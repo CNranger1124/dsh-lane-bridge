@@ -131,8 +131,8 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 
 ### 6.1 GitHub 仓库只读
 
-1. 在 **概览与通道 → GitHub 仓库** 填 `owner/repo`、可选 token、保存并勾选启用。
-2. 在领域里勾选 **允许读取仓库**，保存。
+1. 终端运行 `gh auth login`（已登录可跳过），在 **概览与通道 → GitHub 仓库** 点 **读取仓库**，从下拉选仓库；点 **读取分支** 选分支。也可以手填 `owner/repo` 或 token。
+2. 保存并勾选启用；在领域里勾选 **允许读取仓库**，保存。
 3. 在已绑定会话问一个需要查仓库的问题；模型应先调 `lane_repo_status`，再查 issue/文件/提交。
 4. 验证 `lane_repo_read_file` 不能读 `../`，错误里不出现 token；`lane_repo_create_issue` 默认报“未开启”。
 

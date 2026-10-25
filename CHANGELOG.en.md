@@ -2,6 +2,19 @@
 
 # Changelog
 
+## 0.2.2
+
+- The Settings save bar is now **sticky to the viewport bottom**, so Save is
+  visible anywhere on the page.
+- GitHub repo/branch fields now load dropdown choices from the local `gh` CLI or
+  a token; `gh auth login` is enough, no manual token required.
+- Add a GitHub auth check with a clear message when the local `gh` login is
+  expired (which is the current state on this machine).
+- Add **View logs** to the channel launcher: the last 300 connect/reconnect/error
+  lines, instead of just "not connected".
+- Keep **Start / Stop / Retry / Reconnect all** in the launcher.
+- Test suite grows to 89.
+
 ## 0.2.1
 
 - Add a **Launch channels** card at the top of Settings with explicit

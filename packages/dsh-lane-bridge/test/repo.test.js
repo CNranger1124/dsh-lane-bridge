@@ -59,6 +59,24 @@ test('GitHub repo blocks path traversal and redacts the token', async () => {
   });
 });
 
+test('GitHub repo lists repos and branches for the settings dropdowns', async () => {
+  process.env.QQ_GITHUB_DISABLE_GH = '1';
+  const repo = makeRepo(async (url) => {
+    if (url.includes('/user/repos')) {
+      return jsonResponse(200, [{ full_name: 'owner/repo', private: true, default_branch: 'main' }]);
+    }
+    return jsonResponse(200, [{ name: 'main' }, { name: 'dev' }]);
+  });
+  try {
+    const repos = await repo.listRepos({});
+    assert.deepEqual(repos.repos, [{ repo: 'owner/repo', private: true, defaultBranch: 'main' }]);
+    const branches = await repo.listBranches({ repo: 'owner/repo' });
+    assert.deepEqual(branches.branches, ['main', 'dev']);
+  } finally {
+    delete process.env.QQ_GITHUB_DISABLE_GH;
+  }
+});
+
 test('GitHub repo requires a token for code search and a valid repo', async () => {
   process.env.QQ_GITHUB_DISABLE_GH = '1';
   try {

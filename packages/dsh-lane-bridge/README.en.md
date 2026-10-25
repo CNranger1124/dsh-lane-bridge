@@ -64,10 +64,11 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   (`lane_memory_*`) accumulates cross-conversation experience.
 - **KB drafts + approval**: `lane_kb_draft` writes only to `_待审/`; the Settings
   "KB approval" tab approves/discards before drafts affect retrieval.
-- **Read-only GitHub**: fixed repo, issue/file/code/commit queries; token
+- **Read-only GitHub**: fixed repo, issue/file/code/commit queries; repo/branch
+  dropdowns from the `gh` CLI (no manual token after `gh auth login`), token
   redaction, path guards, ETag cache. Issue creation is off by default.
-- **Channel launcher**: Start/Stop/Retry per channel at the top, with an
-  actionable reason when disconnected (for example SnowLuma is not running).
+- **Channel launcher**: Start/Stop/Retry and View logs per channel at the top,
+  with an actionable reason when disconnected. The save bar is sticky.
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as
   multimodal prompt parts; non-vision models fall back to text.

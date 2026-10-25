@@ -21,10 +21,32 @@ export class ChannelManager {
     this.getConfig = getConfig;
     this.getConversation = getConversation;
     this.onMessage = onMessage;
-    this.logger = logger;
+    this.baseLogger = logger;
+    this.logLines = [];
+    this.logger = this.#wrapLogger();
     this.adapters = new Map();
     this.statuses = new Map();
     this.syncing = null;
+  }
+
+  #record(level, args) {
+    const text = args.map((value) => typeof value === 'string' ? value : String(value?.message ?? value)).join(' ');
+    this.logLines.push({ at: Date.now(), level, text: text.slice(0, 2000) });
+    if (this.logLines.length > 300) this.logLines.splice(0, this.logLines.length - 300);
+  }
+
+  #wrapLogger() {
+    const base = this.baseLogger;
+    return {
+      debug: (...args) => { this.#record('debug', args); base?.debug?.(...args); },
+      info: (...args) => { this.#record('info', args); base?.info?.(...args); },
+      warn: (...args) => { this.#record('warn', args); base?.warn?.(...args); },
+      error: (...args) => { this.#record('error', args); base?.error?.(...args); },
+    };
+  }
+
+  logs() {
+    return [...this.logLines].reverse();
   }
 
   labels() {
@@ -75,6 +97,8 @@ export class ChannelManager {
         });
         adapter.on('status', (status) => {
           this.statuses.set(id, { ...status, enabled: true, label: CHANNEL_LABELS[id], lastEventAt: adapter.state.lastEventAt });
+          if (status?.lastError) this.logger.warn(`[${id}] ${status.lastError}`);
+          else if (status?.connected) this.logger.info(`[${id}] 已连接`);
         });
         this.adapters.set(id, adapter);
         this.statuses.set(id, {
@@ -85,9 +109,10 @@ export class ChannelManager {
         });
         // Never await a transport here: a missing gateway must not block the
         // DSH host from becoming ready.
+        this.logger.info(`[${id}] 启动通道（${entry.wsUrl ?? entry.appId ?? (entry.token ? 'token 已配置' : '无凭据')}）`);
         adapter.start().catch((error) => {
           adapter.setError(error);
-          this.logger?.warn?.(`[lane-bridge] 通道 ${id} 启动失败：${error?.message ?? error}`);
+          this.logger.warn(`[${id}] 启动失败：${error?.message ?? error}`);
         });
       }
     })();

@@ -235,6 +235,21 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     return sendJson(res, 400, { ok: false, error: 'action 必须是 approve/discard' });
   }
 
+  async function handleGithub(req, res) {
+    if (!trustedOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    if (!repo) return sendJson(res, 503, { ok: false, error: 'GitHub 模块不可用' });
+    const url = new URL(req.url ?? '/', 'http://x');
+    const route = url.pathname.slice(`${PREFIX}/api/github`.length);
+    try {
+      if (route === '/auth') return sendJson(res, 200, { ok: true, ...(await repo.authStatus()) });
+      if (route === '/repos') return sendJson(res, 200, { ok: true, ...(await repo.listRepos({ limit: url.searchParams.get('limit') })) });
+      if (route === '/branches') return sendJson(res, 200, { ok: true, ...(await repo.listBranches({ repo: url.searchParams.get('repo') })) });
+      return sendJson(res, 404, { ok: false, error: 'unknown github route' });
+    } catch (error) {
+      return sendJson(res, 400, { ok: false, error: String(error?.message ?? error) });
+    }
+  }
+
   function requireDomain(value) {
     const domainId = String(value ?? '').trim();
     const domain = store.get().domains.find((item) => item.id === domainId);
@@ -306,6 +321,11 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     return handleState(req, res);
   }
 
+  async function handleChannelLogs(req, res) {
+    if (!trustedOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    return sendJson(res, 200, { ok: true, lines: channels.logs?.() ?? [] });
+  }
+
   async function handleConversations(req, res) {
     if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
     const body = await readBody(req);
@@ -335,9 +355,11 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (route === '/api/memory') return await handleMemory(req, res);
       if (route === '/api/usage') return await handleUsage(req, res);
       if (route === '/api/channels/restart' && req.method === 'POST') return await handleRestart(req, res);
+      if (route === '/api/channels/logs') return await handleChannelLogs(req, res);
       if (route === '/api/knowledge') return await handleKnowledge(req, res);
       if (route === '/api/knowledge/read') return await handleKnowledgeRead(req, res);
       if (route === '/api/kb/drafts') return await handleKbDrafts(req, res);
+      if (route.startsWith('/api/github/')) return await handleGithub(req, res);
       return sendJson(res, 404, { ok: false, error: `unknown route: ${route}` });
     } catch (error) {
       logger?.warn?.(`[lane-bridge] HTTP ${route} 失败：${error?.message ?? error}`);

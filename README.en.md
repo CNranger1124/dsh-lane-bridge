@@ -102,13 +102,17 @@ only a one-shot legacy migration script for moving an existing install.
 - **KB drafts + human approval**: `lane_kb_draft` writes only to `_待审/`; a new
   Settings "KB approval" tab approves/discards before drafts affect retrieval.
 - **Read-only GitHub repo**: fixed repository, path guards, token redaction, ETag
-  cache; `lane_repo_*` tools for issues/files/code/commits. Issue creation is off
-  by default.
+  cache; repo/branch dropdowns load from the `gh` CLI (so `gh auth login` removes
+  the need for a manual token); `lane_repo_*` tools for issues/files/code/commits.
+  Issue creation is off by default.
+- **Channel logs**: "View logs" in the launcher shows the last 300
+  connect/reconnect/error lines instead of just "not connected".
 - Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
 - Native DSH Settings card + right-sidebar panel: channels, conversations,
   domains, roles, KB, approval, and push, sharing one state.
-- The top **启动通道** card has Start/Stop/Retry per channel, with actionable
-  connection hints (for example, "SnowLuma is not running").
+- The top **启动通道** card has Start/Stop/Retry per channel plus View logs, with
+  actionable connection hints (for example, "SnowLuma is not running").
+- The save bar is sticky at the bottom of the page, so Save is always visible.
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
   prompt parts, with a text-only fallback for non-vision models.
 - Human handoff: `lane_escalate` pauses auto-replies, notifies an operator
@@ -124,8 +128,9 @@ installation details.
 
 ## Status
 
-`0.2.1` ports the legacy GitHub read-only tools and KB draft approval, and adds
-explicit channel launch buttons. The legacy
+`0.2.2` ports the legacy GitHub read-only tools and KB draft approval, and adds
+explicit channel launch buttons, channel logs, GitHub repo/branch dropdowns, and
+a sticky save bar. The legacy
 standalone `qq-bridge` project still has features the plugin does not yet port:
 group slang learning, sticker library, voice messages, cost conversion, and the
 simulation scheduler. The architecture doc tracks the migration.

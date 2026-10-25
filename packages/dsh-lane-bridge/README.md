@@ -52,8 +52,8 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **领域**：把群/私聊绑定到可复用策略（角色卡、preset、模型、知识库 scope、宿主工具白名单、群聊触发策略）。
 - **共享库**：角色卡和 Markdown 知识库共享；领域选择能读哪些 KB scope。可选的领域记忆（`lane_memory_*`）跨会话积累经验。
 - **知识库草稿 + 人工审批**：`lane_kb_draft` 只写 `_待审/`，Settings 的「知识库审批」页采纳/丢弃后才进入检索。
-- **GitHub 只读**：固定仓库的 issue/文件/代码/提交查询；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
-- **启动通道**：页面顶部每个渠道有启动/停止/重试按钮，未连接时显示原因（例如 SnowLuma 未启动）。
+- **GitHub 只读**：固定仓库的 issue/文件/代码/提交查询；支持 `gh` CLI 自动读取仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
+- **启动通道**：页面顶部每个渠道有启动/停止/重试按钮和「查看日志」，未连接时显示原因（例如 SnowLuma 未启动）。保存栏固定在底部。
 - **统一推送**：`lane_send` 工具 + `POST /lane-bridge/api/push`（单发或广播）。
 - **图片**：入站附件经 SSRF/字节上限检查后作为多模态 prompt part 发送；非视觉模型降级为文本。
 - **人工接管**：`lane_escalate` 暂停会话、通知配置的接管会话，并可在 Settings 恢复。

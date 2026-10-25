@@ -163,9 +163,10 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 
 ### 6.1 Read-only GitHub
 
-1. In **概览与通道 → GitHub 仓库**, fill `owner/repo` and optionally a token,
-   save, and enable it.
-2. In the domain, enable **allow repository reads** and save.
+1. Run `gh auth login` (skip if already logged in), then in
+   **概览与通道 → GitHub 仓库** click **Load repos** and pick one; click
+   **Load branches** and pick a branch. You can also type `owner/repo` or a token.
+2. Save and enable it; in the domain, enable **allow repository reads** and save.
 3. Ask a bound conversation a question that needs the repo; the model should call
    `lane_repo_status` first, then issues/files/commits.
 4. Verify `lane_repo_read_file` rejects `../`, errors never contain the token, and

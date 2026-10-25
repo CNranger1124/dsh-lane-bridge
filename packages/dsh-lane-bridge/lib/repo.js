@@ -197,6 +197,98 @@ export class GitHubRepo {
     return { ok: true, status: response.status, data, cached: false };
   }
 
+  async #apiJson(apiPath, auth) {
+    const headers = {
+      accept: 'application/vnd.github+json',
+      'user-agent': 'dsh-lane-bridge',
+      'x-github-api-version': '2022-11-28',
+    };
+    if (auth.token) headers.authorization = `Bearer ${auth.token}`;
+    let response;
+    try {
+      response = await this.fetchImpl(`${API_BASE}${apiPath}`, { headers, signal: AbortSignal.timeout(15000) });
+    } catch (error) {
+      throw new Error(`GitHub 请求失败：${redact(error?.message ?? error, auth.token)}`);
+    }
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!response.ok) throw new Error(`${response.status} ${redact(data?.message || 'GitHub API 请求失败', auth.token)}`);
+    return data;
+  }
+
+  #ghJson(args) {
+    if (process.env.QQ_GITHUB_DISABLE_GH === '1') return null;
+    for (const bin of GH_CANDIDATES) {
+      try {
+        const out = String(execFileSync(bin, args, {
+          timeout: 15000,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          windowsHide: true,
+        })).trim();
+        return JSON.parse(out);
+      } catch {}
+    }
+    return null;
+  }
+
+  async authStatus() {
+    const cfg = this.config();
+    const auth = this.auth();
+    return {
+      authenticated: Boolean(auth.token),
+      source: auth.source,
+      account: auth.account,
+      repo: cfg.repo,
+      ghInstalled: GH_CANDIDATES.some((bin) => {
+        try {
+          execFileSync(bin, ['--version'], { timeout: 3000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+          return true;
+        } catch { return false; }
+      }),
+      hint: auth.token
+        ? '已找到 GitHub 凭据'
+        : '没有可用凭据：先在终端运行 gh auth login，或在下方填 token',
+    };
+  }
+
+  async listRepos({ limit = 100 } = {}) {
+    const auth = this.auth();
+    if (!auth.token) throw new Error('没有 GitHub 凭据：请先 gh auth login，或填 token');
+    const gh = this.#ghJson(['repo', 'list', '--limit', String(Math.min(200, Math.max(1, Number(limit) || 100))), '--json', 'nameWithOwner,isPrivate,defaultBranchRef']);
+    if (Array.isArray(gh)) {
+      return {
+        source: 'gh-cli',
+        repos: gh.map((item) => ({
+          repo: item.nameWithOwner,
+          private: item.isPrivate === true,
+          defaultBranch: item.defaultBranchRef?.name ?? '',
+        })),
+      };
+    }
+    const data = await this.#apiJson(`/user/repos?per_page=${Math.min(100, Math.max(1, Number(limit) || 100))}&sort=updated`, auth);
+    return {
+      source: 'api',
+      repos: (Array.isArray(data) ? data : []).map((item) => ({
+        repo: item.full_name,
+        private: item.private === true,
+        defaultBranch: item.default_branch ?? '',
+      })),
+    };
+  }
+
+  async listBranches({ repo } = {}) {
+    const parsed = parseRepo(repo || this.config().repo);
+    if (!parsed) throw new Error('仓库格式应为 owner/repo');
+    const auth = this.auth();
+    if (!auth.token) throw new Error('没有 GitHub 凭据：请先 gh auth login，或填 token');
+    const gh = this.#ghJson(['api', `repos/${parsed.full}/branches?per_page=100`]);
+    if (Array.isArray(gh)) return { repo: parsed.full, source: 'gh-cli', branches: gh.map((item) => item.name).filter(Boolean) };
+    const data = await this.#apiJson(`/repos/${parsed.full}/branches?per_page=100`, auth);
+    return { repo: parsed.full, source: 'api', branches: (Array.isArray(data) ? data : []).map((item) => item.name).filter(Boolean) };
+  }
+
   async listIssues({ state = 'open', query = '', labels = '', limit = 15 } = {}) {
     const cfg = this.config();
     const n = Math.min(30, Math.max(1, Number(limit) || 15));

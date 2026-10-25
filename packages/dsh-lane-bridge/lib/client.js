@@ -51,7 +51,8 @@ window.__ModuleLoader__.load({
       .lb-listitem--on { border-color:var(--dsw-alias-accent,#2563eb); background:var(--dsw-alias-bg-selected,#f5f8ff); }
       .lb-mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; }
       .lb-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-      .lb-footer { display:flex; gap:8px; align-items:center; justify-content:flex-end; }
+      .lb-footer { display:flex; gap:8px; align-items:center; justify-content:flex-end; position:sticky; bottom:0; z-index:3; margin-top:4px; padding:9px 2px; background:var(--dsw-alias-bg-primary,#fff); border-top:1px solid var(--dsw-alias-border,#e5e7eb); }
+      .lb-log { margin:0; max-height:320px; overflow:auto; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.55; background:var(--dsw-alias-bg-secondary,#f6f7f9); border:1px solid var(--dsw-alias-border,#e5e7eb); border-radius:8px; padding:10px; }
       .lb-check { display:flex; align-items:center; gap:6px; font-size:12px; }
       .lb-sidebar { height:100%; min-height:0; overflow:auto; padding:0 2px; box-sizing:border-box; }
       .lb-sidebar .lb-root--compact { padding-bottom:16px; }
@@ -121,6 +122,14 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false);
       const [message, setMessage] = useState('');
       const [error, setError] = useState('');
+      const [logs, setLogs] = useState(null);
+      const [showLogs, setShowLogs] = useState(false);
+      const [logError, setLogError] = useState('');
+      const [ghRepos, setGhRepos] = useState([]);
+      const [ghBranches, setGhBranches] = useState([]);
+      const [ghBusy, setGhBusy] = useState('');
+      const [ghError, setGhError] = useState('');
+      const [ghAuth, setGhAuth] = useState(null);
       const setChannel = (id, key, value) => {
         setCfg((current) => {
           const next = clone(current);
@@ -156,12 +165,41 @@ window.__ModuleLoader__.load({
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
+      const loadLogs = async () => {
+        setLogError('');
+        try {
+          const result = await api('/channels/logs');
+          setLogs(result.lines ?? []);
+          setShowLogs(true);
+        } catch (err) { setLogError(String(err.message ?? err)); }
+      };
       const gh = cfg.github ?? {};
       const setGithub = (key, value) => setCfg((current) => {
         const next = clone(current);
         next.github = { ...(next.github ?? {}), [key]: value };
         return next;
       });
+      const loadGithubAuth = async () => {
+        setGhBusy('auth'); setGhError('');
+        try { setGhAuth(await api('/github/auth')); } catch (err) { setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
+      };
+      const loadRepos = async () => {
+        setGhBusy('repos'); setGhError('');
+        try {
+          const result = await api('/github/repos');
+          setGhRepos(result.repos ?? []);
+          if (!gh.repo && result.repos?.length) setGithub('repo', result.repos[0].repo);
+        } catch (err) { setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
+      };
+      const loadBranches = async (repoValue) => {
+        const target = String(repoValue ?? gh.repo ?? '').trim();
+        if (!target) return;
+        setGhBusy('branches'); setGhError('');
+        try {
+          const result = await api(`/github/branches?repo=${encodeURIComponent(target)}`);
+          setGhBranches(result.branches ?? []);
+        } catch (err) { setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
+      };
       const channels = [
         ['snowluma', 'SnowLuma / QQ', 'OneBot v11 WebSocket；可填 SnowLuma 安装目录自动读 token', [
           ['wsUrl', 'WebSocket 地址', 'text'],
@@ -181,7 +219,10 @@ window.__ModuleLoader__.load({
         !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启动任何聊天通道。用下面的「启动通道」卡片逐个启动；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
         h(Card, {
           title: '启动通道',
-          extra: h('button', { className: 'lb-btn', disabled: busy, onClick: () => void restartChannels() }, '全部重连'),
+          extra: h('div', { className: 'lb-actions' },
+            h('button', { className: 'lb-btn', disabled: busy, onClick: () => void restartChannels() }, '全部重连'),
+            h('button', { className: 'lb-btn', onClick: () => void loadLogs() }, showLogs ? '刷新日志' : '查看日志')
+          ),
         },
           h('div', { className: 'lb-muted' }, '顺序：1）先启动 SnowLuma（本插件不会代启动）；2）点对应通道的「启动」；3）等状态变成「已连接」。官方 QQ Bot / Discord 先填凭据再启动。'),
           ...data.channels.map((status) => {
@@ -214,6 +255,12 @@ window.__ModuleLoader__.load({
             );
           })
         ),
+        showLogs ? h(Card, { title: '通道日志', extra: h('button', { className: 'lb-btn', onClick: () => void loadLogs() }, '刷新') },
+          logError ? h('div', { className: 'lb-error' }, logError) : null,
+          !logs ? h('div', { className: 'lb-muted' }, '加载中…') : logs.length === 0
+            ? h('div', { className: 'lb-muted' }, '还没有日志。点「全部重连」后再看。')
+            : h('pre', { className: 'lb-log' }, ...logs.slice(0, 120).map((line) => `${new Date(line.at).toLocaleTimeString()} ${String(line.level).toUpperCase()} ${line.text}\n`))
+        ) : null,
         h(Card, { title: '通用' },
           h('div', { className: 'lb-grid' },
             h(Field, { label: '插件启用' },
@@ -337,14 +384,35 @@ window.__ModuleLoader__.load({
                 '允许仓库工具'
               )
             ),
-            h(Field, { label: '仓库', hint: 'owner/repo' },
-              h('input', { className: 'lb-input', value: gh.repo ?? '', placeholder: 'CNranger1124/dsh-lane-bridge', onChange: (e) => setGithub('repo', e.target.value) })
+            h(Field, { label: '仓库', hint: '可从 GitHub 登录态读取后下拉选择，也可手填 owner/repo' },
+              h('div', { className: 'lb-row' },
+                h('input', {
+                  className: 'lb-input',
+                  list: 'lb-gh-repos',
+                  value: gh.repo ?? '',
+                  placeholder: 'CNranger1124/dsh-lane-bridge',
+                  onChange: (e) => setGithub('repo', e.target.value),
+                  onBlur: (e) => { if (e.target.value.trim()) void loadBranches(e.target.value.trim()); },
+                }),
+                h('datalist', { id: 'lb-gh-repos' }, ...ghRepos.map((item) => h('option', { key: item.repo, value: item.repo }, `${item.repo}${item.private ? '（私有）' : ''}`))),
+                h('button', { className: 'lb-btn', disabled: ghBusy === 'repos', onClick: () => void loadRepos() }, ghBusy === 'repos' ? '读取中…' : '读取仓库')
+              )
             ),
-            h(Field, { label: '分支', hint: '留空=默认分支' },
-              h('input', { className: 'lb-input', value: gh.branch ?? '', placeholder: 'main', onChange: (e) => setGithub('branch', e.target.value) })
+            h(Field, { label: '分支', hint: '留空=默认分支；从仓库读取后可选' },
+              h('div', { className: 'lb-row' },
+                h('input', { className: 'lb-input', list: 'lb-gh-branches', value: gh.branch ?? '', placeholder: 'main', onChange: (e) => setGithub('branch', e.target.value) }),
+                h('datalist', { id: 'lb-gh-branches' }, ...ghBranches.map((branch) => h('option', { key: branch, value: branch }))),
+                h('button', { className: 'lb-btn', disabled: ghBusy === 'branches', onClick: () => void loadBranches(gh.repo) }, ghBusy === 'branches' ? '读取中…' : '读取分支')
+              )
             ),
-            h(Field, { label: 'Token', hint: data.secretStatus?.githubToken ? '已配置；留空表示不修改' : '私有仓库需要；公开只读可留空' },
+            h(Field, { label: 'Token', hint: data.secretStatus?.githubToken ? '已配置；留空表示不修改' : '填了 gh auth login 后可留空；公开仓库匿名请求可能被限流' },
               h('input', { className: 'lb-input', type: 'password', value: gh.token ?? '', placeholder: data.secretStatus?.githubToken ? '••••••••（留空不修改）' : 'ghp_... / github_pat_...', onChange: (e) => setGithub('token', e.target.value) })
+            ),
+            h(Field, { label: 'GitHub 登录态', hint: '优先用本机 gh CLI；失败再填 token' },
+              h('div', { className: 'lb-row' },
+                h('button', { className: 'lb-btn', disabled: ghBusy === 'auth', onClick: () => void loadGithubAuth() }, ghBusy === 'auth' ? '检查中…' : '检查 gh 登录'),
+                ghAuth ? h('span', { className: 'lb-muted' }, `${ghAuth.authenticated ? '已登录' : '未登录'} · ${ghAuth.source}${ghAuth.account ? ` · ${ghAuth.account}` : ''}`) : null
+              )
             ),
             h(Field, { label: '允许建 issue', hint: '默认关闭' },
               h('label', { className: 'lb-check' },
@@ -356,6 +424,8 @@ window.__ModuleLoader__.load({
               h('input', { className: 'lb-input', value: gh.issueLabel ?? 'agent', onChange: (e) => setGithub('issueLabel', e.target.value) })
             ),
           ),
+          ghError ? h('div', { className: 'lb-error' }, ghError) : null,
+          ghAuth?.hint ? h('div', { className: 'lb-muted' }, ghAuth.hint) : null,
           data.github?.hint ? h('div', { className: 'lb-muted' }, data.github.hint) : null,
           h('div', { className: 'lb-actions' },
             h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存 GitHub 设置')
@@ -1016,7 +1086,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'lb-head' },
           h('div', null,
             h('h2', { className: 'lb-title' }, 'IM 桥接'),
-            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。')
+            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。修改后点页面底部的保存按钮（会固定在底部）。')
           ),
           h('button', { className: 'lb-btn', onClick: load }, '刷新')
         ),
