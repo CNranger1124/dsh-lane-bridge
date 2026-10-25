@@ -127,7 +127,7 @@ export class ChannelManager {
           : Boolean(String(entry.token ?? '').trim());
       let hint = '';
       if (config?.enabled === false) hint = '插件总开关已关闭：先打开「插件启用」并保存';
-      else if (!enabled) hint = '未启用：点卡片右上角「启用」，或勾选下方复选框后保存';
+      else if (!enabled) hint = '未启动：点上方「启动通道」里的「启动」，或卡片右上角的「启动」';
       else if (!configured) hint = id === 'snowluma'
         ? '填 SnowLuma 安装目录或 WS 地址后保存；默认 127.0.0.1:3001'
         : id === 'qqbot'

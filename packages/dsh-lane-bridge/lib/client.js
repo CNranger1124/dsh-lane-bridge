@@ -148,6 +148,14 @@ window.__ModuleLoader__.load({
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
+      const restartChannels = async () => {
+        setBusy(true); setError(''); setMessage('');
+        try {
+          await api('/channels/restart', { method: 'POST', body: '{}' });
+          setMessage('已请求重连，稍等几秒看状态');
+          await refresh();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
+      };
       const gh = cfg.github ?? {};
       const setGithub = (key, value) => setCfg((current) => {
         const next = clone(current);
@@ -170,7 +178,42 @@ window.__ModuleLoader__.load({
       ];
       const anyEnabled = channels.some(([id]) => cfg.channels?.[id]?.enabled === true);
       return h('div', { className: 'lb-root' },
-        !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启用任何聊天通道。展开下面的 SnowLuma / QQ Bot / Discord 卡片，点右上角「启用」；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
+        !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启动任何聊天通道。用下面的「启动通道」卡片逐个启动；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
+        h(Card, {
+          title: '启动通道',
+          extra: h('button', { className: 'lb-btn', disabled: busy, onClick: () => void restartChannels() }, '全部重连'),
+        },
+          h('div', { className: 'lb-muted' }, '顺序：1）先启动 SnowLuma（本插件不会代启动）；2）点对应通道的「启动」；3）等状态变成「已连接」。官方 QQ Bot / Discord 先填凭据再启动。'),
+          ...data.channels.map((status) => {
+            const entry = cfg.channels?.[status.id] ?? {};
+            return h('div', { className: 'lb-listitem', key: `launch-${status.id}` },
+              h('div', { style: { minWidth: 0, flex: 1 } },
+                h('div', { className: 'lb-row', style: { gap: 8 } },
+                  h('b', null, status.label),
+                  h(StatusPill, { status })
+                ),
+                status.hint ? h('div', { className: 'lb-muted' }, status.hint) : null
+              ),
+              h('div', { className: 'lb-actions' },
+                !entry.enabled ? h('button', {
+                  className: 'lb-btn lb-btn--primary',
+                  disabled: busy,
+                  onClick: () => void toggleChannel(status.id, true),
+                }, '启动') : null,
+                entry.enabled ? h('button', {
+                  className: 'lb-btn',
+                  disabled: busy,
+                  onClick: () => void restartChannels(),
+                }, '重试连接') : null,
+                entry.enabled ? h('button', {
+                  className: 'lb-btn lb-btn--danger',
+                  disabled: busy,
+                  onClick: () => void toggleChannel(status.id, false),
+                }, '停止') : null
+              )
+            );
+          })
+        ),
         h(Card, { title: '通用' },
           h('div', { className: 'lb-grid' },
             h(Field, { label: '插件启用' },
@@ -254,7 +297,7 @@ window.__ModuleLoader__.load({
                 className: `lb-btn ${entry.enabled ? 'lb-btn--danger' : 'lb-btn--primary'}`,
                 disabled: busy,
                 onClick: () => void toggleChannel(id, !entry.enabled),
-              }, entry.enabled ? '停用' : '启用')
+              }, entry.enabled ? '停止' : '启动')
             ),
           },
             h('div', { className: 'lb-muted' }, hint),

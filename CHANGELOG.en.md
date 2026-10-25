@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 0.2.1
+
+- Add a **Launch channels** card at the top of Settings with explicit
+  **Start / Stop / Retry / Reconnect all** for SnowLuma, official QQ Bot, and
+  Discord, so users no longer have to guess how to open them.
+- Channel card buttons now say **Start/Stop** to match the launcher.
+- Show the exact next step and reason inline when stopped/disconnected (for
+  example, "start SnowLuma first; default 127.0.0.1:3001").
+- Document how to start SnowLuma (`launcher.bat` / `node index.mjs`).
+
 ## 0.2.0
 
 Ports the legacy GitHub read-only tools and KB draft approval, and fixes channel

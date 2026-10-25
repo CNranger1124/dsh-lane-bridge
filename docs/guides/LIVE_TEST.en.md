@@ -68,13 +68,12 @@ If the page is blank or shows “面板渲染失败”, open the browser console
 `settings.section` / `sidebarRightTabs` slot or a bundle load error is the usual
 cause; the error boundary keeps the rest of the UI alive when it can.
 
-### Enable/disable a channel
+### Starting a channel
 
-1. Each channel card has **Enable/Disable** in the top-right corner; **Enable**
-   saves and reconnects immediately.
-2. When disconnected, the card shows the reason: SnowLuma not running, wrong
-   port, missing AppID/Token, etc.
-3. Disabling should show **已停用**; enabling again should return to
+1. The top **启动通道** card has **Start / Stop / Retry** for each channel.
+2. **Start** saves and reconnects immediately. When disconnected, the row shows
+   the reason: SnowLuma not running, wrong port, missing AppID/Token, etc.
+3. Stopping should show **已停用**; starting again should return to
    **未连接/已连接**.
 
 ## 2. SnowLuma (QQ)
@@ -85,8 +84,8 @@ cause; the error boundary keeps the rest of the UI alive when it can.
    - fill **SnowLuma 安装目录** (e.g. `F:/SnowLuma`) and leave the token blank
      for per-account discovery, or
    - fill the WebSocket URL and access token explicitly.
-3. Click **Enable** in the card's top-right corner. The channel should show
-   **已连接**.
+3. Click **Start** for SnowLuma in the top **启动通道** card. The channel should
+   show **已连接**.
 4. Send a private message to the bot from an allowed account. It appears under
    **会话** with a `snowluma:private:<id>` key.
 5. Bind it to the default domain, then send another message. A DSH session

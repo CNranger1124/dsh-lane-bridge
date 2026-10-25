@@ -61,11 +61,11 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 
 如果页面空白或出现「面板渲染失败」，打开浏览器 console：通常是 `settings.section` / `sidebarRightTabs` slot 不存在或 client bundle 加载失败；错误边界会尽量保留界面并显示错误信息。
 
-### 通道启用/停用
+### 启动通道
 
-1. 通道卡片右上角应有 **启用/停用**；点 **启用** 会立即保存并重连。
-2. 未连接时卡片显示原因：SnowLuma 未启动、端口不对、缺少 AppID/Token 等。
-3. 停用通道后应显示 **已停用**；重新启用后应回到 **未连接/已连接**。
+1. 页面顶部 **启动通道** 卡片里每个渠道应有 **启动 / 停止 / 重试连接**。
+2. 点 **启动** 会立即保存并重连；未连接时行内显示原因（SnowLuma 未启动、端口不对、缺少 AppID/Token）。
+3. 停止后应显示 **已停用**；重新启动后应回到 **未连接/已连接**。
 
 ## 2. SnowLuma（QQ）
 
@@ -73,7 +73,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 2. 在 **IM 桥接 → 概览与通道**：
    - 填 **SnowLuma 安装目录**（例如 `F:/SnowLuma`），token 留空，让插件按账号发现；或
    - 显式填 WebSocket 地址和 access token。
-3. 点卡片右上角 **启用**；渠道应显示 **已连接**。
+3. 在顶部 **启动通道** 里点 SnowLuma 的 **启动**；渠道应显示 **已连接**。
 4. 用允许的账号给 bot 发私聊。它应出现在 **会话**，key 形如 `snowluma:private:<id>`。
 5. 绑定到默认领域，再发一条。DSH 侧应出现一个 session，assistant 的回合会发回 QQ。
 

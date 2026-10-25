@@ -48,16 +48,17 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 > 插件安装由 `dsh plugin` 管理；SnowLuma 仍是用户自行安装/启动的独立组件（见其 EULA）。首次验收见 [docs/guides/LIVE_TEST.md](./docs/guides/LIVE_TEST.md)。
 
-## 首次启用通道（为什么只看到「未连接 / 已停用」）
+## 启动通道（为什么只看到「未连接 / 已停用」）
 
 插件不会代启动 SnowLuma（许可证原因），所以「已启用但未连接」通常只是 SnowLuma 没开，或 WS 端口不对。
 
 1. 先自行启动 SnowLuma：双击 SnowLuma 目录里的 `launcher.bat`，或在目录里运行 `node index.mjs`；确认日志出现 `listening 127.0.0.1:3001`。插件不会代启动它（EULA 原因）。
 2. 打开 **Settings → IM 桥接 → 概览与通道**。
-3. 在 **SnowLuma / QQ** 卡片右上角点 **启用**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
-4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点卡片右上角 **启用**；不需要用的通道点 **停用** 即可。
+3. 在页面顶部 **启动通道** 卡片里，找 **SnowLuma / QQ** 点 **启动**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
+4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点对应行的 **启动**；不需要的通道点 **停止**。
+5. 已启动但连不上时，点 **重试连接** 或 **全部重连**。
 
-> 通道卡片右上角的 **启用/停用** 会立即保存并重连；下面的复选框适合改完多个字段后统一「保存通道设置」。
+> **启动/停止** 会立即保存并重连；下面的通道卡片更适合改多个字段后统一「保存通道设置」。
 
 ## 为什么做成插件，而不是独立前端？
 
@@ -79,7 +80,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **GitHub 仓库只读**：固定仓库、路径校验、token 脱敏、ETag 缓存；`lane_repo_*` 工具查 issue、读文件、搜代码、看提交；建 issue 默认关闭。
 - 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`。
 - 原生 DSH 设置卡片 + 右侧栏面板：渠道、会话、领域、角色、知识库、审批、推送；两处共用同一份状态。
-- 通道卡片直接「启用/停用」，未连接时显示可操作原因（例如 SnowLuma 未启动）。
+- 页面顶部「启动通道」：每个渠道一个启动/停止/重试按钮；未连接时显示可操作原因（例如 SnowLuma 未启动）。
 - 入站图片理解：安全下载（SSRF/字节上限）+ 多模态 prompt part；非视觉模型自动降级为纯文本。
 - 人工接管：`lane_escalate` 暂停自动回复、通知接管会话，并可在设置页恢复。
 - 本地 Token 用量账本 + 「用量」页（按会话统计输入/输出/缓存 token）。
@@ -89,7 +90,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 状态
 
-`0.2.0` 把旧项目的 GitHub 只读和知识库草稿审批迁进来了。旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；架构文档会跟踪。
+`0.2.1` 把旧项目的 GitHub 只读和知识库草稿审批迁进来了，并加了明确的「启动通道」按钮。旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；架构文档会跟踪。
 
 当前代码、测试和发布物已经完成；**尚未在真实 DSH 上做安装验收**，也没有在真实 SnowLuma/QQ Bot/Discord 账号上做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
 

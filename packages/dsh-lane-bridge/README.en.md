@@ -66,8 +66,8 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   "KB approval" tab approves/discards before drafts affect retrieval.
 - **Read-only GitHub**: fixed repo, issue/file/code/commit queries; token
   redaction, path guards, ETag cache. Issue creation is off by default.
-- **Channel enablement**: direct Enable/Disable on each card, with an actionable
-  reason when disconnected (for example SnowLuma is not running).
+- **Channel launcher**: Start/Stop/Retry per channel at the top, with an
+  actionable reason when disconnected (for example SnowLuma is not running).
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as
   multimodal prompt parts; non-vision models fall back to text.

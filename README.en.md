@@ -57,7 +57,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 > user-installed component (see its EULA). First-run checklist:
 > [docs/guides/LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
 
-## Enabling a channel (why it says "not connected / stopped")
+## Starting a channel (why it says "not connected / stopped")
 
 The plugin does not start SnowLuma for you (licence reasons). "Enabled but not
 connected" usually means SnowLuma is not running, or the WS port is wrong.
@@ -66,13 +66,14 @@ connected" usually means SnowLuma is not running, or the WS port is wrong.
    `node index.mjs` there; wait for `listening 127.0.0.1:3001` in its log. The
    plugin does not start it for you (EULA reasons).
 2. Open **Settings → IM 桥接 → 概览与通道**.
-3. On the **SnowLuma / QQ** card, click **Enable** in the top-right corner. The
-   pill should turn **已连接**. If not, the card shows the concrete reason.
+3. In the **启动通道** card at the top, find **SnowLuma / QQ** and click
+   **Start**. The pill should turn **已连接**. If not, the row shows the reason.
 4. For official QQ Bot / Discord: fill AppID+AppSecret / Bot Token, then click
-   **Enable**. Click **Disable** for channels you do not use.
+   **Start**. Click **Stop** for channels you do not use.
+5. If it is started but still disconnected, click **Retry** or **Reconnect all**.
 
-> The top-right **Enable/Disable** button saves and reconnects immediately. The
-> checkbox below is for editing several fields and saving them together.
+> **Start/Stop** saves and reconnects immediately. The cards below are for
+> editing several fields and saving them together.
 
 ## Why a plugin instead of a separate app?
 
@@ -106,8 +107,8 @@ only a one-shot legacy migration script for moving an existing install.
 - Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
 - Native DSH Settings card + right-sidebar panel: channels, conversations,
   domains, roles, KB, approval, and push, sharing one state.
-- Channel cards have direct Enable/Disable buttons and actionable connection
-  hints (for example, "SnowLuma is not running").
+- The top **启动通道** card has Start/Stop/Retry per channel, with actionable
+  connection hints (for example, "SnowLuma is not running").
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
   prompt parts, with a text-only fallback for non-vision models.
 - Human handoff: `lane_escalate` pauses auto-replies, notifies an operator
@@ -123,7 +124,8 @@ installation details.
 
 ## Status
 
-`0.2.0` ports the legacy GitHub read-only tools and KB draft approval. The legacy
+`0.2.1` ports the legacy GitHub read-only tools and KB draft approval, and adds
+explicit channel launch buttons. The legacy
 standalone `qq-bridge` project still has features the plugin does not yet port:
 group slang learning, sticker library, voice messages, cost conversion, and the
 simulation scheduler. The architecture doc tracks the migration.
