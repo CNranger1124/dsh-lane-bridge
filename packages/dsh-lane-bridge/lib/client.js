@@ -709,6 +709,7 @@ window.__ModuleLoader__.load({
       const [repoError, setRepoError] = useState('');
       const [presets, setPresets] = useState([]);
       const [presetError, setPresetError] = useState('');
+      const [customPreset, setCustomPreset] = useState(false);
       const current = draft.find((domain) => domain.id === selected) ?? draft[0];
       const globalRepo = data.state.config.github?.repo ?? '';
       const effectiveRepo = current?.repo || globalRepo;
@@ -720,8 +721,13 @@ window.__ModuleLoader__.load({
         } catch (err) { setPresetError(String(err.message ?? err)); }
       };
       useEffect(() => { void loadPresets(); }, []);
+      useEffect(() => { setCustomPreset(false); }, [selected]);
       const selectedPreset = presets.find((preset) => preset.id === current?.preset);
       const presetKnown = Boolean(selectedPreset);
+      // `customPreset` lets the operator switch a known preset back to free text
+      // without clearing the value (an empty preset would fall back to the
+      // default on save).
+      const showCustomPreset = customPreset || !presetKnown;
       const presetNote = PRESET_NOTES[current?.preset]
         ?? selectedPreset?.description
         ?? (presets.length > 0
@@ -828,8 +834,12 @@ window.__ModuleLoader__.load({
                   presets.length > 0
                     ? h('select', {
                       className: 'lb-select',
-                      value: presetKnown ? current.preset : '__custom__',
-                      onChange: (e) => { if (e.target.value !== '__custom__') patch('preset', e.target.value); },
+                      value: showCustomPreset ? '__custom__' : current.preset,
+                      onChange: (e) => {
+                        if (e.target.value === '__custom__') { setCustomPreset(true); return; }
+                        setCustomPreset(false);
+                        patch('preset', e.target.value);
+                      },
                     },
                       h('option', { value: '__custom__' }, '手动输入 / 未知 preset'),
                       ...presets.map((preset) => h('option', { key: preset.id, value: preset.id },
@@ -837,7 +847,7 @@ window.__ModuleLoader__.load({
                       ))
                     )
                     : null,
-                  presets.length === 0 || !presetKnown
+                  presets.length === 0 || showCustomPreset
                     ? h('input', { className: 'lb-input', value: current.preset, placeholder: 'preset id，例如 lane-support', onChange: (e) => patch('preset', e.target.value) })
                     : null,
                   h('div', { className: 'lb-muted' }, presetNote),
