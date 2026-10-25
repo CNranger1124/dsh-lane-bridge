@@ -2,6 +2,14 @@
 
 # 变更记录
 
+## 0.2.6
+
+- **修复 QQ / QQ Bot / Discord 消息只收到道歉、没有模型回复的根因**：DSH 的 `sessionController.prompt(request, signal)` 必须传 `AbortSignal`，以前漏传，宿主在入口就抛 `Cannot read properties of undefined (reading 'throwIfAborted')`，消息根本没进会话。现在每次提交都带一个可取消的 signal。
+- **修复会话事件流监听**：DSH 已把事件流从 `sessionQuery.follow` 移到 `sessionController.history.follow`，旧调用直接 `is not a function`，导致回合永远收不到、回复发不出去。现在优先用新接口，并保留旧接口兜底。
+- 兼容 DSH 的 `{ type: 'event', event }` 事件信封：`turn/start`、`assistant/message`、`turn/end` 现在能正确解包，token 统计和回复都恢复正常。
+- 「会话」表格新增 **DSH 会话** 列：直接显示该会话对应的 DSH session id，没建会话时显示「尚未建立」，不用再猜到底有没有新开。
+- 测试增至 98 项；新增事件信封解包、prompt 必须带 signal 的回归测试。
+
 ## 0.2.5
 
 - 如果重试后会话投影仍不可用，自动清理该会话映射；下一条消息会重建新会话，不会一直卡在坏会话上。

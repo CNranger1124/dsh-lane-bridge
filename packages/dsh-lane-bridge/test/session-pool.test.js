@@ -71,6 +71,28 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
   const prompts = [];
   const resumeCalls = [];
   let nextId = 1;
+  // Mirrors the current DSH contract: the durable follower lives on
+  // sessionController.history and every prompt must carry an AbortSignal.
+  const history = {
+    follow(request, signal) {
+      const sessionId = request.address.sessionId;
+      return (async function* follow() {
+        yield { type: 'snapshot', records: [] };
+        const queue = queues.get(sessionId) ?? eventQueue();
+        queues.set(sessionId, queue);
+        for (;;) {
+          if (signal?.aborted) return;
+          try {
+            const item = await queue.shift(signal);
+            if (item === null) return;
+            yield item;
+          } catch {
+            return;
+          }
+        }
+      })();
+    },
+  };
   const ctx = {
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     workspaceController: { create: async () => ({ workspace: { workspaceId: 'ws-1' } }) },
@@ -81,33 +103,19 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
         queues.set(sessionId, eventQueue());
         return { sessionId };
       },
-      prompt: async (request) => {
+      history,
+      prompt: async (request, signal) => {
+        if (!signal || typeof signal.throwIfAborted !== 'function') {
+          throw new TypeError("Cannot read properties of undefined (reading 'throwIfAborted')");
+        }
+        signal.throwIfAborted();
         prompts.push(request);
         if (promptImpl) return promptImpl(request);
         return { accepted: true };
       },
       selectModel: async () => ({}),
     },
-    sessionQuery: {
-      follow(request, signal) {
-        const sessionId = request.address.sessionId;
-        return (async function* follow() {
-          yield { type: 'snapshot', records: [] };
-          const queue = queues.get(sessionId) ?? eventQueue();
-          queues.set(sessionId, queue);
-          for (;;) {
-            if (signal?.aborted) return;
-            try {
-              const item = await queue.shift(signal);
-              if (item === null) return;
-              yield item;
-            } catch {
-              return;
-            }
-          }
-        })();
-      },
-    },
+    sessionQuery: {},
     agents: {
       get: (sessionId) => agents.get(sessionId) ?? null,
       resume: async ({ resumeSessionId, setup: setupFn }) => {
@@ -261,6 +269,22 @@ test('turn events are collected and delivered to onTurnEnd', async () => {
     assert.equal(turn.ended.text, '收到');
     assert.equal(turn.ended.reason.kind, 'completed');
     assert.equal(turn.key, 'snowluma:group:1');
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('DSH event envelopes are unwrapped before the turn collector sees them', async () => {
+  const env = await setup();
+  try {
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '你好' });
+    const queue = env.queues.get('session-1');
+    queue.push({ type: 'event', event: { type: 'turn/start', seq: 1, data: { turn: 1 } } });
+    queue.push({ type: 'event', event: { type: 'assistant/message', seq: 2, data: { turn: 1, message: { content: [{ type: 'text', text: '在的' }] } } } });
+    queue.push({ type: 'event', event: { type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } } });
+    const turn = await env.turnPromise;
+    assert.equal(turn.ended.text, '在的');
   } finally {
     await env.pool.stop();
     cleanup(env.dir);

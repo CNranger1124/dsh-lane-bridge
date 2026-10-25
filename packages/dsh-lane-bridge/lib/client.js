@@ -600,10 +600,11 @@ window.__ModuleLoader__.load({
           h('div', { style: { overflowX: 'auto' } },
             h('table', { className: 'lb-table' },
               h('thead', null, h('tr', null,
-                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, '领域'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
+                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, 'DSH 会话'), h('th', null, '领域'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
               )),
               h('tbody', null, ...(conversations.length ? conversations.map((convo) => {
                 const binding = draft[convo.key];
+                const sessionId = String(data.state.sessions?.[convo.key]?.sessionId ?? '');
                 return h('tr', { key: convo.key },
                   h('td', null,
                     h('div', null, convo.name || convo.key, binding?.paused ? h('span', { className: 'lb-pill lb-pill--bad', style: { marginLeft: 6 } }, '人工中') : null),
@@ -612,6 +613,11 @@ window.__ModuleLoader__.load({
                   h('td', null,
                     h('div', { className: 'lb-muted' }, convo.lastAt ? new Date(convo.lastAt).toLocaleString() : ''),
                     h('div', null, String(convo.lastText ?? '').slice(0, 60))
+                  ),
+                  h('td', null,
+                    sessionId
+                      ? h('div', { className: 'lb-mono', title: sessionId }, sessionId.slice(0, 16))
+                      : h('span', { className: 'lb-muted' }, binding ? '尚未建立' : '未绑定')
                   ),
                   h('td', null,
                     h('select', {
@@ -651,7 +657,7 @@ window.__ModuleLoader__.load({
                     )
                   )
                 );
-              }) : [h('tr', null, h('td', { colSpan: 6, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
+              }) : [h('tr', null, h('td', { colSpan: 7, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
             )
           ),
           h('div', { className: 'lb-row' },

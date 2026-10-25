@@ -35,9 +35,12 @@ function isTransientProjectionError(error) {
     || String(error?.code ?? '') === 'session/agent-busy';
 }
 
+// DSH wraps durable events as `{ type: 'event', event }` (both in the opening
+// snapshot and on the live stream). Unwrap that envelope before inspecting the
+// event, and keep accepting a bare event for older hosts.
 function normalizeFollowRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const outer = raw.event && typeof raw.event === 'object' ? raw.event : raw;
+  const outer = raw.type === 'event' && raw.event && typeof raw.event === 'object' ? raw.event : raw;
   if (typeof outer.type !== 'string') return null;
   return { event: outer, seq: typeof outer.seq === 'number' ? outer.seq : null };
 }
@@ -302,12 +305,17 @@ export class SessionPool {
     await this.applyModel(sessionId, resolved);
     const { text, injectedRole, roleKey } = await this.buildPrompt(key, inbound, resolved);
     const content = await this.buildContent(text, inbound);
+    // DSH's prompt(request, signal) dereferences the signal on entry; omitting
+    // it throws "Cannot read properties of undefined (reading 'throwIfAborted')"
+    // and the user's message is silently dropped. A never-aborted signal keeps
+    // admission cancellable in shape without cancelling our own retries.
+    const signal = new AbortController().signal;
     const submit = async (parts) => this.ctx.sessionController.prompt({
       requestId: crypto.randomUUID(),
       sessionId,
       mode: 'queue',
       content: parts,
-    });
+    }, signal);
     const submitWithRetry = async (parts) => {
       for (let attempt = 0; ; attempt += 1) {
         try {
@@ -361,7 +369,7 @@ export class SessionPool {
           sessionId: fresh,
           mode: 'queue',
           content,
-        });
+        }, new AbortController().signal);
         return fresh;
       }
       if (isTransientProjectionError(error)) {
@@ -386,7 +394,17 @@ export class SessionPool {
 
     const run = async () => {
       try {
-        const stream = this.ctx.sessionQuery.follow(
+        // DSH moved the durable event follower from the `sessionQuery` service
+        // to `sessionController.history`. Prefer the current location and keep
+        // the old one as a fallback for older hosts.
+        const history = this.ctx.sessionController?.history;
+        const follow = typeof history?.follow === 'function'
+          ? history.follow.bind(history)
+          : typeof this.ctx.sessionQuery?.follow === 'function'
+            ? this.ctx.sessionQuery.follow.bind(this.ctx.sessionQuery)
+            : null;
+        if (!follow) throw new Error('当前 DSH 没有提供会话事件流（sessionController.history.follow 缺失）');
+        const stream = follow(
           { address: { kind: 'session', sessionId }, assistantStream: false },
           ac.signal
         );

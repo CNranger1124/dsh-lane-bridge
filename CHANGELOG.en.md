@@ -2,6 +2,26 @@
 
 # Changelog
 
+## 0.2.6
+
+- **Fix the root cause of QQ / QQ Bot / Discord messages getting only the
+  apology, never a model reply**: DSH's `sessionController.prompt(request,
+  signal)` requires an `AbortSignal`. The bridge omitted it, so the host threw
+  `Cannot read properties of undefined (reading 'throwIfAborted')` at admission
+  and the message never reached the session. Every prompt now carries a signal.
+- **Fix the session event stream**: DSH moved the follower from
+  `sessionQuery.follow` to `sessionController.history.follow`. The old call
+  failed with `is not a function`, so turns were never collected and no reply
+  could be delivered. The bridge now prefers the new API and falls back to the
+  old one.
+- Unwrap DSH's `{ type: 'event', event }` envelope so `turn/start`,
+  `assistant/message`, and `turn/end` are recognised again; token accounting and
+  replies work.
+- The **Conversations** table now has a **DSH session** column showing the bound
+  session id, or "not created yet", so it is obvious whether a session exists.
+- 98 tests; new regressions for envelope unwrapping and the required prompt
+  signal.
+
 ## 0.2.5
 
 - If the prompt still fails after retries, clear that conversation's session
