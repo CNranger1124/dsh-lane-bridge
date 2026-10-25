@@ -2,6 +2,12 @@
 
 # 变更记录
 
+## 0.2.7
+
+- 设置页标题栏显示 **当前运行的插件版本**（`/api/health` 返回进程真实版本）。以后再问「新版本到底加载了没有」，看这个数字即可，不用再靠猜。
+- 含 0.2.6 的全部修复：prompt 补传 `AbortSignal`、事件流改用 `sessionController.history.follow`、事件信封解包、「DSH 会话」列。
+- 测试增至 99 项。
+
 ## 0.2.6
 
 - **修复 QQ / QQ Bot / Discord 消息只收到道歉、没有模型回复的根因**：DSH 的 `sessionController.prompt(request, signal)` 必须传 `AbortSignal`，以前漏传，宿主在入口就抛 `Cannot read properties of undefined (reading 'throwIfAborted')`，消息根本没进会话。现在每次提交都带一个可取消的 signal。

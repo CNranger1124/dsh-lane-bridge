@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 0.2.7
+
+- The settings header now shows the **plugin version the running host actually
+  loaded** (`/api/health` reports the process's real version), so "is the new
+  build loaded?" is a number to read instead of a guess.
+- Includes every 0.2.6 fix: the `AbortSignal` on `prompt`, the
+  `sessionController.history.follow` event stream, envelope unwrapping, and the
+  **DSH session** column.
+- 99 tests.
+
 ## 0.2.6
 
 - **Fix the root cause of QQ / QQ Bot / Discord messages getting only the

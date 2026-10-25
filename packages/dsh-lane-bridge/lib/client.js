@@ -1252,6 +1252,7 @@ window.__ModuleLoader__.load({
 
     function LanePanel({ compact = false, initialTab = 'overview' }) {
       const [data, setData] = useState(null);
+      const [version, setVersion] = useState('');
       const [error, setError] = useState('');
       const [tab, setTab] = useState(initialTab);
       const load = useCallback(async () => {
@@ -1266,6 +1267,13 @@ window.__ModuleLoader__.load({
         const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void load(); }, 15000);
         return () => clearInterval(timer);
       }, [load]);
+      // The build the host actually loaded, straight from the running process.
+      // Without this, "restart to load the new version" is unfalsifiable.
+      useEffect(() => {
+        let alive = true;
+        api('/health').then((health) => { if (alive) setVersion(String(health?.version ?? '')); }).catch(() => {});
+        return () => { alive = false; };
+      }, []);
       const tabs = [
         ['overview', '概览与通道'],
         ['conversations', '会话'],
@@ -1281,7 +1289,10 @@ window.__ModuleLoader__.load({
             h('h2', { className: 'lb-title' }, 'IM 桥接'),
             h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。每个模块可点标题折叠，标题栏有独立保存按钮，页面底部也有固定保存栏。')
           ),
-          h('button', { className: 'lb-btn', onClick: load }, '刷新')
+          h('div', { className: 'lb-actions' },
+            version ? h('span', { className: 'lb-muted', title: '当前运行中的插件版本' }, `v${version}`) : null,
+            h('button', { className: 'lb-btn', onClick: load }, '刷新')
+          )
         ),
         error ? h('div', { className: 'lb-error' }, error) : null,
         data ? h('div', { className: 'lb-tabs' },

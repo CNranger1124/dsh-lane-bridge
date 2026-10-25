@@ -26,6 +26,20 @@ async function setup({ repo = null } = {}) {
   return { dir, store, channels, routes, memoryStore, usageStore };
 }
 
+test('health reports the running plugin version', async () => {
+  const { dir, routes } = await setup();
+  try {
+    const fs = await import('node:fs');
+    const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const res = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/health' }), res);
+    assert.equal(res.status, 200);
+    assert.equal(res.json().version, pkg.version);
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test('state requires the same-origin browser header and redacts secrets', async () => {
   const { dir, store, routes } = await setup();
   try {

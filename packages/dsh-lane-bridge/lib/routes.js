@@ -4,6 +4,7 @@
 // bearer token. The routes are mounted on DSH's own web server under
 // `/lane-bridge`, so no second port or cookie jar exists.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { approveDraft, discardDraft, listDrafts, listKnowledge, readKnowledge, writeKnowledge } from './knowledge.js';
 import { redactState } from './store.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
@@ -11,6 +12,15 @@ import { parseConversationKey } from './defaults.js';
 
 const PREFIX = '/lane-bridge';
 const MAX_BODY = 2 * 1024 * 1024;
+// Build identity the running host actually loaded. The settings page shows it,
+// so "did the new version get loaded?" is answerable without guessing.
+const VERSION = (() => {
+  try {
+    return String(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version ?? '');
+  } catch {
+    return '';
+  }
+})();
 
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body);
@@ -347,7 +357,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     const route = pathname.slice(PREFIX.length) || '/';
     try {
       if (route === '/api/state' && (req.method === 'GET' || req.method === 'HEAD')) return await handleState(req, res);
-      if (route === '/api/health') return sendJson(res, 200, { ok: true, uptime: process.uptime() });
+      if (route === '/api/health') return sendJson(res, 200, { ok: true, uptime: process.uptime(), version: VERSION });
       if (route === '/api/config' && req.method === 'POST') return await handleConfig(req, res);
       if (route === '/api/domains' && req.method === 'POST') return await handleDomains(req, res);
       if (route === '/api/roles' && req.method === 'POST') return await handleRoles(req, res);
