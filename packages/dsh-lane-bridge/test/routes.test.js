@@ -282,6 +282,26 @@ test('knowledge routes list and write documents', async () => {
     await routes.handle(mockRequest({ url: '/lane-bridge/api/knowledge/read?scope=default&path=' + encodeURIComponent('新文档.md') }), read);
     assert.equal(read.status, 200);
     assert.match(read.json().content, /# hi/);
+
+    // Per-document triggers travel with the document, as frontmatter.
+    const withMeta = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/knowledge',
+      body: { scope: 'default', path: '存档.md', content: '# 存档\n\n在 saves。\n', meta: { title: '存档', triggers: [' 存档 ', '存档', 'save'], always: true } },
+    }), withMeta);
+    assert.equal(withMeta.status, 200);
+    const again = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/knowledge/read?scope=default&path=' + encodeURIComponent('存档.md') }), again);
+    assert.equal(again.status, 200);
+    assert.deepEqual(again.json().meta, { title: '存档', triggers: ['存档', 'save'], always: true });
+    assert.doesNotMatch(again.json().content, /^---/u);
+
+    const listed = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/knowledge' }), listed);
+    const row = listed.json().files.find((file) => file.path === '存档.md');
+    assert.deepEqual(row.triggers, ['存档', 'save']);
+    assert.equal(row.always, true);
   } finally {
     cleanup(dir);
   }

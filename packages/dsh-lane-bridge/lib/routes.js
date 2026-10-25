@@ -252,7 +252,16 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     }
     if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
     const body = await readBody(req);
-    const result = writeKnowledge(knowledgeDir, body.scope, body.path, body.content);
+    const meta = body.meta && typeof body.meta === 'object'
+      ? {
+        title: String(body.meta.title ?? '').trim().slice(0, 120),
+        triggers: Array.isArray(body.meta.triggers)
+          ? [...new Set(body.meta.triggers.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30)
+          : [],
+        always: body.meta.always === true,
+      }
+      : null;
+    const result = writeKnowledge(knowledgeDir, body.scope, body.path, body.content, meta);
     return sendJson(res, 200, { ok: true, ...result });
   }
 

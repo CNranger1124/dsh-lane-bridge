@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.3.1
+
+- **Knowledge retrieval is now per document, not per global keyword**: each
+  Markdown file can carry frontmatter — `title`, `triggers` (its own words) and
+  `always` (base documents injected every turn). Only the documents whose own
+  triggers match are injected.
+- Settings → Knowledge now shows each document's triggers, lets you add/remove
+  them, and toggle "always inject"; saving writes the frontmatter for you.
+- Frontmatter is excluded from full-text search and never appears in the body the
+  model reads (`lane_kb_read` returns clean content plus structured triggers).
+- Legacy documents keep working through the domain **fallback words** + full-text
+  search, now labelled "legacy only" in the UI.
+- The domain-level keyword list is demoted from primary mechanism to fallback.
+- 136 tests.
+
 ## 0.3.0
 
 - **Session archival (`sessionMaxTurns`, off by default)**: each domain can set a

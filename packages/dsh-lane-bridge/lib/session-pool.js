@@ -19,7 +19,7 @@ import {
 } from './router.js';
 import { publicError, splitText, stripMarkdown } from './text.js';
 import { parseConversationKey } from './defaults.js';
-import { searchKnowledge } from './knowledge.js';
+import { matchDocuments, searchKnowledge } from './knowledge.js';
 import { fetchImage } from './media.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -296,27 +296,53 @@ export class SessionPool {
   /**
    * Optional keyword-triggered knowledge retrieval.
    *
-   * The knowledge base is never injected wholesale: only documents whose
-   * sections contain one of the trigger words become prompt material, and the
-   * total is capped. `lane_kb_*` tools remain available for follow-up reading.
+   * The unit of retrieval is a **document**, not a global keyword list: each
+   * Markdown file carries its own `triggers` in frontmatter (see
+   * `knowledge.js`), so "存档.md" answers "存档在哪" without "联机.md" being
+   * dragged in as well. Documents that predate per-file triggers still work via
+   * the domain-level fallback words plus full-text search. `lane_kb_*` stays
+   * available for follow-up reading either way.
    */
   retrieveKnowledge(resolved, text) {
     if (resolved.kbAutoRetrieve !== true) return '';
-    const triggers = Array.isArray(resolved.kbTriggerKeywords) ? resolved.kbTriggerKeywords : [];
-    if (triggers.length === 0) return '';
-    const lower = String(text ?? '').toLowerCase();
-    const matched = triggers
-      .filter((word) => word && lower.includes(String(word).toLowerCase()))
-      .slice(0, 3);
-    if (matched.length === 0) return '';
     const limit = Math.max(200, Math.min(8000, Number(resolved.kbRetrieveChars) || 1500));
-    const seen = new Set();
-    const lines = [];
+    const blocks = [];
     let used = 0;
-    for (const term of matched) {
+    const push = (head, body) => {
+      const room = limit - used;
+      if (room < 120) return false;
+      const clean = String(body ?? '').trim();
+      const budget = Math.max(80, room - head.length - 2);
+      const cut = clean.length > budget ? `${clean.slice(0, budget).trimEnd()}\n…（已截断）` : clean;
+      const block = `${head}\n${cut}`;
+      blocks.push(block);
+      used += block.length + 2;
+      return true;
+    };
+
+    let docs = [];
+    try {
+      docs = matchDocuments(this.knowledgeDir, resolved.knowledgeScopes, text, 4);
+    } catch (error) {
+      this.logger?.warn?.(`[lane-bridge] 知识库检索失败：${error?.message ?? error}`);
+    }
+    for (const doc of docs) {
+      const head = `【${doc.title || doc.path}】（${doc.scope}/${doc.path}）`;
+      if (!push(head, doc.body)) break;
+    }
+    if (blocks.length > 0) return blocks.join('\n\n');
+
+    // Legacy path: documents that predate per-document triggers. Runs only when
+    // the domain still declares fallback words, and only matches document text.
+    const fallback = Array.isArray(resolved.kbTriggerKeywords) ? resolved.kbTriggerKeywords : [];
+    const lower = String(text ?? '').toLowerCase();
+    const matchedWords = fallback.filter((word) => word && lower.includes(String(word).toLowerCase())).slice(0, 3);
+    if (matchedWords.length === 0) return '';
+    const seen = new Set();
+    for (const word of matchedWords) {
       let result;
       try {
-        result = searchKnowledge(this.knowledgeDir, resolved.knowledgeScopes, term, 4);
+        result = searchKnowledge(this.knowledgeDir, resolved.knowledgeScopes, word, 3);
       } catch (error) {
         this.logger?.warn?.(`[lane-bridge] 知识库检索失败：${error?.message ?? error}`);
         continue;
@@ -325,13 +351,10 @@ export class SessionPool {
         const id = `${hit.scope}/${hit.path}#${hit.heading}`;
         if (seen.has(id)) continue;
         seen.add(id);
-        const line = `- ${hit.scope}/${hit.path}${hit.heading ? ` › ${hit.heading}` : ''}：${hit.snippet}`;
-        if (used + line.length + 1 > limit) return lines.join('\n');
-        lines.push(line);
-        used += line.length + 1;
+        if (!push(`【${hit.heading || hit.path}】（${hit.scope}/${hit.path}）`, hit.snippet)) return blocks.join('\n\n');
       }
     }
-    return lines.join('\n');
+    return blocks.join('\n\n');
   }
 
   /** Build the prompt text, injecting the role card on first turn / role change. */

@@ -1123,7 +1123,7 @@ window.__ModuleLoader__.load({
               h(Field, { label: '会话归档轮数', hint: '0=不归档。达到轮数后先让模型把要点写进记忆/知识库草稿，再重置 DSH 会话，避免上下文无限增长' },
                 h('input', { className: 'lb-input', type: 'number', min: 0, max: 1000, value: current.sessionMaxTurns ?? 0, onChange: (e) => patch('sessionMaxTurns', Number(e.target.value)) })
               ),
-              h(Field, { label: '知识库自动检索', hint: '只有触发词命中时才注入片段，不做全量发送；没命中就靠 lane_kb_* 自己去查' },
+              h(Field, { label: '知识库自动检索', hint: '开启后按「每个文档自己的触发词」命中来注入（在知识库页给文档加触发词）；下面的兜底词只对没写触发词的旧文档生效；没命中就让模型自己调 lane_kb_*' },
                 h('div', { className: 'lb-field' },
                   h('label', { className: 'lb-check' },
                     h('input', { type: 'checkbox', checked: current.kbAutoRetrieve === true, onChange: (e) => patch('kbAutoRetrieve', e.target.checked) }),
@@ -1132,9 +1132,9 @@ window.__ModuleLoader__.load({
                   h(ChipList, {
                     values: current.kbTriggerKeywords,
                     onChange: (next) => patch('kbTriggerKeywords', next),
-                    placeholder: '触发词，例如 存档',
+                    placeholder: '兜底触发词（仅旧文档）',
                     addLabel: '+ 添加',
-                    emptyText: '留空＝沿用上面的「关键词」',
+                    emptyText: '没有兜底词（推荐：改用文档自己的触发词）',
                   })
                 )
               ),
@@ -1262,6 +1262,7 @@ window.__ModuleLoader__.load({
       const [kbError, setKbError] = useState('');
       const [kbFile, setKbFile] = useState(null);
       const [kbContent, setKbContent] = useState('');
+      const [kbMeta, setKbMeta] = useState({ title: '', triggers: [], always: false });
       const [kbMessage, setKbMessage] = useState('');
       const [memDomain, setMemDomain] = useState(() => data.state.domains[0]?.id ?? '');
       const [memText, setMemText] = useState('');
@@ -1281,13 +1282,21 @@ window.__ModuleLoader__.load({
           const result = await api(`/knowledge/read?${query.toString()}`);
           setKbFile(file);
           setKbContent(result.content ?? '');
+          setKbMeta({
+            title: String(result.meta?.title ?? ''),
+            triggers: Array.isArray(result.meta?.triggers) ? result.meta.triggers : [],
+            always: result.meta?.always === true,
+          });
         } catch (err) { setKbError(String(err.message ?? err)); }
       };
       const saveKb = async () => {
         if (!kbFile) return;
         setKbError(''); setKbMessage('');
         try {
-          await api('/knowledge', { method: 'POST', body: JSON.stringify({ scope: kbFile.scope, path: kbFile.path, content: kbContent }) });
+          await api('/knowledge', {
+            method: 'POST',
+            body: JSON.stringify({ scope: kbFile.scope, path: kbFile.path, content: kbContent, meta: kbMeta }),
+          });
           setKbMessage('已保存');
           await loadKb();
         } catch (err) { setKbError(String(err.message ?? err)); }
@@ -1399,15 +1408,22 @@ window.__ModuleLoader__.load({
           h('button', { className: 'lb-btn', onClick: loadKb }, '刷新'),
           kbFile ? h('button', { className: 'lb-btn lb-btn--primary', onClick: saveKb }, '保存文档') : null
         ) },
-          h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（Markdown / TXT；按 scope 分目录）`),
+          h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（Markdown / TXT；按 scope 分目录；每个文档自带触发词）`),
           kbError ? h('div', { className: 'lb-error' }, kbError) : null,
           kb ? h('div', null,
             h('div', { className: 'lb-muted' }, `scope：${(kb.scopes ?? []).join('、') || '（空）'}；文件 ${kb.count ?? 0} 个`),
             h('div', { style: { overflowX: 'auto' } },
               h('table', { className: 'lb-table' },
-                h('thead', null, h('tr', null, h('th', null, 'scope'), h('th', null, '文件'), h('th', null, '大小'), h('th', null, ''))),
+                h('thead', null, h('tr', null, h('th', null, 'scope'), h('th', null, '文件'), h('th', null, '触发词'), h('th', null, '大小'), h('th', null, ''))),
                 h('tbody', null, ...(kb.files ?? []).map((file) => h('tr', { key: `${file.scope}/${file.path}` },
-                  h('td', null, file.scope), h('td', { className: 'lb-mono' }, file.path), h('td', null, `${file.size} B`),
+                  h('td', null, file.scope),
+                  h('td', null, h('div', { className: 'lb-mono' }, file.path), h('div', { className: 'lb-muted' }, file.title || '')),
+                  h('td', null,
+                    (file.triggers ?? []).length > 0
+                      ? h('div', { className: 'lb-chips' }, ...file.triggers.slice(0, 6).map((word) => h('span', { key: word, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, word))))
+                      : h('span', { className: 'lb-muted' }, file.always ? '总是注入' : '未设置（兜底检索）')
+                  ),
+                  h('td', null, `${file.size} B`),
                   h('td', null, h('button', { className: 'lb-btn', onClick: () => openKb(file) }, '打开'))
                 )))
               )
@@ -1417,6 +1433,22 @@ window.__ModuleLoader__.load({
             h('div', { className: 'lb-row' },
               h('span', { className: 'lb-mono' }, `${kbFile.scope}/${kbFile.path}`),
               kbMessage ? h('span', { className: 'lb-ok' }, kbMessage) : null
+            ),
+            h('div', { className: 'lb-muted' }, '这个文档自己的触发词（写在文件头的 frontmatter 里）：入站消息命中任意一个，才会把这篇注入提示词。'),
+            h(ChipList, {
+              values: kbMeta.triggers,
+              onChange: (next) => setKbMeta((meta) => ({ ...meta, triggers: next })),
+              placeholder: '触发词，例如 存档',
+              addLabel: '+ 添加',
+              emptyText: '还没有触发词（这篇不会被自动检索；仍可由模型调用 lane_kb_read 读取）',
+            }),
+            h('label', { className: 'lb-check' },
+              h('input', {
+                type: 'checkbox',
+                checked: kbMeta.always === true,
+                onChange: (e) => setKbMeta((meta) => ({ ...meta, always: e.target.checked })),
+              }),
+              '总是注入（基础文档用；每轮都会占上下文）'
             ),
             h('textarea', { className: 'lb-textarea lb-textarea--tall', value: kbContent, onChange: (e) => setKbContent(e.target.value) }),
             h('div', { className: 'lb-footer' },

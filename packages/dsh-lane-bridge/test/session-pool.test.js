@@ -553,24 +553,78 @@ test('escalate pauses the binding, notifies the operator, and resume restores it
 });
 
 
-test('knowledge snippets are injected only when a trigger word matches', async () => {
+test('each knowledge document carries its own triggers and is injected only on a hit', async () => {
   const env = await setup();
+  const dir = env.store.paths.knowledgeDir;
   try {
-    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: true, kbTriggerKeywords: ['存档'] }]);
-    fs.mkdirSync(path.join(env.store.paths.knowledgeDir, 'default'), { recursive: true });
-    fs.writeFileSync(
-      path.join(env.store.paths.knowledgeDir, 'default', '存档说明.md'),
-      '# 存档说明\n\n## 存档位置\n\nWindows 在 %APPDATA%/Game/save 下。\n'
-    );
-    const inbound = { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '存档在哪' };
-    await env.pool.prompt('snowluma:group:1', inbound);
-    assert.match(env.prompts[0].content[0].text, /【知识库命中/u);
-    assert.match(env.prompts[0].content[0].text, /%APPDATA%\/Game/u);
+    fs.mkdirSync(path.join(dir, 'default'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'default', '存档.md'), [
+      '---', 'title: 存档位置', 'triggers: 存档, 存档在哪, save', '---', '',
+      '# 存档位置', '', 'Windows 在 %APPDATA%/Game/save 下。', '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(dir, 'default', '联机.md'), [
+      '---', 'title: 联机说明', 'triggers: 联机, 好友', '---', '',
+      '# 联机', '', '只支持局域网联机。', '',
+    ].join('\n'));
+    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: true }]);
+    const ask = (text) => env.pool.prompt('snowluma:group:1', {
+      channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text,
+    });
 
-    // No trigger word: the knowledge base must stay out of the prompt.
+    await ask('存档在哪');
+    const first = env.prompts[0].content[0].text;
+    assert.match(first, /【知识库命中/u);
+    assert.match(first, /%APPDATA%\/Game/u);
+    // The unrelated document must not be dragged in by the same message.
+    assert.doesNotMatch(first, /只支持局域网联机/u);
+
     await env.pool.reset('snowluma:group:1');
-    await env.pool.prompt('snowluma:group:1', { ...inbound, text: '你好' });
-    assert.doesNotMatch(env.prompts[1].content[0].text, /【知识库命中/u);
+    await ask('联机怎么开');
+    const second = env.prompts[1].content[0].text;
+    assert.match(second, /只支持局域网联机/u);
+    assert.doesNotMatch(second, /%APPDATA%\/Game/u);
+
+    // No trigger hit at all: nothing from the knowledge base is injected.
+    await env.pool.reset('snowluma:group:1');
+    await ask('你好');
+    assert.doesNotMatch(env.prompts[2].content[0].text, /【知识库命中/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('an always-injected document is present on every turn', async () => {
+  const env = await setup();
+  const dir = env.store.paths.knowledgeDir;
+  try {
+    fs.mkdirSync(path.join(dir, 'default'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'default', '概述.md'), '---\ntitle: 产品概述\nalways: true\n---\n\n这是内测版。\n');
+    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: true }]);
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '随便问一句' });
+    assert.match(env.prompts[0].content[0].text, /这是内测版/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('documents without triggers still work through the domain fallback words', async () => {
+  const env = await setup();
+  const dir = env.store.paths.knowledgeDir;
+  try {
+    // A dedicated scope keeps the seeded sample documents (which do carry
+    // triggers) out of the way, so only the legacy path can produce a hit.
+    fs.mkdirSync(path.join(dir, 'legacy'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'legacy', '旧文档.md'), '# 旧文档\n\n## 老版本存档\n\n老版本存档在同目录。\n');
+    await env.store.setDomains([{
+      ...defaultDomain(),
+      knowledgeScopes: ['legacy'],
+      kbAutoRetrieve: true,
+      kbTriggerKeywords: ['存档'],
+    }]);
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '存档在哪' });
+    assert.match(env.prompts[0].content[0].text, /老版本存档在同目录/u);
   } finally {
     await env.pool.stop();
     cleanup(env.dir);
@@ -579,8 +633,11 @@ test('knowledge snippets are injected only when a trigger word matches', async (
 
 test('the off switch keeps the knowledge base out even on a match', async () => {
   const env = await setup();
+  const dir = env.store.paths.knowledgeDir;
   try {
-    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: false, kbTriggerKeywords: ['存档'] }]);
+    fs.mkdirSync(path.join(dir, 'default'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'default', '存档.md'), '---\ntriggers: 存档\n---\n\nWindows 在 %APPDATA%。\n');
+    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: false }]);
     await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '存档在哪' });
     assert.doesNotMatch(env.prompts[0].content[0].text, /【知识库命中/u);
   } finally {

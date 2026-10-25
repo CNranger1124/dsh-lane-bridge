@@ -60,16 +60,104 @@ function selectedScopes(knowledgeDir, scopes) {
   return picked.length > 0 ? picked : existing;
 }
 
+// ── 文档头部（frontmatter）──────────────────────────────────────────────────
+//
+// A knowledge document is a self-contained unit, like a skill: it carries its
+// own trigger words in a small frontmatter block, so retrieval is decided per
+// document instead of by one global keyword list.
+//
+//   ---
+//   title: 存档位置
+//   triggers: 存档, 存档在哪, save
+//   always: false
+//   ---
+//
+// Only these three keys are understood. Parsing is deliberately forgiving: an
+// unparsable head is treated as text, never as an error, because these files are
+// hand-written.
+
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
+
+function splitList(value) {
+  return String(value ?? '')
+    .split(/[,，、;；]/u)
+    .map((item) => item.trim().replace(/^["']|["']$/gu, ''))
+    .filter(Boolean);
+}
+
+/** Parse optional frontmatter. Returns the metadata plus the clean body. */
+export function parseDocument(text) {
+  const source = String(text ?? '').replace(/\r\n/gu, '\n');
+  const match = FRONTMATTER_RE.exec(source);
+  if (!match) return { meta: { title: '', triggers: [], always: false }, body: source, hasFrontmatter: false };
+  const data = { title: '', triggers: [], always: false };
+  let pendingList = '';
+  for (const rawLine of match[1].split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const item = /^[-*]\s+(.+)$/u.exec(line);
+    if (item && pendingList === 'triggers') {
+      data.triggers.push(...splitList(item[1]));
+      continue;
+    }
+    const pair = /^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/u.exec(line);
+    if (!pair) continue;
+    const key = pair[1].toLowerCase();
+    const value = pair[2].trim();
+    pendingList = value ? '' : key;
+    if (key === 'title') data.title = value.replace(/^["']|["']$/gu, '').slice(0, 120);
+    else if (key === 'triggers' || key === 'trigger' || key === 'keywords') data.triggers.push(...splitList(value));
+    else if (key === 'always') data.always = /^(true|yes|1)$/iu.test(value);
+  }
+  return {
+    meta: {
+      title: data.title,
+      triggers: [...new Set(data.triggers.map((item) => item.trim()).filter(Boolean))],
+      always: data.always,
+    },
+    body: source.slice(match[0].length),
+    hasFrontmatter: true,
+  };
+}
+
+/** Render metadata back into a frontmatter block (omitted when there is none). */
+export function formatDocument({ meta = {}, body = '' } = {}) {
+  const title = String(meta.title ?? '').trim();
+  const triggers = Array.isArray(meta.triggers) ? meta.triggers.map((item) => String(item).trim()).filter(Boolean) : [];
+  const always = meta.always === true;
+  if (!title && triggers.length === 0 && !always) return String(body ?? '');
+  const lines = ['---'];
+  if (title) lines.push(`title: ${title}`);
+  if (triggers.length > 0) lines.push(`triggers: ${triggers.join(', ')}`);
+  if (always) lines.push('always: true');
+  lines.push('---', '');
+  return `${lines.join('\n')}${String(body ?? '').replace(/^\n+/u, '')}`;
+}
+
+/** Title for display: frontmatter, else the first heading, else the file name. */
+export function documentTitle(meta, body, fallback) {
+  if (meta?.title) return meta.title;
+  const heading = (String(body ?? '').match(/^#\s+(.+)$/mu)?.[1] ?? '').trim();
+  return heading || String(fallback ?? '');
+}
+
 export function listKnowledge(knowledgeDir, scopes = null) {
   const available = listScopes(knowledgeDir);
   const picked = selectedScopes(knowledgeDir, scopes);
   const files = [];
   for (const scope of picked) {
     for (const abs of walkScope(knowledgeDir, scope)) {
+      const rel = path.relative(path.join(knowledgeDir, scope), abs).replace(/\\/gu, '/');
+      let text = '';
+      try { text = fs.readFileSync(abs, 'utf8'); } catch { continue; }
+      const parsed = parseDocument(text);
       files.push({
         scope,
-        path: path.relative(path.join(knowledgeDir, scope), abs).replace(/\\/gu, '/'),
+        path: rel,
         size: fs.statSync(abs).size,
+        title: documentTitle(parsed.meta, parsed.body, rel),
+        triggers: parsed.meta.triggers,
+        always: parsed.meta.always,
       });
     }
   }
@@ -106,16 +194,61 @@ function resolveReadPath(knowledgeDir, scopes, requested) {
 export function readKnowledge(knowledgeDir, scopes, requested) {
   const found = resolveReadPath(knowledgeDir, scopes, requested);
   if (!found.ok) return found;
-  const text = fs.readFileSync(found.abs, 'utf8').replace(/\r\n/gu, '\n');
+  const raw = fs.readFileSync(found.abs, 'utf8').replace(/\r\n/gu, '\n');
+  const parsed = parseDocument(raw);
+  const text = parsed.body;
   const truncated = text.length > MAX_READ_CHARS;
   return {
     ok: true,
     scope: found.scope,
     path: found.rel,
+    title: documentTitle(parsed.meta, text, found.rel),
+    meta: parsed.meta,
+    triggers: parsed.meta.triggers,
+    always: parsed.meta.always,
     chars: text.length,
     truncated,
     content: truncated ? `${text.slice(0, MAX_READ_CHARS)}\n…（已截断）` : text,
   };
+}
+
+/**
+ * Documents whose own trigger words appear in the inbound text.
+ *
+ * This is the unit of retrieval: one Markdown file = one skill-like document,
+ * carrying its own triggers. `always: true` documents are included regardless,
+ * which is how a "product overview" stays in context.
+ */
+export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4) {
+  const lower = String(text ?? '').toLowerCase();
+  const picked = selectedScopes(knowledgeDir, scopes);
+  const scored = [];
+  for (const scope of picked) {
+    for (const abs of walkScope(knowledgeDir, scope)) {
+      let raw = '';
+      try { raw = fs.readFileSync(abs, 'utf8'); } catch { continue; }
+      const parsed = parseDocument(raw);
+      const rel = path.relative(path.join(knowledgeDir, scope), abs).replace(/\\/gu, '/');
+      const matched = parsed.meta.triggers.filter((trigger) => lower.includes(String(trigger).toLowerCase()));
+      if (matched.length === 0 && parsed.meta.always !== true) continue;
+      // Prefer more matched triggers, then longer triggers (更具体的词组优先),
+      // and rank `always` documents last so a specific hit wins the budget.
+      const longest = matched.reduce((max, trigger) => Math.max(max, trigger.length), 0);
+      scored.push({
+        scope,
+        path: rel,
+        title: documentTitle(parsed.meta, parsed.body, rel),
+        body: parsed.body,
+        triggers: parsed.meta.triggers,
+        matched,
+        always: parsed.meta.always === true,
+        score: matched.length * 100 + longest * 10 + (parsed.meta.always ? 1 : 0),
+      });
+    }
+  }
+  scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  const max = Math.max(1, Math.min(20, Number(limit) || 4));
+  return scored.slice(0, max);
 }
 
 function sectionsOf(text) {
@@ -145,7 +278,9 @@ export function searchKnowledge(knowledgeDir, scopes, query, limit = 8) {
     const abs = path.join(knowledgeDir, file.scope, file.path);
     let text = '';
     try {
-      text = fs.readFileSync(abs, 'utf8').replace(/\r\n/gu, '\n');
+      // Frontmatter is metadata, not content: searching it would produce hits the
+      // model cannot see.
+      text = parseDocument(fs.readFileSync(abs, 'utf8')).body.replace(/\r\n/gu, '\n');
     } catch {
       continue;
     }
@@ -170,7 +305,7 @@ export function searchKnowledge(knowledgeDir, scopes, query, limit = 8) {
 }
 
 /** Create or replace one document. Used by the Settings card. */
-export function writeKnowledge(knowledgeDir, scope, relPath, content) {
+export function writeKnowledge(knowledgeDir, scope, relPath, content, meta = null) {
   const safe = safeScope(scope);
   if (!safe) throw new TypeError('invalid knowledge scope');
   const rel = String(relPath ?? '').trim().replace(/\\/gu, '/');
@@ -184,8 +319,11 @@ export function writeKnowledge(knowledgeDir, scope, relPath, content) {
   const abs = path.resolve(base, rel);
   if (!abs.startsWith(`${base}${path.sep}`)) throw new TypeError('path escapes the knowledge scope');
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, String(content ?? ''), 'utf8');
-  return { scope: safe, path: rel.replace(/\\/gu, '/'), bytes: Buffer.byteLength(String(content ?? '')) };
+  // `meta` (title/triggers/always) becomes the frontmatter block; passing null
+  // keeps whatever head the caller already wrote into `content`.
+  const payload = meta ? formatDocument({ meta, body: String(content ?? '') }) : String(content ?? '');
+  fs.writeFileSync(abs, payload, 'utf8');
+  return { scope: safe, path: rel.replace(/\\/gu, '/'), bytes: Buffer.byteLength(payload) };
 }
 
 // ── 待审草稿（AI 起草 → 人工采纳/丢弃）──────────────────────────────────────

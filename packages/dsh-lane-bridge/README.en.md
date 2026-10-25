@@ -194,10 +194,40 @@ Three different things reach the prompt in three different ways:
 | Role card + domain extra instructions | injected when the session is created; re-injected when the speaker identity flips | role card 8000 chars |
 | Domain shared memory | **injected in full** when `memoryEnabled`, newest first | `memoryMaxChars` 200–8000, default 2000 |
 | Knowledge base | **never injected by default**; only when the model calls `lane_kb_*` | per-call limits |
-| KB auto retrieval | when enabled, snippets are injected only if the inbound text matches a **trigger word** | `kbRetrieveChars` 200–8000, default 1500 |
+| KB auto retrieval | when enabled, a document is injected only if the inbound text matches **that document's own triggers** | `kbRetrieveChars` 200–8000, default 1500 |
 
 In other words: only memory is injected wholesale. The knowledge base is never
 sent in full — the default behaviour already matches what you want.
+
+### A knowledge document is a unit with its own triggers
+
+The knowledge base is not one blob of text scanned as a whole: each document is a
+self-contained unit, like a skill, carrying its own trigger words in frontmatter:
+
+```md
+---
+title: Save location
+triggers: 存档, 存档在哪, save
+---
+
+# Save location
+
+Windows: %APPDATA%/Game/save. macOS: ~/Library/Application Support/Game.
+```
+
+- A document is injected only when the inbound message matches **its** triggers —
+  a hit in "save.md" does not drag "multiplayer.md" along.
+- `title` is used in the list and as the injected heading; omit it and the first
+  `# heading` (then the file name) is used instead.
+- `always: true` documents are injected on every turn — useful for a product
+  overview, but they do consume context every time.
+- Frontmatter is not part of full-text search and never shows up in the body the
+  model reads; the Settings → Knowledge page lets you add/remove triggers per
+  document without writing YAML.
+- Documents without frontmatter still work through the domain's **fallback
+  trigger words** plus full-text search (labelled "legacy only" in the UI).
+- `kbRetrieveChars` caps one injection; multiple matches are ordered by number of
+  matched triggers, then trigger length.
 
 ### Session archival (`sessionMaxTurns`)
 

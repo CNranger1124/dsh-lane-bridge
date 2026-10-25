@@ -242,8 +242,16 @@ export function sampleRoleCard() {
 }
 
 export function sampleKnowledge() {
+  // Each file demonstrates the frontmatter a real document should carry: its own
+  // trigger words. A hit on one document does not pull the others in.
   return {
-    'default/产品概述.md': `# 产品概述
+    'default/产品概述.md': `---
+title: 产品概述
+triggers: 产品, 这是什么, 玩法, 新手
+always: false
+---
+
+# 产品概述
 
 > 这是知识库示例。把它替换成你自己产品的口径。
 
@@ -257,7 +265,12 @@ export function sampleKnowledge() {
 | --- | --- | --- |
 | 示例模块 | 「那个功能」 | 待补充 |
 `,
-    'default/常见问题.md': `# 常见问题
+    'default/常见问题.md': `---
+title: 常见问题
+triggers: 存档, 联机, 反馈, 存档在哪
+---
+
+# 常见问题
 
 ## 存档位置在哪？
 
@@ -271,7 +284,12 @@ export function sampleKnowledge() {
 
 请提供：版本号、平台、报错原文、复现步骤。
 `,
-    'default/排障手册.md': `# 排障手册
+    'default/排障手册.md': `---
+title: 排障手册
+triggers: 闪退, 进不去, 卡住, 没反应, 报错
+---
+
+# 排障手册
 
 ## 进不去 / 闪退
 

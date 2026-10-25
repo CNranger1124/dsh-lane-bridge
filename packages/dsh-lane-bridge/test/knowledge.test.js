@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  approveDraft, discardDraft, listDrafts, listKnowledge, readKnowledge, searchKnowledge, writeDraft, writeKnowledge,
+  approveDraft, discardDraft, formatDocument, listDrafts, listKnowledge, matchDocuments, parseDocument,
+  readKnowledge, searchKnowledge, writeDraft, writeKnowledge,
 } from '../lib/knowledge.js';
 import { tempDir, cleanup } from './helpers.js';
 
@@ -121,6 +122,80 @@ test('draft lifecycle: write, hide, list, approve, discard', () => {
     });
     assert.equal(again.duplicate, true);
     assert.equal(again.file, duplicate.file);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('documents parse their own frontmatter without touching the body', () => {
+  const withHead = parseDocument('---\ntitle: 存档位置\ntriggers: 存档, 存档在哪，save\nalways: true\n---\n\n# 存档\n\n正文。\n');
+  assert.equal(withHead.meta.title, '存档位置');
+  assert.deepEqual(withHead.meta.triggers, ['存档', '存档在哪', 'save']);
+  assert.equal(withHead.meta.always, true);
+  assert.equal(withHead.body.trim(), '# 存档\n\n正文。');
+
+  // List form and no frontmatter at all.
+  const listForm = parseDocument('---\ntriggers:\n  - 联机\n  - 好友\n---\n正文\n');
+  assert.deepEqual(listForm.meta.triggers, ['联机', '好友']);
+  const plain = parseDocument('# 标题\n\n正文\n');
+  assert.deepEqual(plain.meta.triggers, []);
+  assert.equal(plain.hasFrontmatter, false);
+  assert.match(plain.body, /# 标题/u);
+
+  // Round trip: rendering then parsing gives the same metadata.
+  const rendered = formatDocument({ meta: { title: 'T', triggers: ['a', 'b'], always: true }, body: '# T\n\nx' });
+  const back = parseDocument(rendered);
+  assert.deepEqual(back.meta, { title: 'T', triggers: ['a', 'b'], always: true });
+  assert.equal(back.body.trim(), '# T\n\nx');
+  // No metadata means no frontmatter block is emitted.
+  assert.equal(formatDocument({ meta: { triggers: [] }, body: '# x' }), '# x');
+});
+
+test('matchDocuments picks documents by their own triggers, never the whole base', () => {
+  const dir = tempDir();
+  try {
+    seed(dir);
+    writeKnowledge(dir, '客服', '存档.md', '# 存档位置\n\n在 saves 目录。\n', { triggers: ['存档', 'save'] });
+    writeKnowledge(dir, '客服', '联机.md', '# 联机\n\n只支持局域网。\n', { triggers: ['联机'] });
+    writeKnowledge(dir, '产品', '概述.md', '# 产品\n\n卡牌游戏。\n', { triggers: [], always: true });
+
+    const hit = matchDocuments(dir, ['客服'], '存档在哪');
+    assert.deepEqual(hit.map((doc) => doc.path), ['存档.md']);
+    assert.deepEqual(hit[0].matched, ['存档']);
+    assert.match(hit[0].body, /saves/u);
+
+    // A different trigger selects a different single document.
+    const other = matchDocuments(dir, ['客服'], '联机怎么开');
+    assert.deepEqual(other.map((doc) => doc.path), ['联机.md']);
+
+    // No hit at all → nothing (the seeded docs have no triggers).
+    assert.deepEqual(matchDocuments(dir, ['客服'], '你好'), []);
+
+    // `always: true` documents are included regardless of the text.
+    const always = matchDocuments(dir, ['产品'], '随便');
+    assert.deepEqual(always.map((doc) => doc.path), ['概述.md']);
+    assert.equal(always[0].always, true);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('writeKnowledge stores frontmatter and readKnowledge hides it from the body', () => {
+  const dir = tempDir();
+  try {
+    seed(dir);
+    writeKnowledge(dir, '客服', '触发.md', '# 正文标题\n\n内容。\n', { title: '标题', triggers: ['甲'], always: false });
+    const raw = fs.readFileSync(path.join(dir, '客服', '触发.md'), 'utf8');
+    assert.match(raw, /^---\ntitle: 标题\ntriggers: 甲\n---/u);
+    const read = readKnowledge(dir, ['客服'], '客服/触发.md');
+    assert.equal(read.ok, true);
+    assert.equal(read.title, '标题');
+    assert.deepEqual(read.triggers, ['甲']);
+    assert.doesNotMatch(read.content, /^---/u);
+    assert.match(read.content, /正文标题/u);
+    // Search must not match frontmatter-only words.
+    const miss = searchKnowledge(dir, ['客服'], '甲');
+    assert.equal(miss.hits.some((hit) => hit.path === '触发.md'), false);
   } finally {
     cleanup(dir);
   }
