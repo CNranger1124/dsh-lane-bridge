@@ -116,6 +116,9 @@ export function defaultConfig() {
   return {
     enabled: true,
     defaultDomainId: 'default',
+    // Fallback for a conversation that has not picked a role yet. Roles carry
+    // the domain binding, so this is only a convenience default.
+    defaultRole: '',
     // Unbound conversations are recorded but never prompt an agent. These two
     // switches are an explicit opt-in for a support inbox that should answer
     // strangers immediately.
@@ -175,7 +178,9 @@ export function defaultDomain() {
   return {
     id: 'default',
     name: '默认客服',
-    role: '客服',
+    // A domain owns infrastructure: knowledge scopes and shared memory. It no
+    // longer names a role — roles point at domains, and a conversation picks a
+    // role.
     preset: 'lane-support',
     model: '',
     knowledgeScopes: ['default'],
@@ -242,65 +247,21 @@ export function sampleRoleCard() {
 }
 
 export function sampleKnowledge() {
-  // Each file demonstrates the frontmatter a real document should carry: its own
-  // trigger words. A hit on one document does not pull the others in.
+  // One flat starter document. The knowledge base is not split into manuals:
+  // a document is a self-contained unit with its own triggers, and the operator
+  // writes as many (or as few) as the product actually needs.
   return {
-    'default/产品概述.md': `---
-title: 产品概述
-triggers: 产品, 这是什么, 玩法, 新手
-always: false
+    'default/知识库.md': `---
+title: 知识库
+triggers:
+domains: default
 ---
 
-# 产品概述
+# 知识库
 
-> 这是知识库示例。把它替换成你自己产品的口径。
-
-## 一句话
-
-（产品是什么、面向谁、核心玩法/功能是什么。）
-
-## 主要模块
-
-| 模块 | 用户会怎么描述 | 备注 |
-| --- | --- | --- |
-| 示例模块 | 「那个功能」 | 待补充 |
-`,
-    'default/常见问题.md': `---
-title: 常见问题
-triggers: 存档, 联机, 反馈, 存档在哪
----
-
-# 常见问题
-
-## 存档位置在哪？
-
-（填写各平台的存档路径或说明。）
-
-## 支持联机吗？
-
-（填写支持情况。）
-
-## 遇到 bug 怎么反馈？
-
-请提供：版本号、平台、报错原文、复现步骤。
-`,
-    'default/排障手册.md': `---
-title: 排障手册
-triggers: 闪退, 进不去, 卡住, 没反应, 报错
----
-
-# 排障手册
-
-## 进不去 / 闪退
-
-1. 确认版本号与平台。
-2. 让用户提供报错原文或截图里的文字。
-3. 检查是否为已知 issue。
-
-## 卡住 / 没反应
-
-1. 确认是否必现、从什么时候开始。
-2. 让用户尝试重启并复现一次。
+> 一篇文档就是一条知识单元。在设置页给它配上触发词（写在上面的 \`triggers\` 里），
+> 入站消息命中其中之一时才会把这篇注入提示词。
+> 这篇目前是空的，直接改写成你自己的产品口径即可。
 `,
   };
 }
@@ -312,7 +273,9 @@ export function defaultState() {
     revision: 0,
     config: defaultConfig(),
     domains: [defaultDomain()],
-    roles: [{ name: '客服', content: role, updatedAt: 0 }],
+    // Conversation → role → domain. The role carries the domain binding; the
+    // domain carries the infrastructure (knowledge scopes, memory).
+    roles: [{ name: '客服', content: role, domainId: 'default', updatedAt: 0 }],
     bindings: {},
     conversations: {},
     sessions: {},

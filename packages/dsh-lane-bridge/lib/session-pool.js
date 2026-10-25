@@ -322,7 +322,7 @@ export class SessionPool {
 
     let docs = [];
     try {
-      docs = matchDocuments(this.knowledgeDir, resolved.knowledgeScopes, text, 4);
+      docs = matchDocuments(this.knowledgeDir, resolved.knowledgeScopes, text, 4, resolved.domain?.id ?? '');
     } catch (error) {
       this.logger?.warn?.(`[lane-bridge] 知识库检索失败：${error?.message ?? error}`);
     }
@@ -342,7 +342,7 @@ export class SessionPool {
     for (const word of matchedWords) {
       let result;
       try {
-        result = searchKnowledge(this.knowledgeDir, resolved.knowledgeScopes, word, 3);
+        result = searchKnowledge(this.knowledgeDir, resolved.knowledgeScopes, word, 3, resolved.domain?.id ?? '');
       } catch (error) {
         this.logger?.warn?.(`[lane-bridge] 知识库检索失败：${error?.message ?? error}`);
         continue;

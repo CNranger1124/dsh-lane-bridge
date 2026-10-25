@@ -119,26 +119,51 @@ export function buildMigration({ fromDir }) {
 
   const domains = [defaultDomain()];
   if (hasSupport) {
-    const supportRole = roleNames.has('客服') ? '客服' : state.roles[0].name;
     const scopes = scopeNames.has('客服') ? ['客服'] : (scopeNames.has('default') ? ['default'] : [...scopeNames].slice(0, 1));
     domains.push({
       ...defaultDomain(),
       id: 'support',
       name: '客服',
-      role: supportRole,
       knowledgeScopes: scopes.length > 0 ? scopes : ['default'],
       autoReply: true,
     });
   }
   state.domains = domains;
 
+  // 0.4.0 model: roles carry the domain, conversations only name a role. Give
+  // every migrated domain its own role card, so a binding always has something
+  // to point at, and so a conversation switches infrastructure by role.
+  const baseRole = state.roles[0] ?? { name: '客服', content: '' };
+  for (const domain of state.domains) {
+    if (state.roles.some((role) => role.domainId === domain.id)) continue;
+    const sameName = state.roles.find((role) => role.name === baseRole.name);
+    if (domain.id === 'default' && sameName) {
+      sameName.domainId = 'default';
+      continue;
+    }
+    const name = domain.id === 'default' ? baseRole.name : `${baseRole.name}（${domain.name || domain.id}）`;
+    state.roles.push({
+      name: roleNames.has(name) ? `${name}-${domain.id}` : name,
+      content: baseRole.content,
+      domainId: domain.id,
+      updatedAt: 0,
+    });
+  }
+  const roleForDomain = (domainId) => (state.roles.find((role) => role.domainId === domainId) ?? state.roles[0]).name;
+  for (const role of state.roles) {
+    if (!role.domainId) role.domainId = state.domains[0].id;
+  }
   const bindings = {};
-  const addBinding = (key, domainId, role) => {
+  const addBinding = (key, domainId, legacyRole) => {
     if (!/^[^:]+:(group|private):.+/u.test(key)) return;
+    // A migrated conversation names a role; that role already carries the
+    // domain. Prefer a legacy per-conversation role only when it is bound to the
+    // same domain, otherwise the domain would silently move.
+    const bound = state.roles.find((role) => role.name === legacyRole && role.domainId === domainId);
     bindings[key] = {
       domainId,
       enabled: true,
-      role: role && roleNames.has(role) ? role : '',
+      role: bound ? bound.name : roleForDomain(domainId),
       preset: '',
       model: '',
       note: 'migrated from qq-bridge',

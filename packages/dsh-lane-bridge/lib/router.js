@@ -13,8 +13,20 @@ export function bindingFor(state, key) {
   return binding && binding.enabled !== false ? binding : null;
 }
 
+export function findRole(state, name) {
+  const roles = Array.isArray(state?.roles) ? state.roles : [];
+  const wanted = String(name ?? '').trim();
+  if (!wanted) return null;
+  return roles.find((role) => role.name === wanted) ?? null;
+}
+
 /**
  * Resolve the effective policy for one conversation.
+ *
+ * Model: conversation → role → domain. The conversation names a role card, the
+ * role names its domain, and the domain owns the infrastructure (knowledge
+ * scopes, shared memory, repo, operators, attention policy). `domainId` on a
+ * binding is only read for state written before 0.4.0.
  *
  * @returns {{
  *   key: string, bound: boolean, domain: object|null,
@@ -30,7 +42,20 @@ export function resolveConversation(state, key) {
   if (!parsed) throw new TypeError(`invalid conversation key: ${key}`);
   const binding = bindingFor(state, key);
   const defaultDomain = findDomain(state, state?.config?.defaultDomainId);
-  const domain = binding ? findDomain(state, binding.domainId) : defaultDomain;
+  const roleName = String(binding?.role || state?.config?.defaultRole || '').trim();
+  const legacyDomainId = String(binding?.domainId ?? '').trim();
+  let role = findRole(state, roleName);
+  const domain = role?.domainId
+    ? findDomain(state, role.domainId)
+    : legacyDomainId
+      ? findDomain(state, legacyDomainId)
+      : defaultDomain;
+  // No explicit role: use the first card that belongs to the resolved domain, so
+  // the persona and the infrastructure never disagree.
+  if (!role) {
+    const roles = Array.isArray(state?.roles) ? state.roles : [];
+    role = roles.find((item) => item.domainId === domain?.id) ?? roles[0] ?? null;
+  }
   const unbound = !binding;
   const autoReply = binding
     ? domain?.autoReply !== false
@@ -42,7 +67,7 @@ export function resolveConversation(state, key) {
     key,
     bound: !unbound,
     domain: domain ?? null,
-    role: String(binding?.role || domain?.role || state?.roles?.[0]?.name || '客服'),
+    role: String(role?.name || '客服'),
     preset: String(binding?.preset || domain?.preset || 'lane-support'),
     model: String(binding?.model || domain?.model || ''),
     knowledgeScopes: Array.isArray(domain?.knowledgeScopes) && domain.knowledgeScopes.length > 0

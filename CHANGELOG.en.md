@@ -2,6 +2,25 @@
 
 # Changelog
 
+## 0.4.0
+
+- **Model is now conversation → role → domain**: a binding only picks a role card,
+  the role card is bound to a domain, and the domain is infrastructure (KB scopes,
+  shared memory, repo, operators, attention policy, preset/model). Domains no
+  longer name a role, and the bindings table no longer offers a domain selector.
+- The role card gained a "domain" selector; the domain card replaces its old role
+  dropdown with a read-only "roles that use it" list, so the direction is no
+  longer written backwards.
+- Legacy state migrates automatically: 0.3.x's `domain.role` becomes that role
+  card's `domainId`, and an old binding without a role keeps resolving through its
+  `domainId` until you pick a role for it in the UI.
+- Role files stay `roles/*.md` (name + body); the domain binding lives in
+  `state.json` and is reconciled with the files on load, so a restart cannot reset
+  roles to the first domain.
+- Domain-level preset/model/triggers/operators are unchanged — they were always
+  infrastructure, they just stopped being described as role attributes.
+- 140 tests.
+
 ## 0.3.1
 
 - **Knowledge retrieval is now per document, not per global keyword**: each

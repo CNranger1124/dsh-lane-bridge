@@ -89,18 +89,32 @@ function rememberSender(senders, entry, name, at) {
   return Object.fromEntries(rows.slice(0, MAX_SENDERS_PER_CONVERSATION));
 }
 
-function normalizeRoleList(raw) {
+function normalizeRoleList(raw, domains = null, fallbackDomainId = 'default') {
   const list = Array.isArray(raw) ? raw : [];
+  const known = Array.isArray(domains) ? domains : [];
+  const valid = (id) => known.some((domain) => domain.id === id);
   const seen = new Set();
   const out = [];
   for (const item of list) {
     const name = String(item?.name ?? '').trim();
     if (!name || seen.has(name)) continue;
     const content = String(item?.content ?? '');
-    out.push({ name, content, updatedAt: Number(item?.updatedAt) || 0 });
+    // Conversation → role → domain. A role must name an existing domain; an
+    // unknown/absent one falls back to the first domain so a deleted domain
+    // never orphans a role card.
+    const wanted = String(item?.domainId ?? '').trim();
+    const domainId = valid(wanted) ? wanted : (known[0]?.id ?? fallbackDomainId);
+    out.push({ name, content, domainId, updatedAt: Number(item?.updatedAt) || 0 });
     seen.add(name);
   }
-  if (out.length === 0) out.push({ name: '客服', content: sampleRoleCard(), updatedAt: 0 });
+  if (out.length === 0) {
+    out.push({
+      name: '客服',
+      content: sampleRoleCard(),
+      domainId: known[0]?.id ?? fallbackDomainId,
+      updatedAt: 0,
+    });
+  }
   return out;
 }
 
@@ -194,19 +208,42 @@ export function normalizeState(raw) {
   const { domains, defaultDomainId } = normalizeDomainList(src.domains, config.defaultDomainId);
   config.defaultDomainId = defaultDomainId;
 
-  const roles = normalizeRoleList(src.roles);
+  // Migration: older state had `domain.role` naming a role. Turn that into the
+  // new direction (role → domain) before normalization, so a state file written
+  // by 0.3.x keeps its behaviour without the operator re-choosing anything.
+  const legacyRoleDomain = new Map();
+  for (const domain of Array.isArray(src.domains) ? src.domains : []) {
+    const legacyRole = String(domain?.role ?? '').trim();
+    if (legacyRole) legacyRoleDomain.set(legacyRole, String(domain?.id ?? '').trim());
+  }
+  const roleSource = (Array.isArray(src.roles) ? src.roles : []).map((role) => ({
+    ...role,
+    domainId: String(role?.domainId ?? '').trim() || legacyRoleDomain.get(String(role?.name ?? '')) || '',
+  }));
+  const roles = normalizeRoleList(roleSource, domains, defaultDomainId);
   const roleNames = new Set(roles.map((r) => r.name));
+  for (const domain of domains) delete domain.role;
+  if (roles.length > 0 && !roles.some((role) => role.name === config.defaultRole)) {
+    // `defaultRole` is only a fallback for bindings that never chose a role; it
+    // follows the first card so the field can never dangle.
+    config.defaultRole = roles[0].name;
+  }
 
   const bindings = {};
   if (isObject(src.bindings)) {
     for (const [key, value] of Object.entries(src.bindings)) {
       if (!/^[^:]+:(group|private):.+$/u.test(key) || !isObject(value)) continue;
-      const domainId = String(value.domainId ?? defaultDomainId);
-      if (!domains.some((d) => d.id === domainId)) continue;
+      const roleName = String(value.role ?? '');
+      const role = roleName ? roles.find((item) => item.name === roleName) : null;
+      // New model: the conversation names a role, the role names the domain.
+      // `domainId` is retained only for legacy rows without a role.
+      const domainId = role?.domainId
+        ?? (String(value.domainId ?? '').trim() || '');
+      if (domainId && !domains.some((d) => d.id === domainId)) continue;
       bindings[key] = {
-        domainId,
+        domainId: domainId || defaultDomainId,
         enabled: value.enabled !== false,
-        role: String(value.role ?? ''),
+        role: role?.name ?? '',
         preset: String(value.preset ?? ''),
         model: String(value.model ?? ''),
         note: String(value.note ?? ''),
@@ -256,14 +293,17 @@ export function normalizeState(raw) {
     }
   }
 
-  // A domain may point at a role card that no longer exists; fall back to the
-  // first role so a deleted role never breaks a live conversation.
-  const fallbackRole = roles[0]?.name ?? '客服';
-  for (const domain of domains) {
-    if (!roleNames.has(domain.role)) domain.role = fallbackRole;
-  }
+  // A binding may name a role card that no longer exists; clear it so the
+  // conversation falls back to the default role instead of breaking.
   for (const binding of Object.values(bindings)) {
     if (binding.role && !roleNames.has(binding.role)) binding.role = '';
+    // Migrated rows only had a domain; pin the role explicitly so the UI shows
+    // what the conversation actually uses.
+    if (!binding.role) {
+      const domainId = binding.domainId || defaultDomainId;
+      const role = roles.find((item) => item.domainId === domainId);
+      if (role) binding.role = role.name;
+    }
   }
 
   return {
@@ -385,11 +425,17 @@ export class LaneStore {
     }
     this.state = normalizeState(raw);
 
-    // Role files are the durable editable copy; the state carries a cached
-    // copy for the UI. Reconcile both directions on load.
+    // Role files are the durable editable copy (name + content); the domain
+    // binding lives in state.json only, so it must be carried across the
+    // reconcile or every restart would reset roles to the first domain.
     const fromDisk = readRoleFiles(this.rolesDir);
     if (fromDisk.length > 0) {
-      this.state.roles = normalizeRoleList(fromDisk);
+      const previous = new Map(this.state.roles.map((role) => [role.name, role]));
+      this.state.roles = normalizeRoleList(
+        fromDisk.map((role) => ({ ...role, domainId: previous.get(role.name)?.domainId })),
+        this.state.domains,
+        this.state.config.defaultDomainId
+      );
     } else {
       for (const role of this.state.roles) this.#writeRoleFile(role.name, role.content);
     }
@@ -462,7 +508,7 @@ export class LaneStore {
 
   async setRoles(roles) {
     return this.update((draft) => {
-      const next = normalizeRoleList(roles);
+      const next = normalizeRoleList(roles, draft.domains, draft.config.defaultDomainId);
       const previous = new Map(draft.roles.map((r) => [r.name, r]));
       draft.roles = next.map((role) => ({ ...role, updatedAt: role.updatedAt || Date.now() }));
       // Remove files for roles deleted by the editor; write changed ones.

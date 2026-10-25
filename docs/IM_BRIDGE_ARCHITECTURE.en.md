@@ -26,22 +26,26 @@ not a second product surface.
 | --- | --- |
 | **Channel** | A transport account: `snowluma` (OneBot v11), `qqbot` (official QQ Bot), later `discord`. |
 | **Conversation** | One chat thread seen by a channel: a group or a private chat. Key: `<channel>:<group|private>:<externalId>`. |
-| **Domain** | Reusable behavior: role card, agent preset, model, KB scopes, host-tool allow-list, group trigger policy (all/mention/keyword/off; mention and keyword can be enabled together), reply policy. Think "tenant" or "product line". |
-| **Binding** | Conversation → domain (+ optional per-conversation role/preset/model overrides). A conversation without a binding is *discovered* but does not call a model. |
-| **Role card** | A Markdown persona in the shared role library. Domains and bindings reference it by name. |
-| **Knowledge base** | Shared Markdown tree (`knowledge/<scope>/...`) read by `lane_kb_*` tools. Domains choose scopes. |
+| **Domain** | **Infrastructure**: KB scopes, shared memory, GitHub repo, host-tool allow-list, operator whitelist, group trigger policy (all/mention/keyword/off; mention and keyword can be enabled together), agent preset/model, reply policy. A domain never names a role. |
+| **Binding** | Conversation → role. There is no domain on a binding; it only picks a role card. A conversation without a binding is *discovered* but does not call a model. |
+| **Role card** | A Markdown persona plus its **domain**. The conversation picks the role; the role decides which infrastructure is used. |
+| **Knowledge base** | Shared Markdown tree (`knowledge/<scope>/...`). Each document carries `triggers` / `domains` frontmatter, read by `lane_kb_*` and by auto retrieval. |
 | **Domain memory** | Optional shared notes (`memories/<domainId>.json`) read/written by `lane_memory_*`; injected into the prompt chronologically, capped. |
 | **Session** | The DSH session mapped 1:1 to a conversation. |
 | **Push** | Operator-initiated outbound message to any bound conversation (HTTP + agent tool). |
 
-### Domain resolution order
+### Resolution order: conversation → role → domain
 
 ```
-binding override (role / preset / model)
-  → bound domain
-  → global default domain
-  → hard defaults
+binding.role (else config.defaultRole / the first role card)
+  → the role card's domainId
+  → the domain (KB scopes, memory, repo, operators, triggers, preset/model)
+  → the global default domain (role missing / legacy data)
 ```
+
+State from 0.3.x is migrated here: an old `domain.role` becomes that role card's
+`domainId`, and a `binding.domainId` without a role still resolves through that
+domain, so behaviour is unchanged until the operator picks a role in the UI.
 
 If no binding exists, the plugin records the conversation under "discovered" and
 does not prompt an agent. This is the cost/safety default; an operator explicitly

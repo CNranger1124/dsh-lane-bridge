@@ -128,9 +128,10 @@ test('draft lifecycle: write, hide, list, approve, discard', () => {
 });
 
 test('documents parse their own frontmatter without touching the body', () => {
-  const withHead = parseDocument('---\ntitle: 存档位置\ntriggers: 存档, 存档在哪，save\nalways: true\n---\n\n# 存档\n\n正文。\n');
+  const withHead = parseDocument('---\ntitle: 存档位置\ntriggers: 存档, 存档在哪，save\ndomains: default, vip\nalways: true\n---\n\n# 存档\n\n正文。\n');
   assert.equal(withHead.meta.title, '存档位置');
   assert.deepEqual(withHead.meta.triggers, ['存档', '存档在哪', 'save']);
+  assert.deepEqual(withHead.meta.domains, ['default', 'vip']);
   assert.equal(withHead.meta.always, true);
   assert.equal(withHead.body.trim(), '# 存档\n\n正文。');
 
@@ -143,9 +144,9 @@ test('documents parse their own frontmatter without touching the body', () => {
   assert.match(plain.body, /# 标题/u);
 
   // Round trip: rendering then parsing gives the same metadata.
-  const rendered = formatDocument({ meta: { title: 'T', triggers: ['a', 'b'], always: true }, body: '# T\n\nx' });
+  const rendered = formatDocument({ meta: { title: 'T', triggers: ['a', 'b'], domains: ['x'], always: true }, body: '# T\n\nx' });
   const back = parseDocument(rendered);
-  assert.deepEqual(back.meta, { title: 'T', triggers: ['a', 'b'], always: true });
+  assert.deepEqual(back.meta, { title: 'T', triggers: ['a', 'b'], domains: ['x'], always: true });
   assert.equal(back.body.trim(), '# T\n\nx');
   // No metadata means no frontmatter block is emitted.
   assert.equal(formatDocument({ meta: { triggers: [] }, body: '# x' }), '# x');

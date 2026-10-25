@@ -60,12 +60,23 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **Token 用量**：本地按会话的 token 账本和「用量」页。
 - **聊天式合并**：按会话短 debounce，把连续消息合成一次 prompt（可配置，`0` 关闭）。
 
-## 配置模型
+## 配置模型：会话 → 角色 → 领域
 
-- **渠道** 在 `state.json` 的 `config.channels.*`。
-- **领域** 描述行为：角色卡名、agent preset、可选 `provider/model`、知识库 scope、允许的宿主工具、管理者白名单、回复上限，以及可选的 `repo` / `branch`（留空继承全局 GitHub 仓库）。
-- **绑定** 把会话 key（`snowluma:group:123456`、`qqbot:private:openid`）挂到领域。
+三层，方向是单向的：
+
+```text
+会话（一个群 / 一个私聊）
+  └─ 选一个角色卡
+       └─ 角色卡绑定一个领域
+            └─ 领域是基础设施：知识库 scope、共享记忆、仓库、管理者、触发策略、preset/模型
+```
+
+- **会话（绑定）只选角色**。绑定里没有「领域」这个选项——换一个角色，知识库、记忆、策略整套跟着换。
+- **角色卡 = 人格文本 + 所属领域**。在「角色卡」页设「所属领域」，它决定这个角色用哪套基础设施。
+- **领域不点名角色**，只描述基础设施：`knowledgeScopes`、记忆开关与长度、`operators`、触发策略、`repo`/`branch`、preset/模型。
+- 一个领域可以挂多个角色（同一套知识库，不同说话人设）；一个角色只属于一个领域。
 - 未绑定会话只记录，不触发模型。想做开放客服收件箱可打开 `autoReplyPrivate`。
+- 兼容旧状态：0.3.x 的 `domain.role` 和 `binding.domainId` 会在加载时自动迁移成「角色 → 领域」，不用重配。
 
 ## 管理者（白名单）
 

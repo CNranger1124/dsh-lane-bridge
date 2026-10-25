@@ -38,53 +38,78 @@ test('explicit private auto-reply turns an unbound private chat on', () => {
   assert.equal(canReply(state, 'snowluma:group:42'), false);
 });
 
-test('bindings override domain and per-conversation role/model', () => {
+test('a conversation picks a role, and the role picks the domain', () => {
   const state = defaultState();
-  state.roles.push({ name: 'VIP', content: '# VIP' });
+  state.roles.push({ name: 'VIP', content: '# VIP', domainId: 'vip' });
   state.domains.push({
     ...state.domains[0],
     id: 'vip',
     name: 'VIP 客服',
-    role: 'VIP',
     knowledgeScopes: ['vip'],
     allowedHostTools: ['web_search'],
     autoReply: true,
   });
   state.bindings['snowluma:group:123'] = {
-    domainId: 'vip',
     enabled: true,
-    role: '客服',
+    role: 'VIP',
     preset: '',
     model: 'deepseek/deepseek-flash',
   };
   const resolved = resolveConversation(state, 'snowluma:group:123');
   assert.equal(resolved.bound, true);
+  assert.equal(resolved.role, 'VIP');
+  // The domain comes from the role, not from the binding.
   assert.equal(resolved.domain.id, 'vip');
-  assert.equal(resolved.role, '客服');
   assert.equal(resolved.model, 'deepseek/deepseek-flash');
   assert.deepEqual(resolved.knowledgeScopes, ['vip']);
   assert.deepEqual(resolved.allowedHostTools, ['web_search']);
   assert.equal(resolved.autoReply, true);
   assert.equal(canReply(state, 'snowluma:group:123'), true);
+
+  // Switching only the role switches the whole infrastructure with it.
+  state.bindings['snowluma:group:123'].role = '客服';
+  const back = resolveConversation(state, 'snowluma:group:123');
+  assert.equal(back.domain.id, 'default');
+  assert.deepEqual(back.knowledgeScopes, ['default']);
 });
 
-test('domains can override the global GitHub repository and branch', () => {
+test('a conversation without a role falls back to the default role', () => {
   const state = defaultState();
-  state.config.github = { ...(state.config.github ?? {}), repo: 'global/repo', branch: 'main' };
-  state.domains.push({
-    ...state.domains[0],
-    id: 'game',
-    name: '游戏客服',
-    repo: 'studio/game',
-    branch: 'release',
-  });
+  state.bindings['snowluma:group:7'] = { enabled: true };
+  const resolved = resolveConversation(state, 'snowluma:group:7');
+  assert.equal(resolved.role, '客服');
+  assert.equal(resolved.domain.id, 'default');
+});
+
+test('legacy bindings that only named a domain still resolve', () => {
+  const state = defaultState();
+  state.domains.push({ ...state.domains[0], id: 'game', name: '游戏客服', repo: 'studio/game', branch: 'release' });
+  // Pre-0.4.0 row: no role, domainId only.
   state.bindings['snowluma:group:9'] = { domainId: 'game', enabled: true };
   const bound = resolveConversation(state, 'snowluma:group:9');
+  assert.equal(bound.domain.id, 'game');
   assert.equal(bound.repo, 'studio/game');
   assert.equal(bound.repoBranch, 'release');
   const fallback = resolveConversation(state, 'snowluma:group:10');
-  assert.equal(fallback.repo, 'global/repo');
-  assert.equal(fallback.repoBranch, 'main');
+  assert.equal(fallback.domain.id, 'default');
+});
+
+test('a legacy domain-only binding picks a role from that domain', () => {
+  const state = defaultState();
+  state.roles.push({ name: '游戏客服', content: '# G', domainId: 'game' });
+  state.domains.push({ ...state.domains[0], id: 'game', name: '游戏' });
+  state.bindings['snowluma:group:5'] = { domainId: 'game', enabled: true };
+  const resolved = resolveConversation(state, 'snowluma:group:5');
+  assert.equal(resolved.domain.id, 'game');
+  assert.equal(resolved.role, '游戏客服');
+});
+
+test('the fallback role belongs to the resolved domain', () => {
+  const state = defaultState();
+  state.roles.push({ name: '游戏客服', content: '# G', domainId: 'game' });
+  state.domains.push({ ...state.domains[0], id: 'game', name: '游戏' });
+  state.bindings['snowluma:group:6'] = { domainId: 'game', enabled: true, role: '' };
+  assert.equal(resolveConversation(state, 'snowluma:group:6').role, '游戏客服');
 });
 
 test('disabled bindings fall back to unbound behavior', () => {

@@ -42,7 +42,12 @@ test('migration builds domains, bindings, roles, knowledge, and sessions', () =>
     assert.equal(plan.state.bindings['snowluma:private:111'].domainId, 'default');
     assert.equal(plan.state.bindings['snowluma:group:222'].domainId, 'support');
     assert.equal(plan.state.sessions['snowluma:group:222'].sessionId, 'sess-2');
-    assert.equal(plan.state.sessions['snowluma:group:222'].role, '客服');
+    // The session caches the role it was created with; roles now carry the domain.
+    assert.equal(
+      plan.state.sessions['snowluma:group:222'].role,
+      plan.state.bindings['snowluma:group:222'].role
+    );
+    assert.ok(plan.state.roles.some((role) => role.domainId === 'support'));
     assert.equal(plan.state.config.channels.snowluma.homeDir, 'C:/SnowLuma');
     assert.ok(plan.warnings.some((warning) => warning.includes('launcherPath')));
   } finally {

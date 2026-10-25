@@ -69,14 +69,20 @@ function selectedScopes(knowledgeDir, scopes) {
 //   ---
 //   title: 存档位置
 //   triggers: 存档, 存档在哪, save
+//   domains: default, vip
 //   always: false
 //   ---
 //
-// Only these three keys are understood. Parsing is deliberately forgiving: an
+// `domains` is the per-document domain binding: a document is only visible to the
+// domains listed there (empty = every domain allowed in that scope). That mirrors
+// how memory is scoped to a domain instead of being global.
+//
+// Only these four keys are understood. Parsing is deliberately forgiving: an
 // unparsable head is treated as text, never as an error, because these files are
 // hand-written.
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
+const MAX_META_ITEMS = 30;
 
 function splitList(value) {
   return String(value ?? '')
@@ -89,15 +95,21 @@ function splitList(value) {
 export function parseDocument(text) {
   const source = String(text ?? '').replace(/\r\n/gu, '\n');
   const match = FRONTMATTER_RE.exec(source);
-  if (!match) return { meta: { title: '', triggers: [], always: false }, body: source, hasFrontmatter: false };
-  const data = { title: '', triggers: [], always: false };
+  if (!match) {
+    return {
+      meta: { title: '', triggers: [], domains: [], always: false },
+      body: source,
+      hasFrontmatter: false,
+    };
+  }
+  const data = { title: '', triggers: [], domains: [], always: false };
   let pendingList = '';
   for (const rawLine of match[1].split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
     const item = /^[-*]\s+(.+)$/u.exec(line);
-    if (item && pendingList === 'triggers') {
-      data.triggers.push(...splitList(item[1]));
+    if (item && (pendingList === 'triggers' || pendingList === 'domains')) {
+      data[pendingList].push(...splitList(item[1]));
       continue;
     }
     const pair = /^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/u.exec(line);
@@ -107,12 +119,14 @@ export function parseDocument(text) {
     pendingList = value ? '' : key;
     if (key === 'title') data.title = value.replace(/^["']|["']$/gu, '').slice(0, 120);
     else if (key === 'triggers' || key === 'trigger' || key === 'keywords') data.triggers.push(...splitList(value));
+    else if (key === 'domains' || key === 'domain') data.domains.push(...splitList(value));
     else if (key === 'always') data.always = /^(true|yes|1)$/iu.test(value);
   }
   return {
     meta: {
       title: data.title,
-      triggers: [...new Set(data.triggers.map((item) => item.trim()).filter(Boolean))],
+      triggers: [...new Set(data.triggers.map((item) => item.trim()).filter(Boolean))].slice(0, MAX_META_ITEMS),
+      domains: [...new Set(data.domains.map((item) => item.trim()).filter(Boolean))].slice(0, MAX_META_ITEMS),
       always: data.always,
     },
     body: source.slice(match[0].length),
@@ -124,14 +138,30 @@ export function parseDocument(text) {
 export function formatDocument({ meta = {}, body = '' } = {}) {
   const title = String(meta.title ?? '').trim();
   const triggers = Array.isArray(meta.triggers) ? meta.triggers.map((item) => String(item).trim()).filter(Boolean) : [];
+  const domains = Array.isArray(meta.domains) ? meta.domains.map((item) => String(item).trim()).filter(Boolean) : [];
   const always = meta.always === true;
-  if (!title && triggers.length === 0 && !always) return String(body ?? '');
+  if (!title && triggers.length === 0 && domains.length === 0 && !always) return String(body ?? '');
   const lines = ['---'];
   if (title) lines.push(`title: ${title}`);
   if (triggers.length > 0) lines.push(`triggers: ${triggers.join(', ')}`);
+  if (domains.length > 0) lines.push(`domains: ${domains.join(', ')}`);
   if (always) lines.push('always: true');
   lines.push('---', '');
   return `${lines.join('\n')}${String(body ?? '').replace(/^\n+/u, '')}`;
+}
+
+/**
+ * Is this document visible to the given domain?
+ *
+ * No binding (`domains` empty) keeps the historical behaviour: visible to any
+ * domain whose knowledge scopes include the document's folder.
+ */
+export function documentVisibleTo(meta, domainId) {
+  const wanted = String(domainId ?? '').trim().toLowerCase();
+  if (!wanted) return true;
+  const domains = Array.isArray(meta?.domains) ? meta.domains : [];
+  if (domains.length === 0) return true;
+  return domains.some((entry) => String(entry).trim().toLowerCase() === wanted);
 }
 
 /** Title for display: frontmatter, else the first heading, else the file name. */
@@ -141,7 +171,7 @@ export function documentTitle(meta, body, fallback) {
   return heading || String(fallback ?? '');
 }
 
-export function listKnowledge(knowledgeDir, scopes = null) {
+export function listKnowledge(knowledgeDir, scopes = null, domainId = '') {
   const available = listScopes(knowledgeDir);
   const picked = selectedScopes(knowledgeDir, scopes);
   const files = [];
@@ -151,12 +181,14 @@ export function listKnowledge(knowledgeDir, scopes = null) {
       let text = '';
       try { text = fs.readFileSync(abs, 'utf8'); } catch { continue; }
       const parsed = parseDocument(text);
+      if (!documentVisibleTo(parsed.meta, domainId)) continue;
       files.push({
         scope,
         path: rel,
         size: fs.statSync(abs).size,
         title: documentTitle(parsed.meta, parsed.body, rel),
         triggers: parsed.meta.triggers,
+        domains: parsed.meta.domains,
         always: parsed.meta.always,
       });
     }
@@ -191,11 +223,14 @@ function resolveReadPath(knowledgeDir, scopes, requested) {
   return { ok: false, message: `没有这个文件：${raw}` };
 }
 
-export function readKnowledge(knowledgeDir, scopes, requested) {
+export function readKnowledge(knowledgeDir, scopes, requested, domainId = '') {
   const found = resolveReadPath(knowledgeDir, scopes, requested);
   if (!found.ok) return found;
   const raw = fs.readFileSync(found.abs, 'utf8').replace(/\r\n/gu, '\n');
   const parsed = parseDocument(raw);
+  if (!documentVisibleTo(parsed.meta, domainId)) {
+    return { ok: false, message: '这篇文档绑定了其他领域，当前领域不能读取' };
+  }
   const text = parsed.body;
   const truncated = text.length > MAX_READ_CHARS;
   return {
@@ -205,6 +240,7 @@ export function readKnowledge(knowledgeDir, scopes, requested) {
     title: documentTitle(parsed.meta, text, found.rel),
     meta: parsed.meta,
     triggers: parsed.meta.triggers,
+    domains: parsed.meta.domains,
     always: parsed.meta.always,
     chars: text.length,
     truncated,
@@ -219,7 +255,7 @@ export function readKnowledge(knowledgeDir, scopes, requested) {
  * carrying its own triggers. `always: true` documents are included regardless,
  * which is how a "product overview" stays in context.
  */
-export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4) {
+export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4, domainId = '') {
   const lower = String(text ?? '').toLowerCase();
   const picked = selectedScopes(knowledgeDir, scopes);
   const scored = [];
@@ -228,6 +264,7 @@ export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4
       let raw = '';
       try { raw = fs.readFileSync(abs, 'utf8'); } catch { continue; }
       const parsed = parseDocument(raw);
+      if (!documentVisibleTo(parsed.meta, domainId)) continue;
       const rel = path.relative(path.join(knowledgeDir, scope), abs).replace(/\\/gu, '/');
       const matched = parsed.meta.triggers.filter((trigger) => lower.includes(String(trigger).toLowerCase()));
       if (matched.length === 0 && parsed.meta.always !== true) continue;
@@ -240,6 +277,7 @@ export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4
         title: documentTitle(parsed.meta, parsed.body, rel),
         body: parsed.body,
         triggers: parsed.meta.triggers,
+        domains: parsed.meta.domains,
         matched,
         always: parsed.meta.always === true,
         score: matched.length * 100 + longest * 10 + (parsed.meta.always ? 1 : 0),
@@ -269,12 +307,12 @@ function sectionsOf(text) {
   return sections;
 }
 
-export function searchKnowledge(knowledgeDir, scopes, query, limit = 8) {
+export function searchKnowledge(knowledgeDir, scopes, query, limit = 8, domainId = '') {
   const terms = String(query ?? '').trim().toLowerCase().split(/\s+/u).filter(Boolean);
   if (terms.length === 0) return { ok: false, message: 'query 不能为空' };
   const max = Math.max(1, Math.min(30, Number(limit) || 8));
   const hits = [];
-  for (const file of listKnowledge(knowledgeDir, scopes).files) {
+  for (const file of listKnowledge(knowledgeDir, scopes, domainId).files) {
     const abs = path.join(knowledgeDir, file.scope, file.path);
     let text = '';
     try {

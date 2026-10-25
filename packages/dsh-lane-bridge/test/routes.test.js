@@ -294,7 +294,7 @@ test('knowledge routes list and write documents', async () => {
     const again = mockResponse();
     await routes.handle(mockRequest({ url: '/lane-bridge/api/knowledge/read?scope=default&path=' + encodeURIComponent('存档.md') }), again);
     assert.equal(again.status, 200);
-    assert.deepEqual(again.json().meta, { title: '存档', triggers: ['存档', 'save'], always: true });
+    assert.deepEqual(again.json().meta, { title: '存档', triggers: ['存档', 'save'], domains: [], always: true });
     assert.doesNotMatch(again.json().content, /^---/u);
 
     const listed = mockResponse();

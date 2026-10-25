@@ -753,6 +753,9 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false);
       const domains = data.state.domains;
       const conversations = Object.values(data.state.conversations ?? {}).sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0));
+      // Conversation → role → domain: the table only offers roles, but showing
+      // which domain each role pulls in keeps the infrastructure visible.
+      const domainName = (id) => (data.state.domains ?? []).find((domain) => domain.id === id)?.name ?? id ?? '';
       // Recent participants, keyed by the exact string the operator whitelist
       // wants. Clicking a chip copies it so nobody has to retype an openid.
       const senderRows = (convo) => Object.entries(convo?.senders ?? {})
@@ -769,7 +772,7 @@ window.__ModuleLoader__.load({
       const setBinding = (key, patch) => {
         setDraft((current) => {
           const next = clone(current);
-          const existing = next[key] ?? { domainId: data.state.config.defaultDomainId, enabled: true };
+          const existing = next[key] ?? { enabled: true };
           next[key] = { ...existing, ...patch };
           return next;
         });
@@ -813,7 +816,7 @@ window.__ModuleLoader__.load({
         const key = manual.trim();
         if (!/^[^:]+:(group|private):.+/u.test(key)) { setError('key 必须形如 snowluma:group:123456'); return; }
         setError('');
-        setDraft((current) => ({ ...current, [key]: { domainId: data.state.config.defaultDomainId, enabled: true } }));
+        setDraft((current) => ({ ...current, [key]: { role: data.state.roles[0]?.name ?? '', enabled: true } }));
         setManual('');
       };
       return h('div', { className: 'lb-root' },
@@ -828,7 +831,7 @@ window.__ModuleLoader__.load({
           h('div', { style: { overflowX: 'auto' } },
             h('table', { className: 'lb-table' },
               h('thead', null, h('tr', null,
-                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, '最近发言者'), h('th', null, 'DSH 会话'), h('th', null, '领域'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
+                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, '最近发言者'), h('th', null, 'DSH 会话'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
               )),
               h('tbody', null, ...(conversations.length ? conversations.map((convo) => {
                 const binding = draft[convo.key];
@@ -863,24 +866,15 @@ window.__ModuleLoader__.load({
                       : h('span', { className: 'lb-muted' }, binding ? '尚未建立' : '未绑定')
                   ),
                   h('td', null,
-                    h('select', {
-                      className: 'lb-select',
-                      value: binding?.domainId ?? '',
-                      onChange: (e) => binding ? setBinding(convo.key, { domainId: e.target.value }) : null,
-                      disabled: !binding,
-                    },
-                      h('option', { value: '' }, '未绑定'),
-                      ...domains.map((domain) => h('option', { key: domain.id, value: domain.id }, domain.name || domain.id))
-                    )
-                  ),
-                  h('td', null,
                     binding ? h('select', {
                       className: 'lb-select',
                       value: binding.role ?? '',
                       onChange: (e) => setBinding(convo.key, { role: e.target.value }),
                     },
-                      h('option', { value: '' }, '跟随领域'),
-                      ...data.state.roles.map((role) => h('option', { key: role.name, value: role.name }, role.name))
+                      h('option', { value: '' }, '默认角色'),
+                      ...data.state.roles.map((role) => h('option', { key: role.name, value: role.name },
+                        `${role.name}${domainName(role.domainId) ? ` · ${domainName(role.domainId)}` : ''}`
+                      ))
                     ) : h('span', { className: 'lb-muted' }, '—')
                   ),
                   h('td', null,
@@ -900,7 +894,7 @@ window.__ModuleLoader__.load({
                     )
                   )
                 );
-              }) : [h('tr', null, h('td', { colSpan: 8, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
+              }) : [h('tr', null, h('td', { colSpan: 7, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
             )
           ),
           h('div', { className: 'lb-row' },
@@ -1044,10 +1038,10 @@ window.__ModuleLoader__.load({
           },
             h('div', { className: 'lb-grid' },
               h(Field, { label: '名称' }, h('input', { className: 'lb-input', value: current.name, onChange: (e) => patch('name', e.target.value) })),
-              h(Field, { label: 'ID', hint: '只读（绑定用它）' }, h('input', { className: 'lb-input', value: current.id, readOnly: true })),
-              h(Field, { label: '角色卡' },
-                h('select', { className: 'lb-select', value: current.role, onChange: (e) => patch('role', e.target.value) },
-                  ...data.state.roles.map((role) => h('option', { key: role.name, value: role.name }, role.name))
+              h(Field, { label: 'ID', hint: '只读；角色卡与知识库文档用它来归属' }, h('input', { className: 'lb-input', value: current.id, readOnly: true })),
+              h(Field, { label: '使用它的角色卡', hint: '角色 → 领域：在「角色卡」页把角色指向这个领域；会话只选角色' },
+                h('div', { className: 'lb-muted' },
+                  (data.state.roles ?? []).filter((role) => role.domainId === current.id).map((role) => role.name).join('、') || '（还没有角色指向这个领域）'
                 )
               ),
               h(Field, { label: 'Agent preset', hint: 'preset 决定会话挂哪些 DSH 插件和工具；桥接的 lane_* 工具与角色卡会另外注入' },
@@ -1262,7 +1256,8 @@ window.__ModuleLoader__.load({
       const [kbError, setKbError] = useState('');
       const [kbFile, setKbFile] = useState(null);
       const [kbContent, setKbContent] = useState('');
-      const [kbMeta, setKbMeta] = useState({ title: '', triggers: [], always: false });
+      const [kbMeta, setKbMeta] = useState({ title: '', triggers: [], domains: [], always: false });
+      const [kbNew, setKbNew] = useState({ scope: 'default', path: '' });
       const [kbMessage, setKbMessage] = useState('');
       const [memDomain, setMemDomain] = useState(() => data.state.domains[0]?.id ?? '');
       const [memText, setMemText] = useState('');
@@ -1285,6 +1280,7 @@ window.__ModuleLoader__.load({
           setKbMeta({
             title: String(result.meta?.title ?? ''),
             triggers: Array.isArray(result.meta?.triggers) ? result.meta.triggers : [],
+            domains: Array.isArray(result.meta?.domains) ? result.meta.domains : [],
             always: result.meta?.always === true,
           });
         } catch (err) { setKbError(String(err.message ?? err)); }
@@ -1298,6 +1294,22 @@ window.__ModuleLoader__.load({
             body: JSON.stringify({ scope: kbFile.scope, path: kbFile.path, content: kbContent, meta: kbMeta }),
           });
           setKbMessage('已保存');
+          await loadKb();
+        } catch (err) { setKbError(String(err.message ?? err)); }
+      };
+      const createKb = async () => {
+        const scope = String(kbNew.scope ?? '').trim() || 'default';
+        let rel = String(kbNew.path ?? '').trim().replace(/\\/gu, '/');
+        if (!rel) { setKbError('填一个文件名，例如 存档.md'); return; }
+        if (!/\.[a-z]+$/iu.test(rel)) rel = `${rel}.md`;
+        setKbError(''); setKbMessage('');
+        try {
+          await api('/knowledge', {
+            method: 'POST',
+            body: JSON.stringify({ scope, path: rel, content: `# ${rel.replace(/\.[^.]+$/u, '')}\n\n`, meta: { title: '', triggers: [], domains: [], always: false } }),
+          });
+          setKbMessage(`已创建 ${scope}/${rel}`);
+          setKbNew((state) => ({ ...state, path: '' }));
           await loadKb();
         } catch (err) { setKbError(String(err.message ?? err)); }
       };
@@ -1358,7 +1370,7 @@ window.__ModuleLoader__.load({
                 ...roles.map((role) => h('option', { key: role.name, value: role.name }, role.name))
               )
             ),
-            h(Field, { label: '重命名', hint: '失焦后生效；引用它的领域/绑定会回退到默认' },
+            h(Field, { label: '重命名', hint: '失焦后生效；引用它的绑定会回退到默认角色' },
               h('input', {
                 key: current?.name ?? '',
                 className: 'lb-input',
@@ -1371,6 +1383,15 @@ window.__ModuleLoader__.load({
                   setSelected(next);
                 },
               })
+            ),
+            h(Field, { label: '所属领域', hint: '角色 → 领域：这个角色决定会话用哪套知识库、记忆和策略' },
+              h('select', {
+                className: 'lb-select',
+                value: current?.domainId ?? '',
+                onChange: (e) => patch('domainId', e.target.value),
+              },
+                ...data.state.domains.map((domain) => h('option', { key: domain.id, value: domain.id }, domain.name || domain.id))
+              )
             )
           ),
           h('div', { className: 'lb-muted' },
@@ -1414,14 +1435,19 @@ window.__ModuleLoader__.load({
             h('div', { className: 'lb-muted' }, `scope：${(kb.scopes ?? []).join('、') || '（空）'}；文件 ${kb.count ?? 0} 个`),
             h('div', { style: { overflowX: 'auto' } },
               h('table', { className: 'lb-table' },
-                h('thead', null, h('tr', null, h('th', null, 'scope'), h('th', null, '文件'), h('th', null, '触发词'), h('th', null, '大小'), h('th', null, ''))),
+                h('thead', null, h('tr', null, h('th', null, 'scope'), h('th', null, '文件'), h('th', null, '触发词'), h('th', null, '绑定领域'), h('th', null, '大小'), h('th', null, ''))),
                 h('tbody', null, ...(kb.files ?? []).map((file) => h('tr', { key: `${file.scope}/${file.path}` },
                   h('td', null, file.scope),
                   h('td', null, h('div', { className: 'lb-mono' }, file.path), h('div', { className: 'lb-muted' }, file.title || '')),
                   h('td', null,
                     (file.triggers ?? []).length > 0
                       ? h('div', { className: 'lb-chips' }, ...file.triggers.slice(0, 6).map((word) => h('span', { key: word, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, word))))
-                      : h('span', { className: 'lb-muted' }, file.always ? '总是注入' : '未设置（兜底检索）')
+                      : h('span', { className: 'lb-muted' }, file.always ? '总是注入' : '未设置（不自动注入）')
+                  ),
+                  h('td', null,
+                    (file.domains ?? []).length > 0
+                      ? h('div', { className: 'lb-chips' }, ...file.domains.map((id) => h('span', { key: id, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, id))))
+                      : h('span', { className: 'lb-muted' }, '所有领域')
                   ),
                   h('td', null, `${file.size} B`),
                   h('td', null, h('button', { className: 'lb-btn', onClick: () => openKb(file) }, '打开'))
@@ -1442,6 +1468,25 @@ window.__ModuleLoader__.load({
               addLabel: '+ 添加',
               emptyText: '还没有触发词（这篇不会被自动检索；仍可由模型调用 lane_kb_read 读取）',
             }),
+            h('div', { className: 'lb-field' },
+              h('span', { className: 'lb-label' }, '绑定领域'),
+              h('div', { className: 'lb-actions' },
+                ...(data.state.domains ?? []).map((domain) => h('label', { key: domain.id, className: 'lb-check' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: (kbMeta.domains ?? []).includes(domain.id),
+                    onChange: (e) => setKbMeta((meta) => ({
+                      ...meta,
+                      domains: e.target.checked
+                        ? [...new Set([...(meta.domains ?? []), domain.id])]
+                        : (meta.domains ?? []).filter((id) => id !== domain.id),
+                    })),
+                  }),
+                  domain.name || domain.id
+                ))
+              ),
+              h('span', { className: 'lb-muted' }, '不勾＝该 scope 下所有领域都能看到；勾了就只对勾选的领域可见（列表 / 检索 / lane_kb_* 都按这个过滤）')
+            ),
             h('label', { className: 'lb-check' },
               h('input', {
                 type: 'checkbox',
@@ -1455,7 +1500,24 @@ window.__ModuleLoader__.load({
               h('button', { className: 'lb-btn', onClick: () => { setKbFile(null); setKbContent(''); } }, '关闭'),
               h('button', { className: 'lb-btn lb-btn--primary', onClick: saveKb }, '保存文档')
             )
-          ) : null
+          ) : null,
+          h('div', { className: 'lb-row' },
+            h('input', {
+              className: 'lb-input',
+              style: { maxWidth: 150 },
+              value: kbNew.scope,
+              placeholder: 'scope（默认 default）',
+              onChange: (e) => setKbNew((state) => ({ ...state, scope: e.target.value })),
+            }),
+            h('input', {
+              className: 'lb-input',
+              style: { maxWidth: 260 },
+              value: kbNew.path,
+              placeholder: '新文档名，例如 存档.md',
+              onChange: (e) => setKbNew((state) => ({ ...state, path: e.target.value })),
+            }),
+            h('button', { className: 'lb-btn', onClick: createKb }, '+ 新建文档')
+          )
         )
       );
     }
@@ -1813,7 +1875,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Push };
+      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Push, RolesAndKnowledge };
       exportsObject.__internals = { joinOperatorEntry, normalizeOperatorInput, splitOperatorEntry };
     }
     return exportsObject;

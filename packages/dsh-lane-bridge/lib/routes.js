@@ -126,11 +126,9 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
     const body = await readBody(req);
     const domains = requireArray(body.domains, 'domains');
-    const roles = new Set(store.get().roles.map((role) => role.name));
     for (const domain of domains) {
       if (!domain || typeof domain !== 'object') throw new Error('domain 必须是对象');
       if (!/^[a-zA-Z0-9._-]{1,60}$/u.test(String(domain.id ?? ''))) throw new Error('domain.id 只允许字母数字 . _ -');
-      if (domain.role && !roles.has(String(domain.role))) throw new Error(`domain.role 不存在：${domain.role}`);
       if (domain.knowledgeScopes !== undefined && !Array.isArray(domain.knowledgeScopes)) throw new Error('knowledgeScopes 必须是数组');
       if (domain.kbTriggerKeywords !== undefined && !Array.isArray(domain.kbTriggerKeywords)) throw new Error('kbTriggerKeywords 必须是数组');
       if (domain.allowedHostTools !== undefined && !Array.isArray(domain.allowedHostTools)) throw new Error('allowedHostTools 必须是数组');
@@ -183,6 +181,8 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     for (const [key, binding] of Object.entries(bindings)) {
       if (!parseConversationKey(key)) throw new Error(`非法会话 key：${key}`);
       if (!binding || typeof binding !== 'object') throw new Error(`binding 必须是对象：${key}`);
+      // The conversation names a role; the role carries the domain. `domainId` is
+      // still accepted for state written before 0.4.0.
       if (binding.domainId && !domains.has(String(binding.domainId))) throw new Error(`domain 不存在：${binding.domainId}`);
       if (binding.role && !roles.has(String(binding.role))) throw new Error(`角色卡不存在：${binding.role}`);
     }
@@ -257,6 +257,9 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
         title: String(body.meta.title ?? '').trim().slice(0, 120),
         triggers: Array.isArray(body.meta.triggers)
           ? [...new Set(body.meta.triggers.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30)
+          : [],
+        domains: Array.isArray(body.meta.domains)
+          ? [...new Set(body.meta.domains.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30)
           : [],
         always: body.meta.always === true,
       }

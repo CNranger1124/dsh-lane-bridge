@@ -13,7 +13,7 @@ test('LaneStore seeds state, role card, and knowledge base', async () => {
     await store.load();
     assert.ok(fs.existsSync(path.join(dir, 'state.json')));
     assert.ok(fs.existsSync(path.join(dir, 'roles', '客服.md')));
-    assert.ok(fs.existsSync(path.join(dir, 'knowledge', 'default', '常见问题.md')));
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', 'default', '知识库.md')));
     const state = store.get();
     assert.equal(state.version, 1);
     assert.equal(state.domains[0].id, 'default');
@@ -132,6 +132,48 @@ test('normalizeState keeps per-domain repository overrides', () => {
   assert.equal(state.domains[0].repo, 'studio/game');
   assert.equal(state.domains[0].branch, 'release');
   assert.equal(state.domains[0].repoEnabled, true);
+});
+
+test('roles carry the domain and old domain.role state is migrated', () => {
+  const state = normalizeState({
+    domains: [
+      { id: 'default', name: '默认', role: '客服' },
+      { id: 'game', name: '游戏', role: '游戏客服' },
+    ],
+    roles: [
+      { name: '客服', content: '# A' },
+      { name: '游戏客服', content: '# B' },
+      { name: '无主', content: '# C' },
+    ],
+  });
+  const byName = Object.fromEntries(state.roles.map((role) => [role.name, role]));
+  assert.equal(byName['客服'].domainId, 'default');
+  assert.equal(byName['游戏客服'].domainId, 'game');
+  // A role that names no domain falls back to the first domain.
+  assert.equal(byName['无主'].domainId, 'default');
+  // The domain no longer points at a role.
+  assert.equal(state.domains[0].role, undefined);
+  assert.equal(state.domains[1].role, undefined);
+});
+
+test('a binding role decides its domain, legacy domainId stays only as a hint', () => {
+  const state = normalizeState({
+    domains: [{ id: 'default' }, { id: 'game' }],
+    roles: [
+      { name: '客服', content: '# A', domainId: 'default' },
+      { name: '游戏客服', content: '# B', domainId: 'game' },
+    ],
+    bindings: {
+      'snowluma:group:1': { role: '游戏客服', domainId: 'default' },
+      'snowluma:group:2': { domainId: 'game' },
+    },
+  });
+  // The role wins over a stale domainId on the row.
+  assert.equal(state.bindings['snowluma:group:1'].role, '游戏客服');
+  assert.equal(state.bindings['snowluma:group:2'].domainId, 'game');
+  // A migrated domain-only row is pinned to the role of that domain, so the UI
+  // shows what the conversation really uses.
+  assert.equal(state.bindings['snowluma:group:2'].role, '游戏客服');
 });
 
 test('normalizeState keeps a clean operator whitelist and drops junk', () => {

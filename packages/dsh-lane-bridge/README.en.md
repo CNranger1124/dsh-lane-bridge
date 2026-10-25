@@ -81,16 +81,28 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **Chat-friendly batching**: a short per-conversation debounce merges message bursts
   into one prompt (configurable, `0` disables).
 
-## Configuration model
+## Model: conversation → role → domain
 
-- **Channels** live in `state.json` (`config.channels.*`).
-- **Domains** describe behavior: role card name, agent preset, optional
-  `provider/model`, knowledge scopes, allowed host tools, reply limit, and
-  optional `repo` / `branch` (empty inherits the global GitHub repo).
-- **Bindings** attach a conversation key (`snowluma:group:123456`,
-  `qqbot:private:openid`) to a domain.
-- Unbound conversations are recorded but never prompt a model. Use
-  `autoReplyPrivate` for an open support inbox.
+Three layers, in one direction:
+
+```text
+conversation (one group / one private chat)
+  └─ picks a role card
+       └─ the role is bound to a domain
+            └─ the domain is infrastructure: knowledge scopes, shared memory,
+               repo, operators, attention policy, preset/model
+```
+
+- **A conversation only picks a role.** There is no domain selector on a
+  binding — swapping the role swaps the knowledge base, memory and policy with it.
+- **A role card = persona text + domain.** "Domains" on the Roles page decides
+  which infrastructure the role uses.
+- **Domains never name a role**; they describe infrastructure only.
+- One domain can host several roles (same knowledge, different personas); a role
+  belongs to exactly one domain.
+- Unbound conversations are recorded but never prompt a model.
+- Legacy state: 0.3.x's `domain.role` and `binding.domainId` are migrated to
+  "role → domain" on load, so nothing needs reconfiguring.
 
 ## Operators (whitelist)
 

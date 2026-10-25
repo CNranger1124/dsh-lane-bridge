@@ -23,22 +23,24 @@
 | --- | --- |
 | **Channel / 渠道** | 一个传输账号：`snowluma`（OneBot v11）、`qqbot`（官方 QQ Bot），以及 `discord`。 |
 | **Conversation / 会话** | 渠道看到的一个聊天线程：群或私聊。Key：`<channel>:<group|private>:<externalId>`。 |
-| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、管理者白名单（`operators`）、群聊触发策略（all/mention/keyword/off，可多选：mention 与 keyword 取或，all/off 互斥）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
-| **Binding / 绑定** | 会话 → 领域（可选按会话覆盖角色/preset/模型）。没有绑定的会话会被 *发现*，但不会调用模型。 |
-| **Role card / 角色卡** | 共享角色库里的 Markdown 人格。领域和绑定按名字引用。 |
-| **Knowledge base / 知识库** | 共享 Markdown 目录树（`knowledge/<scope>/...`），由 `lane_kb_*` 工具读取。领域选择 scope。 |
+| **Domain / 领域** | **基础设施**：知识库 scope、共享记忆、GitHub 仓库、宿主工具白名单、管理者白名单（`operators`）、群聊触发策略（all/mention/keyword/off，可多选：mention 与 keyword 取或，all/off 互斥）、agent preset/模型、回复策略。领域**不点名角色**。 |
+| **Binding / 绑定** | 会话 → 角色。绑定里没有领域；它只选一张角色卡。没有绑定的会话会被 *发现*，但不会调用模型。 |
+| **Role card / 角色卡** | 共享角色库里的 Markdown 人格 + **所属领域**。会话选角色，角色决定用哪套基础设施。 |
+| **Knowledge base / 知识库** | 共享 Markdown 目录树（`knowledge/<scope>/...`）。每篇文档自带 `triggers` / `domains` frontmatter，由 `lane_kb_*` 工具和自动检索读取。 |
 | **Domain memory / 领域记忆** | 可选的共享笔记（`memories/<domainId>.json`），由 `lane_memory_*` 读写；按时间顺序注入 prompt，有长度上限。 |
 | **Session** | 与一个外部会话 1:1 映射的 DSH session。 |
 | **Push / 推送** | 操作者主动发往任意已绑定会话的消息（HTTP + agent 工具）。 |
 
-### 领域解析顺序
+### 解析顺序：会话 → 角色 → 领域
 
 ```
-binding 覆盖（role / preset / model）
-  → 绑定的 domain
-  → 全局默认 domain
-  → 硬编码默认值
+binding.role（没有就用 config.defaultRole / 第一张角色卡）
+  → 角色卡的 domainId
+  → 领域（知识库 scope、记忆、仓库、管理者、触发策略、preset/模型）
+  → 全局默认领域（角色缺失或旧数据时）
 ```
+
+0.3.x 的数据在这里自动迁移：旧 `domain.role` 会被写成对应角色卡的 `domainId`；旧 `binding.domainId`（没有角色的行）仍然按它解析，所以在设置页重选一次角色之前，行为不变。
 
 没有 binding 时，插件把会话记录为“已发现”，不触发 agent。这是成本/安全默认值；操作者可以显式绑定（或为客服收件箱打开 `autoReplyPrivate`）。
 

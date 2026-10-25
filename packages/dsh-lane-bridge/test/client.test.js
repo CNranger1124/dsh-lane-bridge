@@ -321,7 +321,7 @@ test('conversations surface sender ids that can be pasted into the whitelist', a
     state: {
       config: { defaultDomainId: 'default' },
       domains: [{ id: 'default', name: '默认客服' }],
-      roles: [{ name: '客服', content: '' }],
+      roles: [{ name: '客服', content: '', domainId: 'default' }],
       conversations: {
         'qqbot:group:F84F': {
           key: 'qqbot:group:F84F', channel: 'qqbot', kind: 'group', externalId: 'F84F',
@@ -336,9 +336,82 @@ test('conversations surface sender ids that can be pasted into the whitelist', a
   };
   const tree = Conversations({ data, refresh: async () => {} });
   const text = [];
-  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  const headers = [];
+  traverse(tree, (node) => {
+    if (typeof node?.children === 'string') text.push(node.children);
+    if (node?.type === 'th' && typeof node.children?.[0] === 'string') headers.push(node.children[0]);
+  });
   assert.ok(text.some((line) => line.includes('最近发言者')), text.join(' '));
   assert.ok(text.some((line) => line.includes('RANGER') && line.includes('qqbot:8FD96C63')), text.join(' '));
+  // Conversation → role → domain: the table offers a role, not a domain.
+  assert.ok(headers.includes('角色卡'), headers.join(' '));
+  assert.ok(!headers.includes('领域'), 'the conversation table must not ask for a domain');
+  assert.ok(text.some((line) => line.includes('客服 · 默认客服')), 'role options should show the domain they pull in');
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('the roles card binds a role to a domain', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+      setState() {}
+    },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?roles');
+  const { RolesAndKnowledge } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { defaultDomainId: 'default' },
+      domains: [{ id: 'default', name: '默认客服' }, { id: 'game', name: '游戏客服' }],
+      roles: [{ name: '客服', content: '# A', domainId: 'game' }],
+      conversations: {},
+      bindings: {},
+      sessions: {},
+    },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = RolesAndKnowledge({ data, refresh: async () => {} });
+  const text = [];
+  const selects = [];
+  traverse(tree, (node) => {
+    if (typeof node?.children === 'string') text.push(node.children);
+    if (node?.type === 'select') selects.push(node.props ?? {});
+  });
+  assert.ok(text.includes('所属领域'), text.join(' '));
+  assert.ok(selects.some((props) => props.value === 'game'), 'the role must show its domain');
+  // The role card no longer picks a domain on the domain side.
+  assert.ok(!text.some((line) => line === '角色卡'), 'the domain card must not name a role');
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;
