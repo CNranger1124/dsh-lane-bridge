@@ -23,7 +23,7 @@
 | --- | --- |
 | **Channel / 渠道** | 一个传输账号：`snowluma`（OneBot v11）、`qqbot`（官方 QQ Bot），以及 `discord`。 |
 | **Conversation / 会话** | 渠道看到的一个聊天线程：群或私聊。Key：`<channel>:<group|private>:<externalId>`。 |
-| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、群聊触发策略（all/mention/keyword/off）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
+| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、群聊触发策略（all/mention/keyword/off，可多选：mention 与 keyword 取或，all/off 互斥）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
 | **Binding / 绑定** | 会话 → 领域（可选按会话覆盖角色/preset/模型）。没有绑定的会话会被 *发现*，但不会调用模型。 |
 | **Role card / 角色卡** | 共享角色库里的 Markdown 人格。领域和绑定按名字引用。 |
 | **Knowledge base / 知识库** | 共享 Markdown 目录树（`knowledge/<scope>/...`），由 `lane_kb_*` 工具读取。领域选择 scope。 |
@@ -122,7 +122,7 @@ lane-bridge/
 ## 5. 入站 → 回复流程
 
 1. 适配器归一化消息，调用 `router.handleInbound`。
-2. Router 找 binding，并应用领域触发策略（`all`/`mention`/`keyword`/`off`）。没有 binding 或未命中：记录会话，停止，不调用模型。
+2. Router 找 binding，并应用领域触发策略（`all`/`mention`/`keyword`/`off`；mention 与 keyword 可同时启用，命中任意一条即回复）。没有 binding 或未命中：记录会话，停止，不调用模型。
    然后按会话做短 debounce（默认 800ms），把连续消息合成一次 prompt。
 3. `SessionPool.ensure(key)` 恢复/创建 DSH session，应用领域 model/preset，注册 scoped 工具，并在新会话上启动 `sessionQuery.follow`。
 4. 消息前面加一段紧凑的上下文头；首次回合或角色变化时加完整角色卡。
@@ -191,7 +191,7 @@ dsh plugin --profile web add dsh-lane-bridge
 | 区域 | 证据 |
 | --- | --- |
 | State store | 原子写、schema 修复、密钥保留、角色文件对账 |
-| 领域/绑定 resolver | 未绑定默认、按绑定覆盖、禁用绑定、按领域触发策略 |
+| 领域/绑定 resolver | 未绑定默认、按绑定覆盖、禁用绑定、按领域触发策略（可多选） |
 | 知识库工具 | scope 隔离、草稿隐藏、路径穿越拒绝、搜索 |
 | 知识库草稿 | 只写 `_待审`、不参与 list/search/read、去重/限流、采纳追加+备份、丢弃 |
 | GitHub 只读 | 固定仓库/路径、token 脱敏、issue/文件/提交、401 重试、代码搜索需鉴权 |

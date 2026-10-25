@@ -143,7 +143,7 @@ export async function apply(ctx, config = {}) {
     const text = String(message.text ?? '').trim();
     if (!text && (!message.images || message.images.length === 0)) return;
     if (!shouldTrigger(state, key, message)) {
-      logger.debug?.(`[lane-bridge] ${key} 未命中触发策略（${resolved.trigger}），只记录不回复`);
+      logger.debug?.(`[lane-bridge] ${key} 未命中触发策略（${resolved.triggers.join('+')}），只记录不回复`);
       return;
     }
     inboundQueue.push(key, message);

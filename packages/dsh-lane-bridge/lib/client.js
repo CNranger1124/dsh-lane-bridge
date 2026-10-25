@@ -140,6 +140,15 @@ window.__ModuleLoader__.load({
       return String(text ?? '').split(/[\n,，]/u).map((s) => s.trim()).filter(Boolean);
     }
 
+    // Group-chat attention policies. `mention` + `keyword` combine.
+    const TRIGGER_VALUES = ['all', 'mention', 'keyword', 'off'];
+    const TRIGGER_OPTIONS = [
+      ['all', '所有消息'],
+      ['mention', '@ 或回复机器人'],
+      ['keyword', '命中关键词'],
+      ['off', '关闭（只记录）'],
+    ];
+
     function Overview({ data, refresh }) {
       const [cfg, setCfg] = useState(() => clone(data.state.config));
       const [busy, setBusy] = useState(false);
@@ -504,14 +513,17 @@ window.__ModuleLoader__.load({
                 ghAuth ? h('span', { className: 'lb-muted' }, `${ghAuth.authenticated ? '已登录' : '未登录'} · ${ghAuth.source}${ghAuth.account ? ` · ${ghAuth.account}` : ''}`) : null
               )
             ),
-            h(Field, { label: '允许建 issue', hint: '默认关闭' },
+            h(Field, { label: '允许建 issue', hint: '默认关闭；开启后还要在「领域」里勾选允许读取 GitHub 仓库' },
               h('label', { className: 'lb-check' },
                 h('input', { type: 'checkbox', checked: gh.allowCreateIssue === true, onChange: (e) => setGithub('allowCreateIssue', e.target.checked) }),
                 '允许 lane_repo_create_issue'
               )
             ),
-            h(Field, { label: '标记标签' },
+            h(Field, { label: '标记标签', hint: '仓库里不存在这个标签时，会自动改为不带标签创建，不会丢 issue' },
               h('input', { className: 'lb-input', value: gh.issueLabel ?? 'agent', onChange: (e) => setGithub('issueLabel', e.target.value) })
+            ),
+            h(Field, { label: '每小时上限', hint: '防止误刷；0~20' },
+              h('input', { className: 'lb-input', type: 'number', min: 0, max: 20, value: gh.maxCreatesPerHour ?? 3, onChange: (e) => setGithub('maxCreatesPerHour', Number(e.target.value)) })
             ),
           ),
           ghError ? h('div', { className: 'lb-error' }, ghError) : null,
@@ -707,11 +719,34 @@ window.__ModuleLoader__.load({
       const patch = (key, value) => {
         setDraft((list) => list.map((domain) => domain.id === current.id ? { ...domain, [key]: value } : domain));
       };
+      const triggersOf = (domain) => {
+        const raw = Array.isArray(domain?.triggers) ? domain.triggers : [domain?.trigger ?? 'all'];
+        const picked = raw.filter((value) => TRIGGER_VALUES.includes(value));
+        return picked.length ? picked : ['all'];
+      };
+      const setTriggers = (next) => {
+        patch('triggers', next);
+        patch('trigger', next[0]);
+      };
+      // `all` and `off` are exclusive; mention + keyword combine.
+      const toggleTrigger = (mode, on) => {
+        if (mode === 'all' || mode === 'off') {
+          setTriggers([on ? mode : 'all']);
+          return;
+        }
+        const picked = new Set(triggersOf(current));
+        picked.delete('all');
+        picked.delete('off');
+        if (on) picked.add(mode); else picked.delete(mode);
+        const next = TRIGGER_VALUES.filter((value) => picked.has(value) && value !== 'all' && value !== 'off');
+        setTriggers(next.length ? next : ['all']);
+      };
       const add = () => {
         const id = `domain-${Date.now().toString(36)}`;
         setDraft((list) => [...list, {
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
-          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
+          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
+          kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
         }]);
         setSelected(id);
       };
@@ -853,15 +888,19 @@ window.__ModuleLoader__.load({
               '允许自动回复（关闭后只记录消息）'
             ),
             h('div', { className: 'lb-grid' },
-              h(Field, { label: '群聊触发策略' },
-                h('select', { className: 'lb-select', value: current.trigger ?? 'all', onChange: (e) => patch('trigger', e.target.value) },
-                  h('option', { value: 'all' }, '所有消息'),
-                  h('option', { value: 'mention' }, '@ 或回复机器人'),
-                  h('option', { value: 'keyword' }, '命中关键词'),
-                  h('option', { value: 'off' }, '关闭（只记录）')
+              h(Field, { label: '群聊触发策略（可多选）', hint: '命中任意一条就回复；「所有消息」「关闭」与其它互斥；私聊除「关闭」外始终回复' },
+                h('div', { className: 'lb-actions', style: { flexWrap: 'wrap', rowGap: 6 } },
+                  ...TRIGGER_OPTIONS.map(([value, label]) => h('label', { key: value, className: 'lb-check' },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: triggersOf(current).includes(value),
+                      onChange: (e) => toggleTrigger(value, e.target.checked),
+                    }),
+                    label
+                  ))
                 )
               ),
-              h(Field, { label: '关键词', hint: 'trigger=keyword 时生效，逗号分隔' },
+              h(Field, { label: '关键词', hint: '勾选「命中关键词」时生效，逗号分隔' },
                 h('input', { className: 'lb-input', value: (current.keywords ?? []).join(', '), onChange: (e) => patch('keywords', linesToArray(e.target.value)) })
               )
             ),

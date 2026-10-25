@@ -172,6 +172,10 @@ test('domain cards expose a save button in the header and footer', async () => {
   const text = [];
   traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
   assert.ok(text.filter((line) => line === '保存领域').length >= 2, text.join(' '));
+  // The group trigger is a multi-select: all four policies render as checkboxes.
+  const triggerLabels = ['所有消息', '@ 或回复机器人', '命中关键词', '关闭（只记录）'];
+  assert.deepEqual(triggerLabels.filter((label) => text.includes(label)), triggerLabels);
+  assert.ok(text.some((line) => line.includes('可多选')), text.join(' '));
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

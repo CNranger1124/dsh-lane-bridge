@@ -102,6 +102,32 @@ test('GitHub repo scopes reads to a domain repository and branch', async () => {
   }
 });
 
+test('createIssue is gated by the switch and retries without unknown labels', async () => {
+  const calls = [];
+  const repo = makeRepo(async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : null;
+    calls.push({ url, body });
+    // GitHub refuses the whole issue when a label does not exist in the repo.
+    if (Array.isArray(body?.labels)) {
+      return jsonResponse(422, { message: 'Validation Failed', errors: [{ resource: 'Issue', field: 'labels', code: 'invalid' }] });
+    }
+    return jsonResponse(201, { number: 12, html_url: 'https://github.com/owner/repo/issues/12' });
+  }, { allowCreateIssue: true, issueLabel: 'agent' });
+
+  const created = await repo.createIssue({ title: '进游戏闪退', body: '步骤：点开始' });
+  assert.equal(created.ok, true);
+  assert.equal(created.number, 12);
+  assert.deepEqual(created.labelsDropped, ['agent']);
+  assert.deepEqual(created.labels, []);
+  assert.equal(created.createsThisHour, 1);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].body.labels, ['agent']);
+  assert.equal(calls[1].body.labels, undefined);
+
+  const disabled = makeRepo(async () => jsonResponse(201, {}), { allowCreateIssue: false });
+  await assert.rejects(() => disabled.createIssue({ title: 'x', body: 'y' }), /未开启/);
+});
+
 test('GitHub repo requires a token for code search and a valid repo', async () => {
   process.env.QQ_GITHUB_DISABLE_GH = '1';
   try {

@@ -2,6 +2,20 @@
 
 # Changelog
 
+## 0.2.8
+
+- **Group attention policies are now multi-select**: "@ or reply" and "keyword"
+  can be enabled together and either one wakes the bot; "all messages" and
+  "off" stay exclusive. Old single-value `trigger` state migrates automatically.
+- **Fix issue creation failing on unknown labels**: when the configured label
+  does not exist in the repo (the default `agent` usually does not), GitHub
+  returns 422 and rejects the whole issue. The bridge now retries without labels
+  and reports `labelsDropped` instead of losing the bug report.
+- The GitHub settings card gains a per-hour limit input and spells out that
+  "allow issue creation" also needs the domain's repo switch; `lane_repo_status`
+  now reports the label and limit.
+- 102 tests (multi-select triggers, label fallback, settings rendering).
+
 ## 0.2.7
 
 - The settings header now shows the **plugin version the running host actually

@@ -5,6 +5,29 @@
 
 export const STATE_VERSION = 1;
 
+// Attention policies for group chats. `all` and `off` are exclusive; the rest
+// combine (mention OR keyword), because "answer when @ed, and also when someone
+// asks a support question" is the normal support-desk requirement.
+export const TRIGGER_MODES = ['all', 'mention', 'keyword', 'off'];
+
+/**
+ * Canonical trigger list. Accepts an array (new shape) or a single value (old
+ * shape, still written by older clients) and always returns a non-empty list in
+ * a stable order.
+ */
+export function normalizeTriggers(input) {
+  const raw = Array.isArray(input) ? input : [input];
+  const picked = new Set();
+  for (const value of raw) {
+    const mode = String(value ?? '').trim();
+    if (TRIGGER_MODES.includes(mode)) picked.add(mode);
+  }
+  if (picked.size === 0) return ['all'];
+  if (picked.has('off')) return ['off'];
+  if (picked.has('all')) return ['all'];
+  return TRIGGER_MODES.filter((mode) => picked.has(mode));
+}
+
 export function conversationKey(channel, kind, externalId) {
   const c = String(channel ?? '').trim();
   const k = kind === 'private' ? 'private' : 'group';
@@ -89,6 +112,7 @@ export function defaultDomain() {
     allowedHostTools: [],
     autoReply: true,
     trigger: 'all',
+    triggers: ['all'],
     keywords: [],
     memoryEnabled: false,
     memoryMaxChars: 2000,

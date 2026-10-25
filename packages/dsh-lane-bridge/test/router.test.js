@@ -119,7 +119,7 @@ test('context prefix injects channel facts, domain prompt, and role card', () =>
 test('trigger policy gates group messages but not private chats', () => {
   const state = defaultState();
   state.roles.push({ name: 'VIP', content: '# VIP' });
-  state.domains[0].trigger = 'mention';
+  state.domains[0].triggers = ['mention'];
   state.domains[0].autoReply = true;
   state.bindings['snowluma:group:1'] = { domainId: 'default', enabled: true };
   state.bindings['snowluma:private:2'] = { domainId: 'default', enabled: true };
@@ -128,14 +128,34 @@ test('trigger policy gates group messages but not private chats', () => {
   assert.equal(shouldTrigger(state, 'snowluma:group:1', { kind: 'group', text: 'hi', replyToBot: true }), true);
   assert.equal(shouldTrigger(state, 'snowluma:private:2', { kind: 'private', text: 'hi' }), true);
 
-  state.domains[0].trigger = 'keyword';
+  state.domains[0].triggers = ['keyword'];
   state.domains[0].keywords = ['存档', '闪退'];
   assert.equal(shouldTrigger(state, 'snowluma:group:1', { kind: 'group', text: '存档在哪' }), true);
   assert.equal(shouldTrigger(state, 'snowluma:group:1', { kind: 'group', text: '你好' }), false);
 
-  state.domains[0].trigger = 'off';
+  state.domains[0].triggers = ['off'];
   assert.equal(shouldTrigger(state, 'snowluma:group:1', { kind: 'group', text: '存档' }), false);
   assert.equal(shouldTrigger(state, 'snowluma:private:2', { kind: 'private', text: 'hi' }), false);
+});
+
+test('mention and keyword triggers combine with OR', () => {
+  const state = defaultState();
+  state.domains[0].autoReply = true;
+  state.domains[0].triggers = ['mention', 'keyword'];
+  state.domains[0].keywords = ['存档', '闪退'];
+  state.bindings['snowluma:group:1'] = { domainId: 'default', enabled: true };
+  const group = (extra) => shouldTrigger(state, 'snowluma:group:1', { kind: 'group', text: '你好', ...extra });
+  // Either policy alone is enough.
+  assert.equal(group({ mentionsBot: true }), true);
+  assert.equal(group({ text: '存档在哪' }), true);
+  // Neither hit means stay quiet.
+  assert.equal(group({ text: '大家早上好' }), false);
+  // `all` wins over the other policies.
+  state.domains[0].triggers = ['mention', 'keyword', 'all'];
+  assert.equal(group({ text: '随便聊聊' }), true);
+  // `off` is exclusive and stops everything, even a mention.
+  state.domains[0].triggers = ['off', 'mention'];
+  assert.equal(group({ mentionsBot: true }), false);
 });
 
 

@@ -26,7 +26,7 @@ not a second product surface.
 | --- | --- |
 | **Channel** | A transport account: `snowluma` (OneBot v11), `qqbot` (official QQ Bot), later `discord`. |
 | **Conversation** | One chat thread seen by a channel: a group or a private chat. Key: `<channel>:<group|private>:<externalId>`. |
-| **Domain** | Reusable behavior: role card, agent preset, model, KB scopes, host-tool allow-list, group trigger policy (all/mention/keyword/off), reply policy. Think "tenant" or "product line". |
+| **Domain** | Reusable behavior: role card, agent preset, model, KB scopes, host-tool allow-list, group trigger policy (all/mention/keyword/off; mention and keyword can be enabled together), reply policy. Think "tenant" or "product line". |
 | **Binding** | Conversation → domain (+ optional per-conversation role/preset/model overrides). A conversation without a binding is *discovered* but does not call a model. |
 | **Role card** | A Markdown persona in the shared role library. Domains and bindings reference it by name. |
 | **Knowledge base** | Shared Markdown tree (`knowledge/<scope>/...`) read by `lane_kb_*` tools. Domains choose scopes. |
@@ -139,7 +139,7 @@ document the plugin owns, like a database.
 
 1. Adapter normalizes a message and calls `router.handleInbound`.
 2. Router finds the binding and applies the domain trigger policy
-   (`all`/`mention`/`keyword`/`off`). If missing or not triggered: record the
+   (`all`/`mention`/`keyword`/`off`; mention and keyword combine with OR). If missing or not triggered: record the
    conversation, stop. No model call.
    A short per-conversation debounce (default 800 ms) merges message bursts into
    one prompt before the next step.
@@ -232,7 +232,7 @@ What the repository verifies today (`npm test`, 88 tests):
 | Area | Evidence |
 | --- | --- |
 | State store | atomic writes, schema repair, secret preservation, role-file reconciliation |
-| Domain/binding resolver | unbound default, per-binding overrides, disabled binding, per-domain trigger (all/mention/keyword/off) |
+| Domain/binding resolver | unbound default, per-binding overrides, disabled binding, per-domain trigger (all/mention/keyword/off, multi-select) |
 | Knowledge tools | scope isolation, draft hiding, traversal rejection, search |
 | KB drafts | write-only `_待审`, excluded from list/search/read, dedupe/rate limit, approval append + backup, discard |
 | GitHub read-only | fixed repo/path guards, token redaction, issues/files/commits, 401 retry, code search requires auth |

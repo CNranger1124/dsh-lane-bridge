@@ -73,8 +73,24 @@ test('normalizeState repairs broken bindings/domains and keeps the default domai
   assert.equal(state.bindings['snowluma:private:2'].enabled, false);
 });
 
-test('normalizeState keeps per-domain repository overrides', () => {
+test('normalizeState combines multi-select triggers and keeps the legacy field in sync', () => {
   const state = normalizeState({
+    domains: [
+      { id: 'a', triggers: ['keyword', 'mention'] },
+      { id: 'b', trigger: 'keyword' },
+      { id: 'c', triggers: ['off', 'mention'] },
+      { id: 'd', triggers: [] },
+    ],
+    roles: [{ name: '客服', content: 'x' }],
+  });
+  assert.deepEqual(state.domains.find((d) => d.id === 'a').triggers, ['mention', 'keyword']);
+  assert.equal(state.domains.find((d) => d.id === 'a').trigger, 'mention');
+  assert.deepEqual(state.domains.find((d) => d.id === 'b').triggers, ['keyword'], 'old single-value state still works');
+  assert.deepEqual(state.domains.find((d) => d.id === 'c').triggers, ['off'], 'off is exclusive');
+  assert.deepEqual(state.domains.find((d) => d.id === 'd').triggers, ['all'], 'empty falls back to all');
+});
+
+test('normalizeState keeps per-domain repository overrides', () => {  const state = normalizeState({
     domains: [{
       id: 'game',
       name: '游戏',

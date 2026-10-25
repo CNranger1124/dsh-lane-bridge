@@ -97,6 +97,8 @@ only a one-shot legacy migration script for moving an existing install.
 - Discord adapter (`discord.js`; DM + guild channels, optional mention gate).
 - Domain / binding model: one DSH session per group or private chat, with a
   domain-level role card, preset, model, KB scopes, and host-tool allow-list.
+  Group attention policies are multi-select: mention/reply and keyword can be
+  enabled together and either one wakes the bot (`all` and `off` stay exclusive).
 - Shared role-card library, shared knowledge base (`lane_kb_*`), and optional
   domain-scoped shared memory (`lane_memory_*`).
 - **KB drafts + human approval**: `lane_kb_draft` writes only to `_待审/`; a new
@@ -105,7 +107,9 @@ only a one-shot legacy migration script for moving an existing install.
   overrides; path guards, token redaction, ETag cache; repo/branch dropdowns list
   every repo visible to the account from the `gh` CLI (so `gh auth login` removes
   the need for a manual token); `lane_repo_*` tools for issues/files/code/commits.
-  Issue creation is off by default.
+  Issue creation is off by default and rate-limited when enabled; if the
+  configured label does not exist in the repo, the issue is created without
+  labels instead of failing.
 - **Channel logs**: "View logs" in the launcher shows the last 300
   connect/reconnect/error lines instead of just "not connected".
 - Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
@@ -131,16 +135,15 @@ installation details.
 
 ## Status
 
-`0.2.4` adds an explicit Save button to every module header and fixes fresh
-sessions being prompted before their inbox projection was ready, which sent only
-the apology and never produced a model reply. `0.2.3` makes GitHub repos a global
-default with per-domain overrides, lists every repo visible to the account in the
-dropdown, adds per-channel Save buttons, and makes every module collapsible.
-`0.2.2` ports the legacy GitHub read-only tools and KB draft approval, and adds
-explicit channel launch buttons, channel logs, and a sticky save bar. The legacy
-standalone `qq-bridge` project still has features the plugin does not yet port:
-group slang learning, sticker library, voice messages, cost conversion, and the
-simulation scheduler. The architecture doc tracks the migration.
+`0.2.8` makes group attention policies multi-select (mention and keyword together)
+and stops issue creation from failing when the configured label is missing (it
+retries without labels). `0.2.7` shows the running plugin version in Settings;
+`0.2.6` fixes the missing `AbortSignal` on prompt submission and the stale event
+stream API that made QQ reply with only an apology. `0.2.4` adds an explicit Save
+button to every module header. The legacy standalone `qq-bridge` project still has
+features the plugin does not yet port: group slang learning, sticker library,
+voice messages, cost conversion, and the simulation scheduler. The architecture
+doc tracks the migration.
 
 The code, tests, and package are complete; real DSH / official QQ Bot acceptance
 is in progress, while SnowLuma / Discord end-to-end traffic is not verified yet.

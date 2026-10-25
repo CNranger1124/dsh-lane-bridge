@@ -10,6 +10,7 @@ import {
   defaultConfig,
   defaultDomain,
   defaultState,
+  normalizeTriggers,
   sampleKnowledge,
   sampleRoleCard,
   STATE_VERSION,
@@ -80,6 +81,10 @@ function normalizeDomainList(raw, defaultDomainId) {
   for (const item of list) {
     const id = String(item?.id ?? '').trim();
     if (!id || seen.has(id)) continue;
+    // New shape is `triggers: string[]`; old shape is one `trigger`. Normalize
+    // once here and mirror the first value back to `trigger` so an older plugin
+    // build reading the same state keeps working.
+    const triggers = normalizeTriggers(Array.isArray(item?.triggers) ? item.triggers : item?.trigger);
     out.push({
       id,
       name: String(item?.name ?? id).trim() || id,
@@ -93,7 +98,8 @@ function normalizeDomainList(raw, defaultDomainId) {
         ? [...new Set(item.allowedHostTools.map((s) => String(s).trim()).filter(Boolean))]
         : [],
       autoReply: item?.autoReply !== false,
-      trigger: ['all', 'mention', 'keyword', 'off'].includes(String(item?.trigger)) ? String(item.trigger) : 'all',
+      trigger: triggers[0],
+      triggers,
       keywords: Array.isArray(item?.keywords)
         ? [...new Set(item.keywords.map((word) => String(word).trim()).filter(Boolean))]
         : [],

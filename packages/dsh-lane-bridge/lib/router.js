@@ -1,6 +1,6 @@
 // Pure conversation/domain resolution. No fs, no DSH, no timers: the host and
 // the tests share exactly one implementation.
-import { parseConversationKey } from './defaults.js';
+import { normalizeTriggers, parseConversationKey } from './defaults.js';
 
 export function findDomain(state, id) {
   const domains = Array.isArray(state?.domains) ? state.domains : [];
@@ -36,6 +36,7 @@ export function resolveConversation(state, key) {
     : parsed.kind === 'private'
       ? state?.config?.autoReplyPrivate === true
       : state?.config?.autoReplyGroups === true;
+  const triggers = normalizeTriggers(domain?.triggers ?? domain?.trigger);
   return {
     key,
     bound: !unbound,
@@ -46,7 +47,8 @@ export function resolveConversation(state, key) {
     knowledgeScopes: Array.isArray(domain?.knowledgeScopes) && domain.knowledgeScopes.length > 0
       ? domain.knowledgeScopes
       : ['default'],
-    trigger: String(domain?.trigger ?? 'all'),
+    trigger: triggers[0],
+    triggers,
     keywords: Array.isArray(domain?.keywords) ? domain.keywords : [],
     memoryEnabled: domain?.memoryEnabled === true,
     memoryMaxChars: Math.max(200, Math.min(8000, Number(domain?.memoryMaxChars) || 2000)),
@@ -75,22 +77,26 @@ export function canReply(state, key) {
 /**
  * Whether this particular inbound message should wake the agent.
  *
- * `autoReply` is the conversation-level switch; `trigger` is the per-domain
- * attention policy. Private chats ignore `mention` (there is nothing to be
- * mentioned in) but still honor `off` and `keyword`.
+ * `autoReply` is the conversation-level switch; `triggers` is the per-domain
+ * attention policy. Several policies combine with OR: a support desk usually
+ * wants "answer when @ed, and also when someone asks a support question".
+ * `all` and `off` are exclusive. Private chats have nothing to be mentioned in,
+ * so they answer unless the domain is switched off.
  */
 export function shouldTrigger(state, key, inbound) {
   const resolved = resolveConversation(state, key);
   if (!resolved.domain || resolved.autoReply !== true) return false;
   const kind = inbound?.kind === 'private' ? 'private' : 'group';
-  if (resolved.trigger === 'off') return false;
+  const triggers = resolved.triggers;
+  if (triggers.includes('off')) return false;
   if (kind === 'private') return true;
-  if (resolved.trigger === 'mention') return inbound?.mentionsBot === true || inbound?.replyToBot === true;
-  if (resolved.trigger === 'keyword') {
+  if (triggers.includes('all')) return true;
+  if (triggers.includes('mention') && (inbound?.mentionsBot === true || inbound?.replyToBot === true)) return true;
+  if (triggers.includes('keyword')) {
     const text = String(inbound?.text ?? '').toLowerCase();
-    return resolved.keywords.some((word) => text.includes(String(word).toLowerCase()));
+    if (resolved.keywords.some((word) => text.includes(String(word).toLowerCase()))) return true;
   }
-  return true;
+  return false;
 }
 
 export function roleContent(state, name) {

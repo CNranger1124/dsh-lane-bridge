@@ -161,13 +161,15 @@ export class GitHubRepo {
       authAccount: auth.account,
       authenticated: Boolean(auth.token),
       allowCreateIssue: cfg.allowCreateIssue,
+      issueLabel: cfg.issueLabel,
+      maxCreatesPerHour: cfg.maxCreatesPerHour,
       hint: !cfg.enabled
         ? 'GitHub 仓库读取未启用：在设置 → IM 桥接 → 概览与通道里启用'
         : !cfg.valid
           ? '仓库格式应为 owner/repo'
           : cfg.token
-            ? '可用 lane_repo_status / lane_repo_read_file / lane_repo_search_code 等工具'
-            : '可用只读工具；未填 token 时 GitHub 匿名额度可能不足，代码搜索也必须填 token',
+            ? (cfg.allowCreateIssue ? '可读可建 issue' : '可用只读工具；建 issue 未开启')
+            : (cfg.allowCreateIssue ? '已允许建 issue，但没有凭据，写入会失败' : '可用只读工具；未填 token 时 GitHub 匿名额度可能不足，代码搜索也必须填 token'),
     };
   }
 
@@ -513,10 +515,26 @@ export class GitHubRepo {
     if (!cleanTitle) throw new Error('title 不能为空');
     const labelSet = new Set([cfg.issueLabel]);
     for (const label of String(labels ?? '').split(',').map((item) => item.trim()).filter(Boolean)) labelSet.add(label);
-    const result = await this.request(`/repos/${cfg.owner}/${cfg.name}/issues`, {
-      method: 'POST',
-      body: { title: cleanTitle, body: cleanBody, labels: [...labelSet] },
-    });
+    const wanted = [...labelSet];
+    let result;
+    let droppedLabels = [];
+    try {
+      result = await this.request(`/repos/${cfg.owner}/${cfg.name}/issues`, {
+        method: 'POST',
+        body: { title: cleanTitle, body: cleanBody, labels: wanted },
+      });
+    } catch (error) {
+      // GitHub rejects the whole issue when any label does not exist in the
+      // repo. Losing the label is fine; losing the user's bug report is not.
+      const text = String(error?.message ?? '');
+      if (wanted.length === 0 || !/(^|\D)422(\D|$)|label/iu.test(text)) throw error;
+      droppedLabels = wanted;
+      result = await this.request(`/repos/${cfg.owner}/${cfg.name}/issues`, {
+        method: 'POST',
+        body: { title: cleanTitle, body: cleanBody },
+      });
+      this.logger?.warn?.(`[lane-bridge] 仓库里没有标签 ${droppedLabels.join(',')}，issue 已改为不带标签创建`);
+    }
     this.writeCounter(hour, count + 1);
     try {
       if (this.auditFile) {
@@ -524,6 +542,13 @@ export class GitHubRepo {
         fs.appendFileSync(this.auditFile, `${new Date().toISOString()} ${JSON.stringify({ action: 'create_issue', number: result.data?.number, title: cleanTitle })}\n`, 'utf8');
       }
     } catch {}
-    return { ok: true, number: result.data?.number, url: result.data?.html_url, labels: [...labelSet], createsThisHour: count + 1 };
+    return {
+      ok: true,
+      number: result.data?.number,
+      url: result.data?.html_url,
+      labels: droppedLabels.length ? [] : wanted,
+      labelsDropped: droppedLabels,
+      createsThisHour: count + 1,
+    };
   }
 }
