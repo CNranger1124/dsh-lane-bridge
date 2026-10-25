@@ -76,14 +76,48 @@ test('QQ Bot adapter connects and normalizes c2c/group messages', async () => {
   }
 });
 
-test('QQ Bot adapter sends with the stored reply target', async () => {
+test('QQ Bot adapter replies passively inside the window and refuses active sends', async () => {
   const adapter = await readyAdapter();
   try {
-    await adapter.send({ kind: 'private', externalId: 'u-1', replyToId: 'm-1' }, ['第一条', '第二条']);
+    await adapter.send({ kind: 'private', externalId: 'u-1', replyToId: 'm-1', replyToAt: Date.now() }, ['第一条', '第二条']);
     assert.equal(adapter.bot.sent.length, 2);
     assert.deepEqual(adapter.bot.sent[0].target, { scope: 'c2c', targetId: 'u-1', msgId: 'm-1' });
+
+    // Outside the passive window there is no msgId to reply to: QQ would treat
+    // this as an active message, which needs a platform permission we do not have.
+    await assert.rejects(
+      () => adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-old', replyToAt: Date.now() - 10 * 60 * 1000 }, ['群']),
+      /主动消息没有权限/u
+    );
+    assert.equal(adapter.bot.sent.length, 2, 'must not hit the API');
+    // A conversation that never received a message is active too.
+    await assert.rejects(() => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']), /主动消息没有权限/u);
+  } finally {
+    await adapter.stop();
+  }
+});
+
+test('allowing active messages sends without msgId and decorates permission errors', async () => {
+  const adapter = new QqbotAdapter({
+    config: { appId: 'app', appSecret: 'secret', allowActive: true },
+    logger: { info() {}, warn() {}, debug() {} },
+    loadQqbotModule: async () => ({ QQBot: FakeBot }),
+  });
+  await adapter.start();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  adapter.bot.emit('ready', { user: { id: 'bot-openid' } });
+  try {
     await adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']);
-    assert.deepEqual(adapter.bot.sent[2].target, { scope: 'group', targetId: 'g-1' });
+    assert.deepEqual(adapter.bot.sent[0].target, { scope: 'group', targetId: 'g-1' });
+
+    // The platform rejecting an active message gets an actionable hint.
+    adapter.bot.sendText = async () => {
+      throw new Error('API Error [/v2/groups/g-1/messages]: 主动消息失败, 无权限');
+    };
+    await assert.rejects(
+      () => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']),
+      /主动消息权限\/额度/u
+    );
   } finally {
     await adapter.stop();
   }

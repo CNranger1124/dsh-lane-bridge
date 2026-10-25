@@ -164,6 +164,11 @@ export function defaultConfig() {
         enabled: false,
         appId: '',
         appSecret: '',
+        // QQ only allows replying to the message just received. An "active
+        // message" needs a platform permission/配额 that most bots do not have,
+        // so it stays off until the operator explicitly turns it on.
+        allowActive: false,
+        passiveMinutes: 4,
       },
       discord: {
         enabled: false,

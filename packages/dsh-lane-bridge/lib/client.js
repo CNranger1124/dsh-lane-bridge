@@ -624,6 +624,33 @@ window.__ModuleLoader__.load({
               }),
               '群聊里必须 @ 或回复机器人才响应'
             ) : null,
+            id === 'qqbot' ? h('div', { className: 'lb-field' },
+              h('label', { className: 'lb-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: entry.allowActive === true,
+                  onChange: (e) => setChannel('qqbot', 'allowActive', e.target.checked),
+                }),
+                '允许主动消息（需要 QQ 开放平台权限）'
+              ),
+              h('div', { className: 'lb-muted' },
+                'QQ 只允许「被动回复」：收到消息后若干分钟内、带着那条消息的 msg_id 回复。'
+                + '超过窗口、或主动往群里推送，都属于主动消息，平台会返回「主动消息失败, 无权限」。'
+                + '不勾选时，桥接会在本地直接拦下并说明原因，不会去撞平台接口。'
+              ),
+              h('div', { className: 'lb-row' },
+                h('span', { className: 'lb-label' }, '被动回复窗口（分钟）'),
+                h('input', {
+                  className: 'lb-input',
+                  type: 'number',
+                  min: 1,
+                  max: 60,
+                  style: { maxWidth: 90 },
+                  value: entry.passiveMinutes ?? 4,
+                  onChange: (e) => setChannel('qqbot', 'passiveMinutes', Number(e.target.value)),
+                })
+              )
+            ) : null,
             status?.lastError ? h('div', { className: 'lb-muted' }, `状态：${status.lastError}`) : null,
             h('div', { className: 'lb-actions' },
               h('button', {
@@ -1875,7 +1902,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Push, RolesAndKnowledge };
+      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Overview, Push, RolesAndKnowledge };
       exportsObject.__internals = { joinOperatorEntry, normalizeOperatorInput, splitOperatorEntry };
     }
     return exportsObject;

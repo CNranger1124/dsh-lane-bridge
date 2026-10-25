@@ -2,6 +2,24 @@
 
 # Changelog
 
+## 0.4.1
+
+- **Fix "主动消息失败, 无权限"**: the official QQ Bot only allows passive replies
+  (within a window after receiving a message, carrying its `msg_id`). The bridge
+  used to send with a stale `msg_id`, which the platform treated as an active
+  message and rejected with an opaque error. The window is now evaluated in the
+  adapter (default 4 minutes, configurable) and an out-of-window send is refused
+  locally with a reason instead of hitting the API.
+- New `channels.qqbot.allowActive` (default off) plus "passive reply window
+  (minutes)": turn it on deliberately if you really need active pushes — you still
+  need the active-message permission/配额 from the QQ Open Platform.
+- Permission errors now distinguish "this is an active message (needs a quota)"
+  from "this passive reply has expired", and `lane_send` / the push panel surface
+  that sentence verbatim.
+- The window check moved from the channel manager into each adapter, so OneBot and
+  Discord are unaffected (no such restriction).
+- 144 tests.
+
 ## 0.4.0
 
 - **Model is now conversation → role → domain**: a binding only picks a role card,

@@ -472,6 +472,64 @@ test('operator rows round-trip through the channel dropdown without losing the i
   delete globalThis.__LANE_TEST__;
 });
 
+test('the official QQ Bot card exposes the active-message switch and window', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+      setState() {}
+    },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?qqbot-card');
+  const { Overview } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { channels: { qqbot: { enabled: true, allowActive: false, passiveMinutes: 4 } } },
+      domains: [{ id: 'default', name: '默认客服' }],
+      roles: [],
+    },
+    channels: [{ id: 'qqbot', label: '官方 QQ Bot', enabled: true, connected: true }],
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = Overview({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  assert.ok(text.some((line) => line.includes('允许主动消息')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('被动回复窗口')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('主动消息失败, 无权限')), text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
 test('push renders a checkbox per discovered conversation instead of one select', async () => {
   globalThis.__LANE_TEST__ = true;
   const react = {

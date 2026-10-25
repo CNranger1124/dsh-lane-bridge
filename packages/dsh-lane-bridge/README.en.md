@@ -273,6 +273,33 @@ Boundaries:
 - 8000 Chinese chars ≈ 4k tokens; unless you keep long checklists, 2000–3000 is
   the better trade.
 
+## Official QQ Bot: active messages are not allowed
+
+The official QQ Bot can only send a **passive reply**: within a window after
+receiving a message (4 minutes by default here), carrying that message's `msg_id`.
+Anything else — outside the window, or pushing into a group/private chat on your
+own — is an *active message*, which the platform rejects:
+
+```text
+API Error [/v2/groups/<group_openid>/messages]: 主动消息失败, 无权限
+```
+
+This is the platform's permission model, not a bridge bug. What the bridge does:
+
+- Outside the window and with **"allow active messages" off**, it refuses locally
+  with an actionable log line and never hits the API.
+- With the switch on it sends anyway — but you still need an active-message
+  permission/配额 from the QQ Open Platform, otherwise the API rejects it and the
+  error now says which case you are in.
+- The window length is configurable (Settings → IM Bridge → Official QQ Bot,
+  default 4 minutes; the platform usually grants 5).
+- When a passive reply is refused, the error distinguishes "this is an active
+  message" from "this passive reply has expired".
+
+To have the bot speak in a group unprompted (announcements, push, cross-group
+relay), either get the active-message quota or use the SnowLuma channel — OneBot
+has no such restriction.
+
 ## Migrating from `qq-bridge`
 
 ```sh

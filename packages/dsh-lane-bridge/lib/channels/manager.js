@@ -184,12 +184,14 @@ export class ChannelManager {
     const adapter = this.adapterFor(parsed.channel);
     if (!adapter) throw new Error(`通道未启用或未连接：${parsed.channel}`);
     const convo = this.getConversation?.(key) ?? null;
-    const recent = convo && Date.now() - (Number(convo.lastAt) || 0) < 4 * 60 * 1000;
+    // The passive-reply window is platform-specific (QQ is strict, OneBot and
+    // Discord are not), so pass the raw facts and let the adapter decide.
     return adapter.send({
       channel: parsed.channel,
       kind: parsed.kind,
       externalId: parsed.externalId,
-      replyToId: recent ? convo.replyToId : '',
+      replyToId: String(convo?.replyToId ?? ''),
+      replyToAt: Number(convo?.lastAt) || 0,
     }, messages);
   }
 
