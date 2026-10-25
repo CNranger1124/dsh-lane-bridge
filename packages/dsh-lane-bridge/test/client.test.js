@@ -668,6 +668,9 @@ test('knowledge and memory have their own pages instead of living in the role ca
   assert.ok(kbText.includes('当前知识库'), kbText.join(' '));
   assert.ok(kbText.includes('+ 新建知识库'), kbText.join(' '));
   assert.ok(kbText.some((line) => line.includes('默认知识库（default）')), kbText.join(' '));
+  // Which domains reach this knowledge base, so a forgotten binding is visible
+  // right where the documents are.
+  assert.ok(kbText.some((line) => line.includes('绑定领域：默认客服')), kbText.join(' '));
   assert.ok(!kbText.includes('领域共享记忆'), 'memory must not be on the knowledge page');
 
   let memTree;
@@ -676,6 +679,68 @@ test('knowledge and memory have their own pages instead of living in the role ca
   assert.ok(memText.includes('领域共享记忆'), memText.join(' '));
   assert.ok(memText.includes('select:default'), memText.join(' '));
   assert.ok(!memText.includes('当前知识库'), 'knowledge must not be on the memory page');
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('draft approval explains that it creates a document with its own triggers', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+      setState() {}
+    },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?kbdrafts');
+  const { KbDrafts } = globalThis.__laneBundle.__components;
+  const data = {
+    state: { domains: [{ id: 'default', name: '默认客服', knowledgeScopes: ['default'] }], knowledgeBases: [{ id: 'default' }] },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  let tree;
+  assert.doesNotThrow(() => { tree = KbDrafts({ data, refresh: async () => {} }); });
+  const text = [];
+  let selectCount = 0;
+  traverse(tree, (node) => {
+    if (typeof node?.children === 'string') text.push(node.children);
+    if (node?.type === 'select') selectCount += 1;
+  });
+  const joined = text.join(' ');
+  assert.match(joined, /独立文档/);
+  assert.match(joined, /不会覆盖已有文档/);
+  assert.match(joined, /触发词是检索的唯一入口/);
+  // The old flow asked which existing file to append into; documents are now
+  // standalone, so there is nothing to pick.
+  assert.equal(selectCount, 0, 'draft approval must not ask for a target file any more');
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

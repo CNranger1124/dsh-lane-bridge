@@ -85,43 +85,107 @@ test('draft lifecycle: write, hide, list, approve, discard', () => {
       title: '存档位置在哪',
       content: 'Windows 存档在游戏目录的 saves 文件夹。',
       source: 'commit abc123',
+      triggers: ['存档', '存档在哪', 'save'],
     });
     assert.equal(draft.duplicate, false);
     assert.equal(draft.scope, '客服');
     assert.match(draft.file, /\.md$/);
+    assert.deepEqual(draft.triggers, ['存档', '存档在哪', 'save']);
+    // The draft carries the frontmatter a real document needs, so approving it
+    // cannot lose the retrieval keywords.
+    const raw = fs.readFileSync(path.join(dir, '客服', '_待审', draft.file), 'utf8');
+    assert.match(raw, /^---\ntitle: 存档位置在哪\ntriggers: 存档, 存档在哪, save\n---/);
     assert.equal(listKnowledge(dir, ['客服']).count, 2);
     assert.equal(readKnowledge(dir, ['客服'], '客服/_待审/' + draft.file).ok, false);
     assert.equal(searchKnowledge(dir, ['客服'], '存档').hits.some((hit) => hit.path.includes('_待审')), false);
 
     const listed = listDrafts(dir);
-    assert.ok(listed.drafts.some((item) => item.file === draft.file && item.source === 'commit abc123'));
-    assert.ok(listed.targets['客服'].includes('常见问题.md'));
+    assert.ok(listed.drafts.some((item) => item.file === draft.file
+      && item.source === 'commit abc123'
+      && item.triggers.includes('save')));
 
-    const approved = approveDraft(dir, { scope: '客服', file: draft.file, target: '常见问题.md' });
-    assert.equal(approved.target, '常见问题.md');
-    assert.match(fs.readFileSync(path.join(dir, '客服', '常见问题.md'), 'utf8'), /Windows 存档/);
+    const approved = approveDraft(dir, { scope: '客服', file: draft.file });
+    assert.equal(approved.path, '存档位置在哪.md');
+    assert.deepEqual(approved.triggers, ['存档', '存档在哪', 'save']);
+    const approvedRaw = fs.readFileSync(path.join(dir, '客服', '存档位置在哪.md'), 'utf8');
+    assert.match(approvedRaw, /^---\ntitle: 存档位置在哪\ntriggers: 存档, 存档在哪, save\n---/);
+    assert.match(approvedRaw, /Windows 存档/);
+    // Adoption produces a document that trigger-based retrieval can actually hit.
+    const hits = matchDocuments(dir, ['客服'], '请问存档在哪', 5);
+    assert.ok(hits.some((hit) => hit.path === '存档位置在哪.md'), JSON.stringify(hits));
     assert.equal(listDrafts(dir).drafts.some((item) => item.file === draft.file), false);
+
+    // The approval page may override the keywords before they become the
+    // document's retrieval key.
+    const overridden = writeDraft(dir, '客服', {
+      title: '无触发词结论',
+      content: '这条草稿故意没有触发词，用来验证采纳时的兜底。',
+      source: '群反馈',
+      triggers: ['无触发词结论'],
+    });
+    const fixed = approveDraft(dir, { scope: '客服', file: overridden.file, triggers: ['临时补的关键词'] });
+    assert.deepEqual(fixed.triggers, ['临时补的关键词']);
+    assert.equal(fixed.path, '无触发词结论.md');
 
     const second = writeDraft(dir, '客服', {
       title: '临时结论',
       content: '这是一条准备丢弃的临时结论。',
       source: '群反馈',
+      triggers: ['临时结论'],
     });
     discardDraft(dir, { scope: '客服', file: second.file });
     assert.equal(listDrafts(dir).drafts.some((item) => item.file === second.file), false);
+
+    assert.throws(
+      () => writeDraft(dir, '客服', {
+        title: '没有触发词',
+        content: '没有触发词的草稿应该直接被拒绝。',
+        source: 'commit x',
+      }),
+      /triggers 不能为空/
+    );
 
     const duplicate = writeDraft(dir, '客服', {
       title: '重复标题',
       content: '重复内容至少十个字符。',
       source: 'commit x',
+      triggers: ['重复'],
     });
     const again = writeDraft(dir, '客服', {
       title: '重复标题',
       content: '重复内容至少十个字符。',
       source: 'commit x',
+      triggers: ['重复'],
     });
     assert.equal(again.duplicate, true);
     assert.equal(again.file, duplicate.file);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('approving twice does not overwrite the first document', () => {
+  const dir = tempDir();
+  try {
+    seed(dir);
+    const one = writeDraft(dir, '客服', {
+      title: '同一标题',
+      content: '第一篇内容，至少十个字符。',
+      source: 'commit a',
+      triggers: ['同标题'],
+    });
+    const two = writeDraft(dir, '客服', {
+      title: '同一标题',
+      content: '第二篇内容，至少十个字符。',
+      source: 'commit b',
+      triggers: ['同标题'],
+    });
+    const first = approveDraft(dir, { scope: '客服', file: one.file });
+    const second = approveDraft(dir, { scope: '客服', file: two.file });
+    assert.equal(first.path, '同一标题.md');
+    assert.equal(second.path, '同一标题-2.md');
+    assert.match(fs.readFileSync(path.join(dir, '客服', '同一标题.md'), 'utf8'), /第一篇内容/);
+    assert.match(fs.readFileSync(path.join(dir, '客服', '同一标题-2.md'), 'utf8'), /第二篇内容/);
   } finally {
     cleanup(dir);
   }

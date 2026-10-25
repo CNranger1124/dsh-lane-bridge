@@ -230,7 +230,7 @@ dsh plugin --profile web add dsh-lane-bridge
 | State store | 原子写、schema 修复、密钥保留、角色文件对账 |
 | 领域/绑定 resolver | 未绑定默认、按绑定覆盖、禁用绑定、按领域触发策略（可多选） |
 | 知识库工具 | scope 隔离、草稿隐藏、路径穿越拒绝、搜索 |
-| 知识库草稿 | 只写 `_待审`、不参与 list/search/read、去重/限流、采纳追加+备份、丢弃 |
+| 知识库草稿 | 只写 `_待审`、不参与 list/search/read、去重/限流、必须带 triggers 且 scope 必须在领域绑定内、采纳＝新建带触发词的文档（同名加序号）、丢弃 |
 | GitHub 只读 | 固定仓库/路径、token 脱敏、issue/文件/提交、401 重试、代码搜索需鉴权 |
 | HTTP 边界 | 同源写、密钥脱敏、bearer push、参数校验错误 |
 | 会话编排 | 新建 session、冷 `agents.resume` setup、角色卡首次/再次注入、回合收集、`lane_send` 抑制 |

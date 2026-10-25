@@ -180,12 +180,14 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 ### 6.2 KB draft approval
 
 1. Have the model learn a new fact not covered by the KB and call `lane_kb_draft`
-   (title/content/source required).
+   (title/content/triggers/source required; `scope` when the domain binds several).
 2. The **知识库审批** tab should list the draft; `lane_kb_list/search/read` must
-   not see it.
-3. Choose a target file and click **Approve**: the document gets a new section
-   with the source, and the draft disappears. **Discard** just removes the draft.
-4. Confirm a backup exists under `~/.dsh/lane-bridge/kb-backups/`.
+   not see it. The card names the base it will be written into and which domains
+   bind that base.
+3. With an empty trigger list **Approve** stays disabled; add a keyword and approve:
+   a new `title.md` appears in that base with `title`/`triggers` frontmatter and the
+   source, and the draft disappears. **Discard** just removes the draft.
+4. Ask the player's phrasing again — the new document should now match.
 
 ## 7. What to record if it fails
 

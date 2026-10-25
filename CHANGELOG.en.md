@@ -2,6 +2,40 @@
 
 # Changelog
 
+## 0.6.0
+
+- **The deposition prompts were rewritten for the current model**: the knowledge
+  sections of `lane_kb_draft`, `lane_retire` and the preset persona now describe
+  knowledge bases as per-topic units with their own triggers, name the bases the
+  domain binds, and require "one topic per draft" plus "3–8 phrases the player
+  would actually type".
+- **Drafts must carry triggers**: `lane_kb_draft` gained a required `triggers`
+  parameter; a draft without them is rejected with a reason (otherwise the adopted
+  document could never be retrieved). Draft files now carry frontmatter
+  (`title` / `triggers`) instead of a plain heading.
+- **Drafts land in a base the domain binds**: the `?? 'default'` fallback is gone —
+  a domain with no bound base errors out, several bound bases require an explicit
+  `scope`, and an out-of-range scope is refused with the list of choices.
+  `lane_retire` follows the same rule and logs skipped drafts.
+- **Approval creates a document**: previously it appended to a target file
+  (default `常见问题.md`) chosen in the UI; now it writes
+  `knowledge/<base>/<title>.md` with frontmatter and never overwrites (duplicates
+  get `-2`).
+- **The approval page edits triggers**: each draft's keywords are an add/remove
+  chip list and "approve" is disabled while empty; the card also shows which base
+  it will be written into and which domains bind that base, with a warning when
+  none do.
+- **Mismatch hints on the domain/knowledge pages**: the bound-base dropdown shows a
+  document count per base and flags `空库`; binding an empty base shows a warning
+  that retrieval and AI drafts will both target an empty library, and the knowledge
+  page shows which domains reach the selected base.
+- Two real bugs fixed: same-title drafts created within the same second overwrote
+  each other (now suffixed), and an empty bound base silently received drafts in
+  `默认知识库`.
+- Tests up to 156 (trigger validation, adopted documents match via
+  `matchDocuments`, no overwrite on duplicate titles, out-of-range scope refusal,
+  no target-file dropdown on the approval page).
+
 ## 0.5.2
 
 - **The Discord card now says which credential to paste**: only the **Bot Token**

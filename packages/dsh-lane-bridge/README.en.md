@@ -63,8 +63,10 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   domain binds *several* knowledge bases, and every document inside them is
   reachable by its own triggers. Optional domain-scoped memory
   (`lane_memory_*`) accumulates cross-conversation experience.
-- **KB drafts + approval**: `lane_kb_draft` writes only to `_待审/`; the Settings
-  "KB approval" tab approves/discards before drafts affect retrieval.
+- **KB drafts + approval**: `lane_kb_draft` writes a **single-topic draft**
+  (title + triggers + body + source) into the review queue of a knowledge base the
+  domain binds; the "KB approval" tab lets you correct the triggers, and approving
+  creates a real document with them (no overwrite: duplicates get a suffix).
 - **Read-only GitHub**: global default repo with per-domain repo/branch
   overrides; issue/file/code/commit queries; repo/branch dropdowns list every
   repo visible to the account via the `gh` CLI (no manual token after
@@ -270,6 +272,37 @@ Windows: %APPDATA%/Game/save. macOS: ~/Library/Application Support/Game.
 - `kbRetrieveChars` caps one injection; multiple matches are ordered by number of
   matched triggers, then trigger length.
 
+### How AI sediment becomes a document
+
+`lane_kb_draft` does not append a section to one big file. It writes a
+**standalone, single-topic** draft:
+
+```md
+---
+title: 宝具不生效
+triggers: 宝具不生效, 宝具没用, 宝具机制, 图鉴
+---
+
+# 宝具不生效
+
+> 来源：commit f179be46
+> 起草：2026-10-25T14:30:00.000Z（客服 AI 生成，待人工审核；未采纳前不参与检索）
+
+宝具槽位需要在装备界面点「装备」才会生效；只放进背包不算。
+```
+
+- **Triggers are mandatory**: a draft without them is rejected (the tool returns
+  the reason), because the adopted document would never be retrieved. The
+  approval page edits them as chips, and "approve" stays disabled while empty.
+- **It lands in a knowledge base the domain binds**: with exactly one bound,
+  `scope` may be omitted; with several the model must name one, otherwise the
+  tool refuses and lists the choices. A domain with no bound base gets an error
+  instead of silently writing somewhere else.
+- **Approval creates a document**: `knowledge/<base>/<title>.md` with frontmatter —
+  it does not append to `常见问题.md` and never overwrites (duplicates become
+  `title-2.md`).
+- `_待审/` is invisible to retrieval and to the model; discarding deletes it.
+
 ### Session archival (`sessionMaxTurns`)
 
 `0` disables it (default). With N:
@@ -278,8 +311,9 @@ Windows: %APPDATA%/Game/save. macOS: ~/Library/Application Support/Game.
 2. At N the bridge starts an **internal archival turn**: the model is asked to
    call `lane_retire` and split what matters into
    - `memory`: facts needed beyond this conversation → domain memory;
-   - `kb`: product facts confirmed here and not covered yet → a KB **draft**
-     (still requires human approval).
+   - `kb`: product facts confirmed here and not covered yet → a KB **draft**,
+     one topic per draft, **with triggers and a knowledge base** (still requires
+     human approval).
 3. The DSH session is then reset; the next message starts clean, with the freshly
    written memory and KB matches.
 
@@ -422,7 +456,7 @@ SnowLuma.
 | `POST` | `/lane-bridge/api/session/reset` | Forget a conversation's DSH session (next message starts fresh) |
 | `POST` | `/lane-bridge/api/channels/restart` | Reconnect adapters |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | List / write KB documents |
-| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | List / approve / discard pending drafts |
+| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | List / approve / discard pending drafts; approve takes `{action:'approve', scope, file, triggers:[...]}` and creates a new document with those triggers |
 | `GET`/`POST` | `/lane-bridge/api/memory` | Read / replace / clear domain memory |
 | `POST` | `/lane-bridge/api/handoff` | pause / escalate / resume a conversation |
 | `GET`/`POST` | `/lane-bridge/api/usage` | read / clear the local token ledger |

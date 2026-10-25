@@ -303,7 +303,7 @@ What the repository verifies today (`npm test`, 88 tests):
 | State store | atomic writes, schema repair, secret preservation, role-file reconciliation |
 | Domain/binding resolver | unbound default, per-binding overrides, disabled binding, per-domain trigger (all/mention/keyword/off, multi-select) |
 | Knowledge tools | scope isolation, draft hiding, traversal rejection, search |
-| KB drafts | write-only `_待审`, excluded from list/search/read, dedupe/rate limit, approval append + backup, discard |
+| KB drafts | write-only `_待审`, excluded from list/search/read, dedupe/rate limit, triggers required and scope must be bound by the domain, approval creates a new triggered document (suffix on name clash), discard |
 | GitHub read-only | fixed repo/path guards, token redaction, issues/files/commits, 401 retry, code search requires auth |
 | HTTP boundary | same-origin writes, secret redaction, bearer push, validation errors |
 | Session orchestration | new session creation, cold `agents.resume` setup, role-card first/again injection, turn collection, `lane_send` suppression |

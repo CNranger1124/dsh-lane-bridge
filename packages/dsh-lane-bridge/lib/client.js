@@ -995,7 +995,23 @@ window.__ModuleLoader__.load({
       const [presets, setPresets] = useState([]);
       const [presetError, setPresetError] = useState('');
       const [customPreset, setCustomPreset] = useState(false);
+      // Document counts per knowledge base: an empty bound base silently means
+      // "no knowledge" and "drafts land in a dead library", so show it instead
+      // of letting the operator discover it from the model's answers.
+      const [kbCounts, setKbCounts] = useState({});
       const current = draft.find((domain) => domain.id === selected) ?? draft[0];
+      const emptyBound = (current?.knowledgeScopes ?? []).filter((id) => kbCounts[id] === 0);
+      useEffect(() => {
+        let alive = true;
+        void (async () => {
+          try {
+            const result = await api('/kb');
+            if (!alive) return;
+            setKbCounts(Object.fromEntries((result.bases ?? []).map((kb) => [kb.id, kb.docs ?? 0])));
+          } catch { /* the 知识库 page reports its own errors */ }
+        })();
+        return () => { alive = false; };
+      }, [data]);
       const globalRepo = data.state.config.github?.repo ?? '';
       const effectiveRepo = current?.repo || globalRepo;
       const loadPresets = async () => {
@@ -1144,12 +1160,12 @@ window.__ModuleLoader__.load({
               h(Field, { label: '模型', hint: 'provider/model；留空=DSH 默认' },
                 h('input', { className: 'lb-input', value: current.model, onChange: (e) => patch('model', e.target.value) })
               ),
-              h(Field, { label: '绑定知识库', hint: '可绑定多个。会话命中某个知识库中文档自带的触发词时，才会注入那一篇；留空＝这个领域不自动注入知识' },
+              h(Field, { label: '绑定知识库', hint: '可绑定多个。会话命中某个知识库中文档自带的触发词时，才会注入那一篇；留空＝这个领域不自动注入知识；AI 写的草稿也会落在绑定的库里' },
                 h(EnumChipList, {
                   values: current.knowledgeScopes,
                   options: (data.state.knowledgeBases ?? []).map((kb) => ({
                     value: kb.id,
-                    label: kb.name && kb.name !== kb.id ? `${kb.name}（${kb.id}）` : kb.id,
+                    label: `${kb.name && kb.name !== kb.id ? `${kb.name}（${kb.id}）` : kb.id}${kbCounts[kb.id] === 0 ? ' · 空库' : (typeof kbCounts[kb.id] === 'number' ? ` · ${kbCounts[kb.id]} 篇` : '')}`,
                   })),
                   onChange: (next) => patch('knowledgeScopes', next),
                   emptyText: '还没有绑定知识库',
@@ -1157,6 +1173,10 @@ window.__ModuleLoader__.load({
                   addLabel: '+ 绑定',
                 })
               ),
+              emptyBound.length > 0
+                ? h('div', { className: 'lb-error' },
+                  `绑定的知识库里没有文档：${emptyBound.join('、')}。这个领域现在的自动检索和 AI 草稿都会落在空库上，先到「知识库」页把文档放进去，或者改绑到有文档的库。`)
+                : null,
               h(Field, { label: '允许的宿主工具', hint: '加号添加、× 移除；为空=无宿主工具' },
                 h(ChipList, {
                   values: current.allowedHostTools,
@@ -1589,9 +1609,15 @@ window.__ModuleLoader__.load({
         } catch (err) { setError(String(err.message ?? err)); }
       };
       const files = docs?.files ?? [];
+      const boundDomains = (data.state.domains ?? [])
+        .filter((domain) => Array.isArray(domain.knowledgeScopes) && domain.knowledgeScopes.includes(current?.id))
+        .map((domain) => domain.name || domain.id);
       return h('div', { className: 'lb-root' },
         h(Card, { title: '知识库', extra: h('button', { className: 'lb-btn', onClick: () => { void loadBases(); void loadDocs(current?.id); } }, '刷新') },
           h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（一个知识库＝一个子目录；文档是 Markdown / TXT，自带触发词）`),
+          boundDomains.length === 0
+            ? h('div', { className: 'lb-error' }, '还没有任何领域绑定这个知识库：会话检索不到它，AI 的草稿也不会写到这里。去「领域」页的「绑定知识库」加上它。')
+            : h('div', { className: 'lb-muted' }, `绑定领域：${boundDomains.join('、')}`),
           h('div', { className: 'lb-grid' },
             h(Field, { label: '当前知识库', hint: '领域在「领域」页绑定这些名字，会话就能按触发词命中其中的文档' },
               h('select', {
@@ -1692,19 +1718,36 @@ window.__ModuleLoader__.load({
 
     function KbDrafts({ data, refresh }) {
       const [state, setState] = useState(null);
+      // Keywords are the whole point of a document: the operator can correct
+      // them here, and an empty set blocks approval instead of producing a
+      // document nothing will ever match.
+      const [tags, setTags] = useState({});
       const [error, setError] = useState('');
       const [message, setMessage] = useState('');
       const [busy, setBusy] = useState('');
       const load = useCallback(async () => {
         setError('');
-        try { setState(await api('/kb/drafts')); } catch (err) { setError(String(err.message ?? err)); }
+        try {
+          const next = await api('/kb/drafts');
+          setState(next);
+          setTags(Object.fromEntries((next.drafts ?? []).map((draft) => [
+            `${draft.scope}/${draft.file}`,
+            Array.isArray(draft.triggers) ? draft.triggers : [],
+          ])));
+        } catch (err) { setError(String(err.message ?? err)); }
       }, []);
       useEffect(() => { void load(); }, [load]);
-      const approve = async (draft, target) => {
+      const boundDomains = useCallback((scope) => (data.state.domains ?? [])
+        .filter((domain) => Array.isArray(domain.knowledgeScopes) && domain.knowledgeScopes.includes(scope))
+        .map((domain) => domain.name || domain.id), [data.state.domains]);
+      const approve = async (draft, triggers) => {
         setBusy(`${draft.scope}/${draft.file}`); setError(''); setMessage('');
         try {
-          await api('/kb/drafts', { method: 'POST', body: JSON.stringify({ action: 'approve', scope: draft.scope, file: draft.file, target }) });
-          setMessage('已采纳，已并入正式知识库');
+          const result = await api('/kb/drafts', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'approve', scope: draft.scope, file: draft.file, triggers }),
+          });
+          setMessage(`已采纳：${result.scope}/${result.path}（触发词 ${result.triggers?.length ?? 0} 个）`);
           await load();
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(''); }
@@ -1721,17 +1764,20 @@ window.__ModuleLoader__.load({
       const drafts = state?.drafts ?? [];
       return h('div', { className: 'lb-root' },
         h(Card, { title: '知识库审批', extra: h('button', { className: 'lb-btn', onClick: load }, '刷新') },
-          h('div', { className: 'lb-muted' }, 'AI 只能把新结论写进「待审」区；未采纳前不参与检索。采纳时会把内容追加到目标文档，并保留来源。'),
+          h('div', { className: 'lb-muted' },
+            'AI 只能把新结论写进所在知识库的「待审」区；未采纳前不参与检索。'
+            + '采纳会在那个知识库里生成一篇**独立文档**（带标题和触发词），不会覆盖已有文档；同名时自动加序号。'
+            + '触发词是检索的唯一入口，为空不允许采纳。'
+          ),
           error ? h('div', { className: 'lb-error' }, error) : null,
           message ? h('span', { className: 'lb-ok' }, message) : null,
           !state ? h('div', { className: 'lb-muted' }, '加载中…') : drafts.length === 0
             ? h('div', { className: 'lb-muted' }, '没有待审草稿。')
             : h('div', { className: 'lb-list' }, ...drafts.map((draft) => {
-              const targets = state.targets?.[draft.scope] ?? [];
-              const options = targets.length ? targets : ['常见问题.md'];
-              const target = options.includes('常见问题.md') ? '常见问题.md' : options[0];
-              const selectId = `lb-draft-target-${draft.scope}-${draft.file}`;
-              return h('div', { className: 'lb-card', key: `${draft.scope}/${draft.file}` },
+              const id = `${draft.scope}/${draft.file}`;
+              const current = tags[id] ?? [];
+              const domains = boundDomains(draft.scope);
+              return h('div', { className: 'lb-card', key: id },
                 h('div', { className: 'lb-card-head' },
                   h('div', null,
                     h('div', { className: 'lb-card-title' }, draft.title),
@@ -1739,23 +1785,30 @@ window.__ModuleLoader__.load({
                   ),
                   h('span', { className: 'lb-pill' }, `${draft.chars} 字`)
                 ),
+                h('div', { className: 'lb-muted' },
+                  `将写入知识库「${draft.scope}」`
+                  + (domains.length ? `（绑定领域：${domains.join('、')}）` : '（⚠ 还没有领域绑定这个知识库，采纳后也不会被检索）')
+                ),
                 h('div', { className: 'lb-muted' }, `来源：${draft.source || '（未注明）'}`),
                 h('div', { className: 'lb-muted' }, draft.preview || '（正文为空）'),
+                h(Field, { label: '触发词', hint: '用户会怎么说就写什么；为空不能采纳' },
+                  h(ChipList, {
+                    values: current,
+                    onChange: (next) => setTags({ ...tags, [id]: next }),
+                    placeholder: '例如 宝具不生效',
+                    addLabel: '+ 添加',
+                    emptyText: '没有触发词：这篇采纳后检索不到',
+                  })
+                ),
                 h('div', { className: 'lb-row' },
-                  h('select', { className: 'lb-select', defaultValue: target, id: selectId },
-                    ...options.map((option) => h('option', { key: option, value: option }, option))
-                  ),
                   h('button', {
                     className: 'lb-btn lb-btn--primary',
-                    disabled: busy === `${draft.scope}/${draft.file}`,
-                    onClick: () => {
-                      const el = document.getElementById(selectId);
-                      void approve(draft, el?.value ?? target);
-                    },
+                    disabled: busy === id || current.length === 0,
+                    onClick: () => void approve(draft, current),
                   }, '采纳'),
                   h('button', {
                     className: 'lb-btn lb-btn--danger',
-                    disabled: busy === `${draft.scope}/${draft.file}`,
+                    disabled: busy === id,
                     onClick: () => void discard(draft),
                   }, '丢弃')
                 )

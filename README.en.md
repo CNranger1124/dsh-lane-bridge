@@ -108,8 +108,10 @@ only a one-shot legacy migration script for moving an existing install.
   enabled together and either one wakes the bot (`all` and `off` stay exclusive).
 - Shared role-card library, shared knowledge base (`lane_kb_*`), and optional
   domain-scoped shared memory (`lane_memory_*`).
-- **KB drafts + human approval**: `lane_kb_draft` writes only to `_待审/`; a new
-  Settings "KB approval" tab approves/discards before drafts affect retrieval.
+- **KB drafts + human approval**: `lane_kb_draft` writes a single-topic draft with
+  triggers into the review queue of a knowledge base the domain binds; the Settings
+  "KB approval" tab lets you correct the triggers, and approving creates a real
+  document there (never overwriting: duplicates get a suffix).
 - **Read-only GitHub repo**: one global default repo, with per-domain repo/branch
   overrides; path guards, token redaction, ETag cache; repo/branch dropdowns list
   every repo visible to the account from the `gh` CLI (so `gh auth login` removes

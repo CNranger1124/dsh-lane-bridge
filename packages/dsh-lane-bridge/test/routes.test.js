@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LaneStore } from '../lib/store.js';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRoutes } from '../lib/routes.js';
 import { MemoryStore } from '../lib/memory.js';
@@ -317,25 +318,34 @@ test('knowledge draft routes list, approve, and discard', async () => {
       title: '测试草稿',
       content: '这是一条测试草稿内容。',
       source: 'issue #1',
+      triggers: ['测试草稿', '草稿'],
     });
     const list = mockResponse();
     await routes.handle(mockRequest({ url: '/lane-bridge/api/kb/drafts' }), list);
     assert.equal(list.status, 200);
-    assert.ok(list.json().drafts.some((item) => item.file === draft.file));
+    const listed = list.json().drafts.find((item) => item.file === draft.file);
+    assert.ok(listed);
+    assert.deepEqual(listed.triggers, ['测试草稿', '草稿']);
 
+    // Approval creates a standalone document in that knowledge base, keywords
+    // included, so trigger-based retrieval can find it afterwards.
     const approve = mockResponse();
     await routes.handle(mockRequest({
       method: 'POST',
       url: '/lane-bridge/api/kb/drafts',
-      body: { action: 'approve', scope: 'default', file: draft.file, target: '常见问题.md' },
+      body: { action: 'approve', scope: 'default', file: draft.file, triggers: ['测试草稿', '测试用词'] },
     }), approve);
     assert.equal(approve.status, 200);
     assert.equal(approve.json().ok, true);
+    assert.equal(approve.json().path, '测试草稿.md');
+    assert.deepEqual(approve.json().triggers, ['测试草稿', '测试用词']);
+    assert.match(fs.readFileSync(path.join(store.paths.knowledgeDir, 'default', '测试草稿.md'), 'utf8'), /triggers: 测试草稿, 测试用词/);
 
     const second = writeDraft(store.paths.knowledgeDir, 'default', {
       title: '要丢弃',
       content: '这条草稿只是用来测试丢弃流程的内容。',
       source: '群反馈',
+      triggers: ['要丢弃'],
     });
     const discard = mockResponse();
     await routes.handle(mockRequest({

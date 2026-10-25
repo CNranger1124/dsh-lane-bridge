@@ -51,7 +51,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
 - **领域**：把群/私聊绑定到可复用策略（preset、模型、**绑定的知识库**、宿主工具白名单、管理者白名单、群聊触发策略）。
 - **共享库**：角色卡和 Markdown 知识库共享；领域可以绑定**多个知识库**，绑定后就能按文档自己的触发词命中。领域记忆（`lane_memory_*`）跨会话积累经验。
-- **知识库草稿 + 人工审批**：`lane_kb_draft` 只写 `_待审/`，Settings 的「知识库审批」页采纳/丢弃后才进入检索。
+- **知识库草稿 + 人工审批**：`lane_kb_draft` 写的是**一篇文章草稿**（标题 + 触发词 + 正文 + 来源），落在该领域绑定知识库的 `_待审/` 里；「知识库审批」页可以改触发词，采纳后才变成那个知识库里一篇带触发词的正式文档（同名不覆盖，自动加序号）。
 - **GitHub 只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；issue/文件/代码/提交查询；支持 `gh` CLI 读取账号可见的全部仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
 - **启动通道**：页面顶部每个渠道有启动/停止/重试按钮和「查看日志」，未连接时显示原因（例如 SnowLuma 未启动）。每个模块标题栏都有独立保存按钮，所有模块可折叠，保存栏固定在底部。
 - **统一推送**：`lane_send` 工具 + `POST /lane-bridge/api/push`（单发或广播）。
@@ -197,6 +197,29 @@ Windows 在 %APPDATA%/Game/save 下，macOS 在 ~/Library/Application Support/Ga
 - 完全没写 frontmatter 的旧文档仍然可用：靠领域里的「兜底触发词」+ 全文检索匹配（面板里已标明「仅旧文档」）。
 - 还有个上限 `kbRetrieveChars`：一次注入最多这么多字，多篇命中时按「命中词数 → 词长」排序取前面的。
 
+### AI 沉淀：草稿怎么变成文档
+
+`lane_kb_draft` 不是「往某个大文件尾部追加一段」，而是写一篇**独立的、单主题的**草稿：
+
+```md
+---
+title: 宝具不生效
+triggers: 宝具不生效, 宝具没用, 宝具机制, 图鉴
+---
+
+# 宝具不生效
+
+> 来源：commit f179be46
+> 起草：2026-10-25T14:30:00.000Z（客服 AI 生成，待人工审核；未采纳前不参与检索）
+
+宝具槽位需要在装备界面点「装备」才会生效；只放进背包不算。
+```
+
+- **必须有触发词**：草稿没触发词直接被拒（工具报错、模型收到原因），否则采纳后也是一篇永远检索不到的文档。审批页可以用芯片式列表改触发词，仍为空时「采纳」按钮不可用。
+- **落在领域绑定的库里**：领域只绑一个知识库时 `scope` 可省略；绑多个时必须指定，写错会被拒绝并列出可选项。领域一个库都没绑时直接报错，不会偷偷写到别处。
+- **采纳 = 新建一篇文档**：在 `knowledge/<库>/<标题>.md` 生成带 frontmatter 的文档，不会追加进「常见问题.md」，也不会覆盖已有文件（同名自动变 `标题-2.md`）。
+- 待审区（`_待审/`）不参与检索，模型也读不到；丢弃即删除。
+
 ### 会话归档（`sessionMaxTurns`）
 
 `0` = 不归档（默认）。设成 N 后：
@@ -204,7 +227,7 @@ Windows 在 %APPDATA%/Game/save 下，macOS 在 ~/Library/Application Support/Ga
 1. 每个回答完的回合 +1（计数存在 `state.sessions[key].turns`，重启不丢）；
 2. 达到 N 时，桥接发起一次**内部归档回合**：让模型调用 `lane_retire`，把本次对话里值得留的东西分成两类写入——
    - `memory`: 跨会话还需要知道的事实 → 领域记忆；
-   - `kb`: 确认过、且现有知识库没覆盖的产品口径 → 知识库**草稿**（仍然要人工采纳才生效）；
+   - `kb`: 确认过、且现有知识库没覆盖的产品口径 → 知识库**草稿**，一条一个主题，**必须带触发词和知识库**（仍然要人工采纳才生效）；
 3. 归档回合结束后**重置 DSH 会话**，下一条消息是一个干净上下文 + 刚写入的记忆/知识库检索。
 
 几条边界：
@@ -308,7 +331,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 | `POST` | `/lane-bridge/api/session/reset` | 忘记会话的 DSH session（下一条消息新建） |
 | `POST` | `/lane-bridge/api/channels/restart` | 重连适配器 |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | 列出/写入 KB 文档 |
-| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | 列出/采纳/丢弃待审草稿 |
+| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | 列出/采纳/丢弃待审草稿；采纳参数 `{action:'approve', scope, file, triggers:[...]}`，在该知识库新建一篇带触发词的文档 |
 | `GET`/`POST` | `/lane-bridge/api/memory` | 读取/替换/清空领域记忆 |
 | `POST` | `/lane-bridge/api/handoff` | 暂停 / 转人工 / 恢复会话 |
 | `GET`/`POST` | `/lane-bridge/api/usage` | 读取/清空本地 token 账本 |

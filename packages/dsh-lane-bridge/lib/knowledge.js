@@ -123,16 +123,15 @@ function selectedScopes(knowledgeDir, scopes) {
 //   ---
 //   title: 存档位置
 //   triggers: 存档, 存档在哪, save
-//   domains: default, vip
 //   always: false
 //   ---
 //
-// `domains` is the per-document domain binding: a document is only visible to the
-// domains listed there (empty = every domain allowed in that scope). That mirrors
-// how memory is scoped to a domain instead of being global.
+// A document belongs to the knowledge base (directory) it lives in, and a domain
+// reaches it by binding that knowledge base — there is no `domains:` key any
+// more; a stray one is ignored instead of silently hiding the document.
 //
-// Only these four keys are understood. Parsing is deliberately forgiving: an
-// unparsable head is treated as text, never as an error, because these files are
+// Three keys are understood. Parsing is deliberately forgiving: an unparsable
+// head is treated as text, never as an error, because these files are
 // hand-written.
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
@@ -454,15 +453,23 @@ function slugify(value) {
 }
 
 export function parseDraft(text) {
+  // Drafts carry the same frontmatter a real document needs (`title`,
+  // `triggers`), because approving one turns it into a document: without
+  // triggers the deposited conclusion would never be retrieved.
   const source = String(text ?? '');
-  const title = (source.match(/^#\s+(.+)$/mu)?.[1] ?? '').trim().slice(0, 80);
-  const origin = (source.match(/^>\s*来源[：:]\s*(.+)$/mu)?.[1] ?? '').trim();
-  const body = source
+  const parsed = parseDocument(source);
+  const heading = (parsed.body.match(/^#\s+(.+)$/mu)?.[1] ?? '').trim();
+  const title = (parsed.meta.title || heading || '').trim().slice(0, 80);
+  const origin = (parsed.meta.source || (parsed.body.match(/^>\s*来源[：:]\s*(.+)$/mu)?.[1] ?? ''))
+    .replace(/[\r\n]+/gu, ' ')
+    .trim()
+    .slice(0, 240);
+  const body = parsed.body
     .split(/\r?\n/u)
     .filter((line) => !/^#\s+/u.test(line) && !/^>\s*(来源|起草)[：:]/u.test(line))
     .join('\n')
     .trim();
-  return { title, source: origin, body };
+  return { title, source: origin, body, triggers: parsed.meta.triggers };
 }
 
 function readDraftMeta(knowledgeDir, scope, file) {
@@ -481,6 +488,7 @@ function readDraftMeta(knowledgeDir, scope, file) {
     file,
     title: parsed.title || file,
     source: parsed.source,
+    triggers: parsed.triggers,
     preview: parsed.body.replace(/\s+/gu, ' ').slice(0, 140),
     chars: parsed.body.length,
     mtime,
@@ -488,18 +496,21 @@ function readDraftMeta(knowledgeDir, scope, file) {
   };
 }
 
-function targetFiles(knowledgeDir, scope) {
-  const base = path.join(knowledgeDir, scope);
-  let entries = [];
-  try {
-    entries = fs.readdirSync(base, { withFileTypes: true });
-  } catch {
-    return [];
+/** Normalize analyst-supplied trigger words; throws when there are none. */
+export function normalizeTriggers(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(/[,，、;；\n]/u);
+  const out = [];
+  for (const item of raw) {
+    const word = String(item ?? '')
+      .replace(/^["']|["']$/gu, '')
+      .replace(/[\r\n\t]+/gu, ' ')
+      .trim()
+      .slice(0, 24);
+    if (word && !out.includes(word)) out.push(word);
   }
-  return entries
-    .filter((entry) => entry.isFile() && ALLOWED_EXT.has(path.extname(entry.name).toLowerCase()))
-    .map((entry) => entry.name)
-    .sort();
+  return out.slice(0, MAX_META_ITEMS);
 }
 
 export function listDrafts(knowledgeDir, scopes = null) {
@@ -507,9 +518,7 @@ export function listDrafts(knowledgeDir, scopes = null) {
   const wanted = Array.isArray(scopes) ? scopes.map(safeScope).filter(Boolean) : [];
   const picked = wanted.length ? allScopes.filter((scope) => wanted.includes(scope)) : allScopes;
   const drafts = [];
-  const targets = {};
   for (const scope of picked) {
-    targets[scope] = targetFiles(knowledgeDir, scope);
     let entries = [];
     try {
       entries = fs.readdirSync(draftDir(knowledgeDir, scope), { withFileTypes: true });
@@ -523,18 +532,22 @@ export function listDrafts(knowledgeDir, scopes = null) {
     }
   }
   drafts.sort((a, b) => b.mtime - a.mtime);
-  return { scopes: allScopes, drafts, targets };
+  return { scopes: allScopes, drafts };
 }
 
-export function writeDraft(knowledgeDir, scope, { title, content, source }) {
+export function writeDraft(knowledgeDir, scope, { title, content, source, triggers }) {
   const safe = safeScope(scope);
   if (!safe) throw new TypeError('invalid knowledge scope');
   const cleanTitle = String(title ?? '').replace(/[\r\n]+/gu, ' ').trim().slice(0, 80);
   const cleanContent = String(content ?? '').trim().slice(0, MAX_DRAFT_CHARS);
   const cleanSource = String(source ?? '').replace(/[\r\n]+/gu, ' ').trim().slice(0, 240);
+  const cleanTriggers = normalizeTriggers(triggers);
   if (!cleanTitle) throw new TypeError('title 不能为空');
   if (cleanContent.length < 10) throw new TypeError('content 太短（至少 10 字）');
   if (!cleanSource) throw new TypeError('source 不能为空：要能指出这条结论是从哪查到的');
+  if (cleanTriggers.length === 0) {
+    throw new TypeError('triggers 不能为空：至少写 1 个玩家会用的说法（正式名、简称、错别字、英文名都可以），否则采纳后永远检索不到');
+  }
 
   const dir = draftDir(knowledgeDir, safe);
   const existing = [];
@@ -556,18 +569,25 @@ export function writeDraft(knowledgeDir, scope, { title, content, source }) {
   }
 
   const stamp = new Date().toISOString().replace(/[:T]/gu, '-').slice(0, 19);
-  const file = `${stamp}-${slugify(cleanTitle)}.md`;
-  const body = [
-    `# ${cleanTitle}`,
-    '',
-    `> 来源：${cleanSource}`,
-    `> 起草：${new Date().toISOString()}（客服 AI 生成，**待人工审核**；未采纳前不参与检索）`,
-    '',
-    cleanContent,
-    '',
-  ].join('\n');
+  // The stamp only has second resolution: two different drafts with the same
+  // title in the same second must not overwrite each other.
+  const stem = `${stamp}-${slugify(cleanTitle)}`;
+  let file = `${stem}.md`;
+  for (let i = 2; fs.existsSync(path.join(dir, file)); i += 1) file = `${stem}-${i}.md`;
+  const head = formatDocument({
+    meta: { title: cleanTitle, triggers: cleanTriggers },
+    body: [
+      `# ${cleanTitle}`,
+      '',
+      `> 来源：${cleanSource}`,
+      `> 起草：${new Date().toISOString()}（客服 AI 生成，**待人工审核**；未采纳前不参与检索）`,
+      '',
+      cleanContent,
+      '',
+    ].join('\n'),
+  });
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, file), body, 'utf8');
+  fs.writeFileSync(path.join(dir, file), head, 'utf8');
   return { ...readDraftMeta(knowledgeDir, safe, file), duplicate: false };
 }
 
@@ -577,7 +597,19 @@ function safeDraftFile(file) {
   return name;
 }
 
-export function approveDraft(knowledgeDir, { scope, file, target } = {}) {
+// Approving turns a draft into a standalone document, so it needs a file name
+// that does not clobber an existing one; duplicates get a numeric suffix.
+function uniqueDocName(knowledgeDir, scope, base) {
+  const dir = path.join(knowledgeDir, scope);
+  const stem = (slugify(base).slice(0, 60) || 'doc').replace(/[. ]+$/u, '');
+  for (let i = 1; i <= 50; i += 1) {
+    const name = i === 1 ? `${stem}.md` : `${stem}-${i}.md`;
+    if (!fs.existsSync(path.join(dir, name))) return name;
+  }
+  throw new Error('同名文档太多了，先整理一下知识库再采纳');
+}
+
+export function approveDraft(knowledgeDir, { scope, file, triggers } = {}) {
   const safe = safeScope(scope);
   if (!safe) throw new TypeError('invalid knowledge scope');
   const safeFile = safeDraftFile(file);
@@ -585,28 +617,23 @@ export function approveDraft(knowledgeDir, { scope, file, target } = {}) {
   if (!fs.existsSync(draftPath)) throw new Error('草稿不存在（可能已被处理）');
   const parsed = parseDraft(fs.readFileSync(draftPath, 'utf8'));
   if (!parsed.body) throw new Error('草稿正文为空，先补内容再采纳');
-
-  const targets = targetFiles(knowledgeDir, safe);
-  const wanted = path.basename(String(target ?? '').trim());
-  const targetName = wanted && ALLOWED_EXT.has(path.extname(wanted).toLowerCase())
-    ? wanted
-    : (targets.includes('常见问题.md') ? '常见问题.md' : (targets[0] ?? '常见问题.md'));
-  if (!ALLOWED_EXT.has(path.extname(targetName).toLowerCase())) throw new TypeError('目标文件必须是 .md/.txt');
-
-  const base = path.resolve(path.join(knowledgeDir, safe));
-  const abs = path.resolve(base, targetName);
-  if (!abs.startsWith(`${base}${path.sep}`)) throw new TypeError('目标文件越出知识库目录');
-  const previous = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8').replace(/\s*$/u, '') : `# ${safe} 知识库`;
-  const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
-  try {
-    const backupDir = path.join(path.dirname(knowledgeDir), 'kb-backups');
-    fs.mkdirSync(backupDir, { recursive: true });
-    fs.writeFileSync(path.join(backupDir, `${safe}-${targetName}-${stamp}.md`), previous, 'utf8');
-  } catch {}
-  const block = `\n\n## ${parsed.title || targetName}\n\n${parsed.body}\n\n> 来源：${parsed.source || '（未注明）'}（采纳于 ${new Date().toISOString().slice(0, 10)}）\n`;
-  fs.writeFileSync(abs, `${previous}${block}`, 'utf8');
+  // The approval page may correct the keywords: they become the document's
+  // retrieval key, so an empty set has to stop here instead of producing a
+  // document nothing can ever match.
+  const tags = normalizeTriggers(triggers ?? parsed.triggers);
+  if (tags.length === 0) {
+    throw new Error('这条草稿没有触发词：先在审批页补上 1~8 个玩家会说的说法，否则生成文档后永远检索不到');
+  }
+  const title = parsed.title || safeFile.replace(/\.(md|txt)$/iu, '');
+  const targetName = uniqueDocName(knowledgeDir, safe, title);
+  const doc = formatDocument({
+    meta: { title, triggers: tags },
+    body: `# ${title}\n\n${parsed.body}\n\n> 来源：${parsed.source || '（未注明）'}（采纳于 ${new Date().toISOString().slice(0, 10)}）\n`,
+  });
+  fs.mkdirSync(path.join(knowledgeDir, safe), { recursive: true });
+  fs.writeFileSync(path.join(knowledgeDir, safe, targetName), doc, 'utf8');
   fs.rmSync(draftPath, { force: true });
-  return { ok: true, scope: safe, target: targetName, title: parsed.title, file: safeFile };
+  return { ok: true, scope: safe, path: targetName, title, triggers: tags, file: safeFile };
 }
 
 export function discardDraft(knowledgeDir, { scope, file } = {}) {

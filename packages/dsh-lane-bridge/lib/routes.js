@@ -363,7 +363,12 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     const scope = String(body.scope ?? '').trim();
     const file = String(body.file ?? '').trim();
     if (body.action === 'discard') return sendJson(res, 200, { ok: true, ...discardDraft(knowledgeDir, { scope, file }) });
-    if (body.action === 'approve') return sendJson(res, 200, { ok: true, ...approveDraft(knowledgeDir, { scope, file, target: body.target }) });
+    if (body.action === 'approve') {
+      return sendJson(res, 200, {
+        ok: true,
+        ...approveDraft(knowledgeDir, { scope, file, triggers: body.triggers }),
+      });
+    }
     return sendJson(res, 400, { ok: false, error: 'action 必须是 approve/discard' });
   }
 

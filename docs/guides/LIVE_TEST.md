@@ -140,7 +140,7 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 
 1. 让模型查到一个知识库没有覆盖的新结论，调用 `lane_kb_draft`（title/content/source 必填）。
 2. **知识库审批** 页应出现草稿；`lane_kb_list/search/read` 不应看到它。
-3. 选目标文件点 **采纳**：正式文档应追加小节并保留来源，草稿消失；点 **丢弃** 则只删除草稿。
+3. 检查草稿下显示的「将写入知识库 X（绑定领域：…）」；触发词芯片为空时 **采纳** 是灰的，加一个词后点 **采纳**：该知识库里应出现一篇新的 `标题.md`，带 `title` / `triggers` frontmatter 和来源，草稿消失；点 **丢弃** 则只删除草稿。
 4. 确认 `~/.dsh/lane-bridge/kb-backups/` 有采纳前备份。
 
 ## 7. 失败时记录什么

@@ -150,8 +150,8 @@ NPM_TOKEN = 你的 npm automation token
 然后：
 
 ```sh
-git tag v0.5.2
-git push origin v0.5.2
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 ## 3. DSH 安装已发布版本

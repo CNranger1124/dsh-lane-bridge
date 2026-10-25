@@ -158,8 +158,8 @@ NPM_TOKEN = your npm automation token
 Then:
 
 ```sh
-git tag v0.5.2
-git push origin v0.5.2
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 ## 3. Install a published version into DSH

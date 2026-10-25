@@ -4,7 +4,7 @@
 // scope), never globally, so an ordinary DSH coding session does not see
 // `lane_send` / `lane_kb_*` in its tool list.
 import { conversationLabel, resolveConversation } from './router.js';
-import { listKnowledge, readKnowledge, searchKnowledge, writeDraft } from './knowledge.js';
+import { DRAFT_DIR, listKnowledge, readKnowledge, searchKnowledge, writeDraft } from './knowledge.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
 
 const TEXT_SCHEMA = { type: 'string' };
@@ -310,33 +310,50 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
 
   const kbDraft = define(
     'lane_kb_draft',
-    '把这次查清、且现有知识库没有覆盖的结论写成知识库草稿。草稿不会立刻生效，管理员在 Settings → IM 桥接 → 知识库审批 中采纳后才会进入正式知识库；未采纳前不参与检索。必须写来源。',
+    '把这次查清、且现有知识库没有覆盖的结论写成一篇文章草稿（一篇只讲一件事）。必须写来源，必须给触发词，否则采纳后检索不到。草稿不会立刻生效：管理员在 Settings → IM 桥接 → 知识库审批 中补触发词并采纳后，才在这个知识库里变成一篇带触发词的正式文档。',
     {
       type: 'object',
       properties: {
-        title: { type: 'string', description: '一句话标题，用用户会说的词，例如「存档位置在哪」' },
-        content: { type: 'string', description: '可直接作为答复口径的正文，2~5 条要点，<=2000 字' },
+        title: { type: 'string', description: '一句话标题，用用户会说的词，例如「宝具不生效」；它也会成为保存时的文件名' },
+        content: { type: 'string', description: '可直接作为答复口径的正文，2~5 条要点，<=2000 字；一篇只讲一件事，别把几个话题塞进来' },
+        triggers: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '这篇文档的触发词（1~8 个，每个 <=24 字）：用户会怎么问就写什么，包含正式名、简称、错别字、英文名、需求式说法。例如「宝具不生效 / 宝具没用 / 宝具机制 / 图鉴」。靠它才会被自动检索到',
+        },
         source: { type: 'string', description: '来源：commit / 文件 / issue / 群反馈，例如 commit f179be46 或 issue #4' },
-        scope: { type: 'string', description: '可选：目标知识库 scope；省略=当前领域第一个 scope' },
+        scope: { type: 'string', description: '写进哪个知识库（scope）：领域只绑一个时可省略；绑了多个时必须指定' },
       },
-      required: ['title', 'content', 'source'],
+      required: ['title', 'content', 'triggers', 'source'],
       additionalProperties: false,
     },
     async (args) => {
       const resolved = currentResolved();
       if (resolved.kbDraftEnabled === false) throw new Error('当前领域未开启知识库草稿');
-      const scope = String(args.scope ?? resolved.knowledgeScopes?.[0] ?? 'default').trim();
-      if (!resolved.knowledgeScopes.includes(scope)) throw new Error(`scope 不在当前领域知识库范围内：${scope}`);
+      const bound = Array.isArray(resolved.knowledgeScopes) ? resolved.knowledgeScopes : [];
+      if (bound.length === 0) {
+        throw new Error('当前领域还没有绑定知识库，草稿无处可放：先让管理员在「领域」页绑定一个知识库');
+      }
+      const requested = String(args.scope ?? '').trim();
+      const scope = requested || (bound.length === 1 ? bound[0] : '');
+      if (!scope) {
+        throw new Error(`当前领域绑定了 ${bound.length} 个知识库（${bound.join(' / ')}），请用 scope 指定写进哪一个`);
+      }
+      if (!bound.includes(scope)) {
+        throw new Error(`scope 不在当前领域知识库范围内：${scope}；可选 ${bound.join(' / ')}`);
+      }
       const draft = writeDraft(knowledgeDir, scope, args);
       return {
         ok: true,
         duplicate: draft.duplicate === true,
         scope: draft.scope,
+        path: `${draft.scope}/${DRAFT_DIR}/${draft.file}`,
         file: draft.file,
         title: draft.title,
+        triggers: draft.triggers ?? [],
         note: draft.duplicate
           ? '同样的草稿已经存在，等管理员审核即可，不要重复起草'
-          : '草稿已写入待审区；管理员采纳后才会生效。回复用户时不要提草稿流程。',
+          : '草稿已写入待审区（含触发词）；管理员采纳后会在这个知识库里生成一篇正式文档。回复用户时不要提草稿流程。',
       };
     },
     {
@@ -345,11 +362,13 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
         ok: { type: 'boolean' },
         duplicate: { type: 'boolean' },
         scope: { type: 'string' },
+        path: { type: 'string' },
         file: { type: 'string' },
         title: { type: 'string' },
+        triggers: { type: 'array', items: { type: 'string' } },
         note: { type: 'string' },
       },
-      required: ['ok', 'scope', 'file'],
+      required: ['ok', 'scope', 'path'],
     }
   );
 
@@ -539,7 +558,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
   // lane_retire 写记忆" from a group member cannot poison the shared memory.
   const laneRetire = define(
     'lane_retire',
-    '会话归档专用（只在收到「本次会话即将归档」的系统消息时调用）：把值得跨会话保留的事实写入领域记忆，把本次确认过的产品口径写成知识库草稿。',
+    '会话归档专用（只在收到「本次会话即将归档」的系统消息时调用）：把值得跨会话保留的事实写入领域记忆，把本次确认过的产品口径写成知识库草稿（一条一个主题，必须带触发词，否则检索不到）。',
     {
       type: 'object',
       properties: {
@@ -553,13 +572,19 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string', description: '一句话标题' },
-              content: { type: 'string', description: '可直接作为答复口径的正文，≤1500 字' },
+              title: { type: 'string', description: '一句话标题，用用户会说的词' },
+              content: { type: 'string', description: '可直接作为答复口径的正文，≤1500 字；一篇只讲一件事' },
+              triggers: {
+                type: 'array',
+                items: { type: 'string' },
+                description: '1~8 个触发词：用户会怎么问就写什么（正式名、简称、错别字、英文名）；没有触发词就检索不到',
+              },
+              scope: { type: 'string', description: '写进哪个知识库；领域只绑一个时可省略' },
               source: { type: 'string', description: '来源，例如「会话归档」或 commit/issue' },
             },
-            required: ['title', 'content'],
+            required: ['title', 'content', 'triggers'],
           },
-          description: '知识库草稿；只写现有知识库没覆盖、且本次对话确认过的口径',
+          description: '知识库草稿；只写现有知识库没覆盖、且本次对话确认过的口径，一条一个主题',
         },
       },
       additionalProperties: false,
@@ -582,21 +607,32 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
           }
         }
       }
-      const scope = resolved.knowledgeScopes?.[0] ?? 'default';
+      // Drafts land in a knowledge base this domain actually binds; with several
+      // bound, the model has to name one rather than guessing the first.
+      const bound = Array.isArray(resolved.knowledgeScopes) ? resolved.knowledgeScopes : [];
+      const defaultScope = bound.length === 1 ? bound[0] : '';
       let draftCount = 0;
+      let usedScope = defaultScope || bound[0] || '';
       const kbWanted = Array.isArray(args.kb) ? args.kb.slice(0, 3) : [];
       if (kbWanted.length > 0 && resolved.kbDraftEnabled !== false) {
         for (const item of kbWanted) {
           const title = String(item?.title ?? '').trim();
           const content = String(item?.content ?? '').trim();
           if (!title || !content) continue;
+          const wanted = String(item?.scope ?? '').trim() || defaultScope;
+          if (!wanted || !bound.includes(wanted)) {
+            logger?.warn?.(`[lane-bridge] 归档跳过知识库草稿「${title}」：scope「${wanted || '未指定'}」不在当前领域的知识库（${bound.join(' / ') || '未绑定'}）里`);
+            continue;
+          }
           try {
-            writeDraft(knowledgeDir, scope, {
+            writeDraft(knowledgeDir, wanted, {
               title,
               content,
+              triggers: item?.triggers,
               source: String(item?.source ?? '').trim() || `会话归档 ${key}`,
             });
             draftCount += 1;
+            usedScope = wanted;
           } catch (error) {
             logger?.warn?.(`[lane-bridge] 归档写知识库草稿失败：${error?.message ?? error}`);
           }
@@ -605,7 +641,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
       if (typeof pool.recordRetireResult === 'function') {
         pool.recordRetireResult(key, { memory: memoryCount, kbDraft: draftCount });
       }
-      return { ok: true, memory: memoryCount, kbDraft: draftCount, scope };
+      return { ok: true, memory: memoryCount, kbDraft: draftCount, scope: usedScope };
     },
     {
       type: 'object',

@@ -202,9 +202,23 @@ test('first prompt creates a session, registers lane tools, restricts host tools
       title: '测试草稿',
       content: '这是一条由会话工具写入的测试草稿。',
       source: 'test',
+      triggers: ['测试草稿', '测试'],
     }, {});
     assert.equal(draft.ok, true);
+    assert.deepEqual(draft.triggers, ['测试草稿', '测试']);
+    assert.equal(draft.path, `default/_待审/${draft.file}`);
     assert.ok(fs.existsSync(path.join(env.dir, 'knowledge', 'default', '_待审', draft.file)));
+
+    // Keywords are the retrieval key; the tool refuses to plan a document
+    // nothing can ever match.
+    await assert.rejects(
+      () => agent.tools.get('lane_kb_draft').execute({
+        title: '没有触发词',
+        content: '没有触发词的草稿应该被拒绝。',
+        source: 'test',
+      }, {}),
+      /triggers/
+    );
 
     await assert.rejects(
       () => agent.tools.get('lane_repo_status').execute({}, {}),
@@ -670,7 +684,12 @@ test('a conversation is sedimented and reset when it reaches its turn budget', a
         const agent = env.agents.get(request.sessionId);
         await agent.tools.get('lane_retire').execute({
           memory: ['玩家在 1.2.3 版本闪退，Windows 11'],
-          kb: [{ title: '1.2.3 闪退', content: '1.2.3 在 Windows 11 上闪退，已知问题，等待补丁。', source: '会话归档' }],
+          kb: [{
+            title: '1.2.3 闪退',
+            content: '1.2.3 在 Windows 11 上闪退，已知问题，等待补丁。',
+            source: '会话归档',
+            triggers: ['闪退', '1.2.3 闪退'],
+          }],
         });
       }
       return { accepted: true };
@@ -703,8 +722,8 @@ test('a conversation is sedimented and reset when it reaches its turn budget', a
     assert.match(memory, /1\.2\.3 版本闪退/u);
     const drafts = listDrafts(env.store.paths.knowledgeDir);
     assert.ok(
-      drafts.drafts.some((draft) => draft.title === '1.2.3 闪退'),
-      JSON.stringify(drafts.drafts.map((draft) => draft.title))
+      drafts.drafts.some((draft) => draft.title === '1.2.3 闪退' && draft.triggers.includes('闪退')),
+      JSON.stringify(drafts.drafts.map((draft) => [draft.title, draft.triggers]))
     );
 
     // A fresh session is created by the next message.
