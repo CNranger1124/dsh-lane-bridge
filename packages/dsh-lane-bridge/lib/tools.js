@@ -210,7 +210,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     async (args) => {
       const resolved = currentResolved();
       const scopes = args.scope ? [String(args.scope)] : resolved.knowledgeScopes;
-      return listKnowledge(knowledgeDir, scopes, resolved.domain?.id ?? '');
+      return listKnowledge(knowledgeDir, scopes);
     },
     {
       type: 'object',
@@ -248,7 +248,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     },
     async (args) => {
       const resolved = currentResolved();
-      const result = readKnowledge(knowledgeDir, resolved.knowledgeScopes, args.path, resolved.domain?.id ?? '');
+      const result = readKnowledge(knowledgeDir, resolved.knowledgeScopes, args.path);
       if (!result.ok) throw new Error(result.message);
       return result;
     },
@@ -281,7 +281,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     async (args) => {
       const resolved = currentResolved();
       const scopes = args.scope ? [String(args.scope)] : resolved.knowledgeScopes;
-      const result = searchKnowledge(knowledgeDir, scopes, args.query, args.limit, resolved.domain?.id ?? '');
+      const result = searchKnowledge(knowledgeDir, scopes, args.query, args.limit);
       if (!result.ok) throw new Error(result.message);
       return result;
     },

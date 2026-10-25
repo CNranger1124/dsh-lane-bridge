@@ -57,10 +57,11 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   together. No second server or console token.
 - **One DSH session per conversation**: transcripts, tools, and token usage are
   visible in the normal DSH UI.
-- **Domains**: bind a group/private chat to a reusable policy (role card, preset,
-  model, KB scopes, host-tool allow-list, group trigger policy).
-- **Shared libraries**: role cards and the Markdown knowledge base are shared;
-  domains choose which KB scopes they can read. Optional domain-scoped memory
+- **Domains**: bind a group/private chat to a reusable policy (preset, model,
+  **bound knowledge bases**, host-tool allow-list, group trigger policy).
+- **Shared libraries**: role cards and the Markdown knowledge bases are shared; a
+  domain binds *several* knowledge bases, and every document inside them is
+  reachable by its own triggers. Optional domain-scoped memory
   (`lane_memory_*`) accumulates cross-conversation experience.
 - **KB drafts + approval**: `lane_kb_draft` writes only to `_待审/`; the Settings
   "KB approval" tab approves/discards before drafts affect retrieval.
@@ -89,7 +90,7 @@ Three layers, in one direction:
 conversation (one group / one private chat)
   └─ picks a role card
        └─ the role is bound to a domain
-            └─ the domain is infrastructure: knowledge scopes, shared memory,
+            └─ the domain is infrastructure: bound knowledge bases, shared memory,
                repo, operators, attention policy, preset/model
 ```
 
@@ -195,7 +196,7 @@ Identity: {{identity}} | from: {{kind}} | channel: {{channel}}
 | "how should it be phrased" | `{{#if operator}}` in the role card / domain prompt | soft, the model can be talked around |
 
 If ordinary members must not obtain some information at all, do not rely on the
-prompt — put it in another domain with another knowledge scope.
+prompt — put it in another knowledge base and let only that domain bind it.
 
 ## Context budget: archival, memory length, knowledge retrieval
 
@@ -210,6 +211,30 @@ Three different things reach the prompt in three different ways:
 
 In other words: only memory is injected wholesale. The knowledge base is never
 sent in full — the default behaviour already matches what you want.
+
+### How knowledge bases, domains, and roles fit together
+
+```
+knowledge bases (a directory each, many)  <-- domain "bound knowledge bases"
+                                                    ^
+                                          role card picks its domain
+                                                    ^
+                                             conversation / group / DM
+```
+
+- A **knowledge base** is a container: `knowledge/<name>/`, one subdirectory, each
+  Markdown file carrying its own triggers. Create / rename / delete it on the
+  "Knowledge" page; renaming also moves the directory and repoints every domain
+  that bound it.
+- A **domain** binds **several** knowledge bases (Domains page → bound knowledge
+  bases, picked from a dropdown instead of typing a folder name). Once bound, any
+  role in that domain can hit the triggers of every document inside them.
+- **Documents no longer carry a `domains` list**: the knowledge base they live in
+  is their owner. A leftover `domains:` line in an old file is ignored.
+- Binding nothing means the domain injects **no** knowledge automatically (it does
+  not fall back to "everything"). The model can still call `lane_kb_*`.
+- **Memory** is domain-scoped too and has its own page; the knowledge base wins on
+  conflicts.
 
 ### A knowledge document is a unit with its own triggers
 

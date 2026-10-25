@@ -216,3 +216,22 @@ test('writeKnowledge creates nested files and blocks escapes', () => {
     cleanup(dir);
   }
 });
+
+test('documents belong to their knowledge base, not to a per-document domain list', async () => {
+  const dir = tempDir();
+  try {
+    writeKnowledge(dir, '宝具', '机制.md', '# 宝具\n\n正文 A\n', { title: '宝具机制', triggers: ['宝具'] });
+    // Legacy frontmatter naming another domain must no longer hide the document:
+    // the domain reaches it by binding the knowledge base.
+    writeKnowledge(dir, '存档', '位置.md', '# 存档\n\n正文 B\n', { title: '存档位置', triggers: ['存档'], domains: ['vip'] });
+    const listed = listKnowledge(dir, ['宝具', '存档']);
+    assert.deepEqual(listed.files.map((file) => `${file.scope}/${file.path}`).sort(), ['存档/位置.md', '宝具/机制.md']);
+    assert.equal(listed.files[0].domains, undefined, 'documents no longer expose a domain list');
+    assert.deepEqual(matchDocuments(dir, ['宝具', '存档'], '宝具不生效').map((doc) => doc.scope), ['宝具']);
+    // An empty binding means "no knowledge", never "everything on disk".
+    assert.equal(listKnowledge(dir, []).count, 0);
+    assert.deepEqual(matchDocuments(dir, [], '宝具不生效'), []);
+  } finally {
+    cleanup(dir);
+  }
+});

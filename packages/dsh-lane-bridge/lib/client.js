@@ -215,6 +215,43 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /**
+     * Enumerated multi-select: the value set is closed (knowledge bases), so it
+     * is picked from a dropdown instead of typed. Add with +, remove with x.
+     */
+    function EnumChipList({ values, options, onChange, addLabel = '+ 添加', emptyText = '还没有绑定', emptyOptionsText = '没有可选的项' }) {
+      const list = Array.isArray(values) ? values : [];
+      const items = Array.isArray(options) ? options : [];
+      const available = items.filter((item) => !list.includes(item.value));
+      const labelOf = (value) => items.find((item) => item.value === value)?.label ?? `${value}（已不存在）`;
+      const [pick, setPick] = useState('');
+      const chosen = available.some((item) => item.value === pick) ? pick : (available[0]?.value ?? '');
+      return h('div', { className: 'lb-field' },
+        list.length > 0
+          ? h('div', { className: 'lb-chips' }, ...list.map((value, index) => h('span', {
+            key: `${value}-${index}`,
+            className: 'lb-chip',
+          },
+            h('span', null, labelOf(value)),
+            h('button', {
+              type: 'button',
+              className: 'lb-chip-x',
+              title: `移除 ${value}`,
+              onClick: () => onChange(list.filter((_item, i) => i !== index)),
+            }, '×')
+          )))
+          : h('span', { className: 'lb-muted' }, emptyText),
+        available.length > 0
+          ? h('div', { className: 'lb-addrow' },
+            h('select', { className: 'lb-select', value: chosen, onChange: (event) => setPick(event.target.value) },
+              ...available.map((item) => h('option', { key: item.value, value: item.value }, item.label))
+            ),
+            h('button', { type: 'button', className: 'lb-btn', onClick: () => { if (chosen) onChange([...list, chosen]); } }, addLabel)
+          )
+          : h('span', { className: 'lb-muted' }, emptyOptionsText)
+      );
+    }
+
     // Channel enumerations for the operator whitelist. `channel:id` is the
     // stored format; the UI never asks the operator to type the prefix.
     const OPERATOR_CHANNELS = [
@@ -1100,13 +1137,17 @@ window.__ModuleLoader__.load({
               h(Field, { label: '模型', hint: 'provider/model；留空=DSH 默认' },
                 h('input', { className: 'lb-input', value: current.model, onChange: (e) => patch('model', e.target.value) })
               ),
-              h(Field, { label: '知识库 scope', hint: '加号添加、× 移除；留空回退到 default' },
-                h(ChipList, {
+              h(Field, { label: '绑定知识库', hint: '可绑定多个。会话命中某个知识库中文档自带的触发词时，才会注入那一篇；留空＝这个领域不自动注入知识' },
+                h(EnumChipList, {
                   values: current.knowledgeScopes,
+                  options: (data.state.knowledgeBases ?? []).map((kb) => ({
+                    value: kb.id,
+                    label: kb.name && kb.name !== kb.id ? `${kb.name}（${kb.id}）` : kb.id,
+                  })),
                   onChange: (next) => patch('knowledgeScopes', next),
-                  placeholder: 'scope 名称，例如 default',
-                  addLabel: '+ 添加',
-                  emptyText: '还没有 scope（保存后回退到 default）',
+                  emptyText: '还没有绑定知识库',
+                  emptyOptionsText: '还没有创建知识库；先去「知识库」页新建一个',
+                  addLabel: '+ 绑定',
                 })
               ),
               h(Field, { label: '允许的宿主工具', hint: '加号添加、× 移除；为空=无宿主工具' },
@@ -1273,103 +1314,24 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function RolesAndKnowledge({ data, refresh }) {
+    function Roles({ data, refresh }) {
       const [roles, setRoles] = useState(() => clone(data.state.roles));
       const [selected, setSelected] = useState(() => data.state.roles[0]?.name ?? '');
       const [message, setMessage] = useState('');
       const [error, setError] = useState('');
       const [busy, setBusy] = useState(false);
-      const [kb, setKb] = useState(null);
-      const [kbError, setKbError] = useState('');
-      const [kbFile, setKbFile] = useState(null);
-      const [kbContent, setKbContent] = useState('');
-      const [kbMeta, setKbMeta] = useState({ title: '', triggers: [], domains: [], always: false });
-      const [kbNew, setKbNew] = useState({ scope: 'default', path: '' });
-      const [kbMessage, setKbMessage] = useState('');
-      const [memDomain, setMemDomain] = useState(() => data.state.domains[0]?.id ?? '');
-      const [memText, setMemText] = useState('');
-      const [memMessage, setMemMessage] = useState('');
-      const [memError, setMemError] = useState('');
       const current = roles.find((role) => role.name === selected) ?? roles[0];
       const patch = (key, value) => setRoles((list) => list.map((role) => role.name === current.name ? { ...role, [key]: value } : role));
-      const loadKb = useCallback(async () => {
-        setKbError('');
-        try { setKb(await api('/knowledge')); } catch (err) { setKbError(String(err.message ?? err)); }
-      }, []);
-      useEffect(() => { loadKb(); }, [loadKb]);
-      const openKb = async (file) => {
-        setKbError(''); setKbMessage('');
-        try {
-          const query = new URLSearchParams({ scope: file.scope, path: file.path });
-          const result = await api(`/knowledge/read?${query.toString()}`);
-          setKbFile(file);
-          setKbContent(result.content ?? '');
-          setKbMeta({
-            title: String(result.meta?.title ?? ''),
-            triggers: Array.isArray(result.meta?.triggers) ? result.meta.triggers : [],
-            domains: Array.isArray(result.meta?.domains) ? result.meta.domains : [],
-            always: result.meta?.always === true,
-          });
-        } catch (err) { setKbError(String(err.message ?? err)); }
-      };
-      const saveKb = async () => {
-        if (!kbFile) return;
-        setKbError(''); setKbMessage('');
-        try {
-          await api('/knowledge', {
-            method: 'POST',
-            body: JSON.stringify({ scope: kbFile.scope, path: kbFile.path, content: kbContent, meta: kbMeta }),
-          });
-          setKbMessage('已保存');
-          await loadKb();
-        } catch (err) { setKbError(String(err.message ?? err)); }
-      };
-      const createKb = async () => {
-        const scope = String(kbNew.scope ?? '').trim() || 'default';
-        let rel = String(kbNew.path ?? '').trim().replace(/\\/gu, '/');
-        if (!rel) { setKbError('填一个文件名，例如 存档.md'); return; }
-        if (!/\.[a-z]+$/iu.test(rel)) rel = `${rel}.md`;
-        setKbError(''); setKbMessage('');
-        try {
-          await api('/knowledge', {
-            method: 'POST',
-            body: JSON.stringify({ scope, path: rel, content: `# ${rel.replace(/\.[^.]+$/u, '')}\n\n`, meta: { title: '', triggers: [], domains: [], always: false } }),
-          });
-          setKbMessage(`已创建 ${scope}/${rel}`);
-          setKbNew((state) => ({ ...state, path: '' }));
-          await loadKb();
-        } catch (err) { setKbError(String(err.message ?? err)); }
-      };
-      const loadMemory = useCallback(async (domainId) => {
-        setMemError(''); setMemMessage('');
-        try {
-          const result = await api(`/memory?domain=${encodeURIComponent(domainId)}`);
-          setMemText(result.text ?? '');
-        } catch (err) { setMemError(String(err.message ?? err)); }
-      }, []);
-      useEffect(() => { if (memDomain) void loadMemory(memDomain); }, [memDomain, loadMemory]);
-      const saveMemory = async () => {
-        setMemError(''); setMemMessage('');
-        try {
-          const result = await api('/memory', { method: 'POST', body: JSON.stringify({ domainId: memDomain, text: memText }) });
-          setMemMessage(`已保存（${result.count ?? 0} 条）`);
-          await loadMemory(memDomain);
-        } catch (err) { setMemError(String(err.message ?? err)); }
-      };
-      const clearMemory = async () => {
-        if (typeof window.confirm === 'function' && !window.confirm('清空该领域的共享记忆？')) return;
-        setMemError(''); setMemMessage('');
-        try {
-          await api('/memory', { method: 'POST', body: JSON.stringify({ domainId: memDomain, action: 'clear' }) });
-          setMemText('');
-          setMemMessage('已清空');
-        } catch (err) { setMemError(String(err.message ?? err)); }
+      const basesOf = (domainId) => {
+        const domain = (data.state.domains ?? []).find((item) => item.id === domainId);
+        const bound = Array.isArray(domain?.knowledgeScopes) ? domain.knowledgeScopes : [];
+        return bound.map((id) => (data.state.knowledgeBases ?? []).find((kb) => kb.id === id)?.name || id);
       };
       const add = () => {
         let index = 1;
         let name = '新角色';
         while (roles.some((role) => role.name === name)) name = `新角色${index++}`;
-        setRoles((list) => [...list, { name, content: '# 角色卡\n\n' }]);
+        setRoles((list) => [...list, { name, content: '# 角色卡\n\n', domainId: data.state.domains[0]?.id ?? 'default' }]);
         setSelected(name);
       };
       const remove = () => {
@@ -1411,13 +1373,16 @@ window.__ModuleLoader__.load({
                 },
               })
             ),
-            h(Field, { label: '所属领域', hint: '角色 → 领域：这个角色决定会话用哪套知识库、记忆和策略' },
+            h(Field, { label: '所属领域', hint: '角色 → 领域：领域决定这个角色用哪些知识库、记忆和策略' },
               h('select', {
                 className: 'lb-select',
                 value: current?.domainId ?? '',
                 onChange: (e) => patch('domainId', e.target.value),
               },
                 ...data.state.domains.map((domain) => h('option', { key: domain.id, value: domain.id }, domain.name || domain.id))
+              ),
+              h('div', { className: 'lb-muted' },
+                `该领域绑定的知识库：${basesOf(current?.domainId).join('、') || '（无）'}`
               )
             )
           ),
@@ -1432,6 +1397,41 @@ window.__ModuleLoader__.load({
             h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存角色卡')
           )
         ),
+        h('div', { className: 'lb-muted' }, '知识库和记忆各有独立页面（标签页「知识库」「记忆」），这里只负责角色本身与它绑定的领域。')
+      );
+    }
+
+    function Memory({ data }) {
+      const [memDomain, setMemDomain] = useState(() => data.state.domains[0]?.id ?? '');
+      const [memText, setMemText] = useState('');
+      const [memMessage, setMemMessage] = useState('');
+      const [memError, setMemError] = useState('');
+      const loadMemory = useCallback(async (domainId) => {
+        setMemError(''); setMemMessage('');
+        try {
+          const result = await api(`/memory?domain=${encodeURIComponent(domainId)}`);
+          setMemText(result.text ?? '');
+        } catch (err) { setMemError(String(err.message ?? err)); }
+      }, []);
+      useEffect(() => { if (memDomain) void loadMemory(memDomain); }, [memDomain, loadMemory]);
+      const saveMemory = async () => {
+        setMemError(''); setMemMessage('');
+        try {
+          const result = await api('/memory', { method: 'POST', body: JSON.stringify({ domainId: memDomain, text: memText }) });
+          setMemMessage(`已保存（${result.count ?? 0} 条）`);
+          await loadMemory(memDomain);
+        } catch (err) { setMemError(String(err.message ?? err)); }
+      };
+      const clearMemory = async () => {
+        if (typeof window.confirm === 'function' && !window.confirm('清空该领域的共享记忆？')) return;
+        setMemError(''); setMemMessage('');
+        try {
+          await api('/memory', { method: 'POST', body: JSON.stringify({ domainId: memDomain, action: 'clear' }) });
+          setMemText('');
+          setMemMessage('已清空');
+        } catch (err) { setMemError(String(err.message ?? err)); }
+      };
+      return h('div', { className: 'lb-root' },
         h(Card, { title: '领域共享记忆', extra: h('div', { className: 'lb-actions' },
           h('button', { className: 'lb-btn', onClick: () => loadMemory(memDomain) }, '刷新'),
           h('button', { className: 'lb-btn lb-btn--primary', onClick: saveMemory }, '保存记忆')
@@ -1451,101 +1451,197 @@ window.__ModuleLoader__.load({
             h('button', { className: 'lb-btn lb-btn--danger', onClick: clearMemory }, '清空'),
             h('button', { className: 'lb-btn lb-btn--primary', onClick: saveMemory }, '保存记忆')
           )
-        ),
-        h(Card, { title: '共享知识库', extra: h('div', { className: 'lb-actions' },
-          h('button', { className: 'lb-btn', onClick: loadKb }, '刷新'),
-          kbFile ? h('button', { className: 'lb-btn lb-btn--primary', onClick: saveKb }, '保存文档') : null
-        ) },
-          h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（Markdown / TXT；按 scope 分目录；每个文档自带触发词）`),
-          kbError ? h('div', { className: 'lb-error' }, kbError) : null,
-          kb ? h('div', null,
-            h('div', { className: 'lb-muted' }, `scope：${(kb.scopes ?? []).join('、') || '（空）'}；文件 ${kb.count ?? 0} 个`),
-            h('div', { style: { overflowX: 'auto' } },
-              h('table', { className: 'lb-table' },
-                h('thead', null, h('tr', null, h('th', null, 'scope'), h('th', null, '文件'), h('th', null, '触发词'), h('th', null, '绑定领域'), h('th', null, '大小'), h('th', null, ''))),
-                h('tbody', null, ...(kb.files ?? []).map((file) => h('tr', { key: `${file.scope}/${file.path}` },
-                  h('td', null, file.scope),
-                  h('td', null, h('div', { className: 'lb-mono' }, file.path), h('div', { className: 'lb-muted' }, file.title || '')),
-                  h('td', null,
-                    (file.triggers ?? []).length > 0
-                      ? h('div', { className: 'lb-chips' }, ...file.triggers.slice(0, 6).map((word) => h('span', { key: word, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, word))))
-                      : h('span', { className: 'lb-muted' }, file.always ? '总是注入' : '未设置（不自动注入）')
-                  ),
-                  h('td', null,
-                    (file.domains ?? []).length > 0
-                      ? h('div', { className: 'lb-chips' }, ...file.domains.map((id) => h('span', { key: id, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, id))))
-                      : h('span', { className: 'lb-muted' }, '所有领域')
-                  ),
-                  h('td', null, `${file.size} B`),
-                  h('td', null, h('button', { className: 'lb-btn', onClick: () => openKb(file) }, '打开'))
-                )))
+        )
+      );
+    }
+
+    function Knowledge({ data, refresh }) {
+      const bases = data.state.knowledgeBases ?? [];
+      const [kbId, setKbId] = useState(() => bases[0]?.id ?? '');
+      const [counts, setCounts] = useState({});
+      const [docs, setDocs] = useState(null);
+      const [file, setFile] = useState(null);
+      const [content, setContent] = useState('');
+      const [meta, setMeta] = useState({ title: '', triggers: [], always: false });
+      const [newBase, setNewBase] = useState('');
+      const [renameTo, setRenameTo] = useState('');
+      const [newDoc, setNewDoc] = useState('');
+      const [message, setMessage] = useState('');
+      const [error, setError] = useState('');
+      const [busy, setBusy] = useState(false);
+      const current = bases.find((kb) => kb.id === kbId) ?? bases[0];
+      const loadBases = useCallback(async () => {
+        try {
+          const result = await api('/kb');
+          setCounts(Object.fromEntries((result.bases ?? []).map((kb) => [kb.id, kb.docs ?? 0])));
+        } catch (err) { setError(String(err.message ?? err)); }
+      }, []);
+      const loadDocs = useCallback(async (id) => {
+        if (!id) { setDocs(null); return; }
+        try {
+          setDocs(await api(`/knowledge?scope=${encodeURIComponent(id)}`));
+        } catch (err) { setError(String(err.message ?? err)); }
+      }, []);
+      useEffect(() => { void loadBases(); }, [loadBases]);
+      useEffect(() => { setRenameTo(current?.name ?? current?.id ?? ''); }, [current?.id]);
+      useEffect(() => { void loadDocs(current?.id); }, [current?.id, loadDocs]);
+      const runBase = async (body, okMessage, nextId) => {
+        setBusy(true); setError(''); setMessage('');
+        try {
+          await api('/kb', { method: 'POST', body: JSON.stringify(body) });
+          setMessage(okMessage);
+          await loadBases();
+          await refresh();
+          if (nextId) setKbId(nextId);
+          setFile(null);
+          await loadDocs(nextId ?? current?.id);
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
+      };
+      const createBase = async () => {
+        const name = String(newBase ?? '').trim();
+        if (!name) { setError('先填一个知识库名'); return; }
+        await runBase({ action: 'create', name }, `已创建「${name}」`, name);
+        setNewBase('');
+      };
+      const renameBase = async () => {
+        if (!current) return;
+        const name = String(renameTo ?? '').trim();
+        if (!name || name === current.id) { setError('新名字和现在一样'); return; }
+        await runBase({ action: 'rename', id: current.id, name }, '已重命名', name);
+      };
+      const deleteBase = async () => {
+        if (!current) return;
+        if (typeof window.confirm === 'function' && !window.confirm(`删除知识库「${current.name || current.id}」及其中所有文档？此操作不可撤销。`)) return;
+        await runBase({ action: 'delete', id: current.id, force: true }, '已删除', '');
+      };
+      const openDoc = async (docFile) => {
+        setError(''); setMessage('');
+        try {
+          const query = new URLSearchParams({ scope: docFile.scope, path: docFile.path });
+          const result = await api(`/knowledge/read?${query.toString()}`);
+          setFile(docFile);
+          setContent(result.content ?? '');
+          setMeta({
+            title: String(result.meta?.title ?? ''),
+            triggers: Array.isArray(result.meta?.triggers) ? result.meta.triggers : [],
+            always: result.meta?.always === true,
+          });
+        } catch (err) { setError(String(err.message ?? err)); }
+      };
+      const saveDoc = async () => {
+        if (!file) return;
+        setError(''); setMessage('');
+        try {
+          await api('/knowledge', {
+            method: 'POST',
+            body: JSON.stringify({ scope: file.scope, path: file.path, content, meta }),
+          });
+          setMessage('已保存');
+          await loadBases();
+          await loadDocs(current?.id);
+        } catch (err) { setError(String(err.message ?? err)); }
+      };
+      const createDoc = async () => {
+        if (!current) { setError('先建一个知识库'); return; }
+        let rel = String(newDoc ?? '').trim().replace(/\\/gu, '/');
+        if (!rel) { setError('填一个文件名，例如 存档.md'); return; }
+        if (!/\.[a-z]+$/iu.test(rel)) rel = `${rel}.md`;
+        setError(''); setMessage('');
+        try {
+          await api('/knowledge', {
+            method: 'POST',
+            body: JSON.stringify({ scope: current.id, path: rel, content: `# ${rel.replace(/\.[^.]+$/u, '')}\n\n`, meta: { title: '', triggers: [], always: false } }),
+          });
+          setMessage(`已创建 ${current.id}/${rel}`);
+          setNewDoc('');
+          await loadBases();
+          await loadDocs(current.id);
+        } catch (err) { setError(String(err.message ?? err)); }
+      };
+      const files = docs?.files ?? [];
+      return h('div', { className: 'lb-root' },
+        h(Card, { title: '知识库', extra: h('button', { className: 'lb-btn', onClick: () => { void loadBases(); void loadDocs(current?.id); } }, '刷新') },
+          h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（一个知识库＝一个子目录；文档是 Markdown / TXT，自带触发词）`),
+          h('div', { className: 'lb-grid' },
+            h(Field, { label: '当前知识库', hint: '领域在「领域」页绑定这些名字，会话就能按触发词命中其中的文档' },
+              h('select', {
+                className: 'lb-select',
+                value: current?.id ?? '',
+                onChange: (e) => { setKbId(e.target.value); setFile(null); },
+              },
+                ...bases.map((kb) => h('option', { key: kb.id, value: kb.id },
+                  `${kb.name && kb.name !== kb.id ? `${kb.name}（${kb.id}）` : kb.id} · ${counts[kb.id] ?? 0} 篇`
+                ))
+              )
+            ),
+            h(Field, { label: '重命名', hint: '会同时改目录名，并更新所有绑定了它的领域' },
+              h('div', { className: 'lb-row' },
+                h('input', { className: 'lb-input', value: renameTo, onChange: (e) => setRenameTo(e.target.value) }),
+                h('button', { className: 'lb-btn', disabled: busy || !current, onClick: renameBase }, '重命名')
               )
             )
-          ) : h('div', { className: 'lb-muted' }, '加载中…'),
-          kbFile ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-            h('div', { className: 'lb-row' },
-              h('span', { className: 'lb-mono' }, `${kbFile.scope}/${kbFile.path}`),
-              kbMessage ? h('span', { className: 'lb-ok' }, kbMessage) : null
+          ),
+          h('div', { className: 'lb-row' },
+            h('input', { className: 'lb-input', style: { maxWidth: 260 }, value: newBase, placeholder: '新知识库名，例如 宝具', onChange: (e) => setNewBase(e.target.value) }),
+            h('button', { className: 'lb-btn', disabled: busy, onClick: createBase }, '+ 新建知识库'),
+            h('button', { className: 'lb-btn lb-btn--danger', disabled: busy || !current, onClick: deleteBase }, '删除当前知识库')
+          ),
+          error ? h('div', { className: 'lb-error' }, error) : null,
+          message ? h('span', { className: 'lb-ok' }, message) : null
+        ),
+        h(Card, { title: `文档${current ? `（${current.name || current.id}）` : ''}`, extra: h('button', { className: 'lb-btn', onClick: () => loadDocs(current?.id) }, '刷新') },
+          !docs ? h('div', { className: 'lb-muted' }, '加载中…') : files.length === 0
+            ? h('div', { className: 'lb-muted' }, '这个知识库里还没有文档。')
+            : h('div', { style: { overflowX: 'auto' } },
+              h('table', { className: 'lb-table' },
+                h('thead', null, h('tr', null, h('th', null, '文件'), h('th', null, '标题'), h('th', null, '触发词'), h('th', null, '大小'), h('th', null, ''))),
+                h('tbody', null, ...files.map((docFile) => h('tr', { key: docFile.path },
+                  h('td', null, h('div', { className: 'lb-mono' }, docFile.path)),
+                  h('td', null, docFile.title || ''),
+                  h('td', null,
+                    (docFile.triggers ?? []).length > 0
+                      ? h('div', { className: 'lb-chips' }, ...docFile.triggers.slice(0, 6).map((word) => h('span', { key: word, className: 'lb-chip' }, h('span', { className: 'lb-mono' }, word))))
+                      : h('span', { className: 'lb-muted' }, docFile.always ? '总是注入' : '未设置（不自动注入）')
+                  ),
+                  h('td', null, `${docFile.size} B`),
+                  h('td', null, h('button', { className: 'lb-btn', onClick: () => openDoc(docFile) }, '打开'))
+                )))
+              )
             ),
-            h('div', { className: 'lb-muted' }, '这个文档自己的触发词（写在文件头的 frontmatter 里）：入站消息命中任意一个，才会把这篇注入提示词。'),
+          h('div', { className: 'lb-row' },
+            h('input', { className: 'lb-input', style: { maxWidth: 260 }, value: newDoc, placeholder: '新文档名，例如 存档.md', onChange: (e) => setNewDoc(e.target.value) }),
+            h('button', { className: 'lb-btn', disabled: !current, onClick: createDoc }, '+ 新建文档')
+          )
+        ),
+        file ? h(Card, { title: `编辑：${file.path}`, extra: h('div', { className: 'lb-actions' },
+          h('button', { className: 'lb-btn', onClick: () => { setFile(null); setContent(''); } }, '关闭'),
+          h('button', { className: 'lb-btn lb-btn--primary', onClick: saveDoc }, '保存文档')
+        ) },
+          h('div', { className: 'lb-grid' },
+            h(Field, { label: '标题', hint: '展示用；留空则取文档第一个标题' },
+              h('input', { className: 'lb-input', value: meta.title, onChange: (e) => setMeta((m) => ({ ...m, title: e.target.value })) })
+            )
+          ),
+          h(Field, { label: '触发词', hint: '入站消息命中任意一个，才会把这篇注入提示词；加号添加、× 移除' },
             h(ChipList, {
-              values: kbMeta.triggers,
-              onChange: (next) => setKbMeta((meta) => ({ ...meta, triggers: next })),
+              values: meta.triggers,
+              onChange: (next) => setMeta((m) => ({ ...m, triggers: next })),
               placeholder: '触发词，例如 存档',
               addLabel: '+ 添加',
-              emptyText: '还没有触发词（这篇不会被自动检索；仍可由模型调用 lane_kb_read 读取）',
-            }),
-            h('div', { className: 'lb-field' },
-              h('span', { className: 'lb-label' }, '绑定领域'),
-              h('div', { className: 'lb-actions' },
-                ...(data.state.domains ?? []).map((domain) => h('label', { key: domain.id, className: 'lb-check' },
-                  h('input', {
-                    type: 'checkbox',
-                    checked: (kbMeta.domains ?? []).includes(domain.id),
-                    onChange: (e) => setKbMeta((meta) => ({
-                      ...meta,
-                      domains: e.target.checked
-                        ? [...new Set([...(meta.domains ?? []), domain.id])]
-                        : (meta.domains ?? []).filter((id) => id !== domain.id),
-                    })),
-                  }),
-                  domain.name || domain.id
-                ))
-              ),
-              h('span', { className: 'lb-muted' }, '不勾＝该 scope 下所有领域都能看到；勾了就只对勾选的领域可见（列表 / 检索 / lane_kb_* 都按这个过滤）')
-            ),
-            h('label', { className: 'lb-check' },
-              h('input', {
-                type: 'checkbox',
-                checked: kbMeta.always === true,
-                onChange: (e) => setKbMeta((meta) => ({ ...meta, always: e.target.checked })),
-              }),
-              '总是注入（基础文档用；每轮都会占上下文）'
-            ),
-            h('textarea', { className: 'lb-textarea lb-textarea--tall', value: kbContent, onChange: (e) => setKbContent(e.target.value) }),
-            h('div', { className: 'lb-footer' },
-              h('button', { className: 'lb-btn', onClick: () => { setKbFile(null); setKbContent(''); } }, '关闭'),
-              h('button', { className: 'lb-btn lb-btn--primary', onClick: saveKb }, '保存文档')
-            )
-          ) : null,
-          h('div', { className: 'lb-row' },
+              emptyText: '还没有触发词（这篇不会被自动注入；模型仍可调 lane_kb_read 读取）',
+            })
+          ),
+          h('label', { className: 'lb-check' },
             h('input', {
-              className: 'lb-input',
-              style: { maxWidth: 150 },
-              value: kbNew.scope,
-              placeholder: 'scope（默认 default）',
-              onChange: (e) => setKbNew((state) => ({ ...state, scope: e.target.value })),
+              type: 'checkbox',
+              checked: meta.always === true,
+              onChange: (e) => setMeta((m) => ({ ...m, always: e.target.checked })),
             }),
-            h('input', {
-              className: 'lb-input',
-              style: { maxWidth: 260 },
-              value: kbNew.path,
-              placeholder: '新文档名，例如 存档.md',
-              onChange: (e) => setKbNew((state) => ({ ...state, path: e.target.value })),
-            }),
-            h('button', { className: 'lb-btn', onClick: createKb }, '+ 新建文档')
-          )
-        )
+            '总是注入（基础文档用；每轮都会占上下文）'
+          ),
+          h('textarea', { className: 'lb-textarea lb-textarea--tall', value: content, onChange: (e) => setContent(e.target.value) }),
+          message ? h('span', { className: 'lb-ok' }, message) : null
+        ) : null
       );
     }
 
@@ -1791,7 +1887,9 @@ window.__ModuleLoader__.load({
         ['overview', '概览与通道'],
         ['conversations', '会话'],
         ['domains', '领域'],
-        ['roles', '角色与知识'],
+        ['roles', '角色卡'],
+        ['knowledge', '知识库'],
+        ['memory', '记忆'],
         ['drafts', '知识库审批'],
         ['usage', '用量'],
         ['push', '推送'],
@@ -1819,7 +1917,9 @@ window.__ModuleLoader__.load({
         data && tab === 'overview' ? h(Overview, { data, refresh: load }) : null,
         data && tab === 'conversations' ? h(Conversations, { data, refresh: load }) : null,
         data && tab === 'domains' ? h(Domains, { data, refresh: load }) : null,
-        data && tab === 'roles' ? h(RolesAndKnowledge, { data, refresh: load }) : null,
+        data && tab === 'roles' ? h(Roles, { data, refresh: load }) : null,
+        data && tab === 'knowledge' ? h(Knowledge, { data, refresh: load }) : null,
+        data && tab === 'memory' ? h(Memory, { data }) : null,
         data && tab === 'drafts' ? h(KbDrafts, { data, refresh: load }) : null,
         data && tab === 'usage' ? h(Usage, { data, refresh: load }) : null,
         data && tab === 'push' ? h(Push, { data, refresh: load }) : null
@@ -1902,7 +2002,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Overview, Push, RolesAndKnowledge };
+      exportsObject.__components = { Card, ChipList, Conversations, Domains, EnumChipList, KbDrafts, Knowledge, LanePanel, LaneSettings, LaneSidebar, Memory, OperatorEditor, Overview, Push, Roles };
       exportsObject.__internals = { joinOperatorEntry, normalizeOperatorInput, splitOperatorEntry };
     }
     return exportsObject;

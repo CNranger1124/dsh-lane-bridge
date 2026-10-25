@@ -292,3 +292,20 @@ test('redactState never leaks secrets but reports presence', () => {
     githubToken: true,
   });
 });
+
+test('knowledge bases are adopted from disk and default is always registered', async () => {
+  const dir = tempDir();
+  try {
+    fs.mkdirSync(path.join(dir, 'knowledge', '手写知识库'), { recursive: true });
+    const store = new LaneStore({ dataDir: dir });
+    await store.load();
+    const ids = store.get().knowledgeBases.map((kb) => kb.id).sort();
+    assert.deepEqual(ids, ['default', '手写知识库'].sort());
+    // The registry round-trips through state.json.
+    const reload = new LaneStore({ dataDir: dir });
+    await reload.load();
+    assert.deepEqual(reload.get().knowledgeBases.map((kb) => kb.id).sort(), ids);
+  } finally {
+    cleanup(dir);
+  }
+});

@@ -456,3 +456,52 @@ test('usage route reads and clears the local ledger', async () => {
     cleanup(dir);
   }
 });
+
+test('knowledge bases are created, renamed, and unbound from domains', async () => {
+  const { dir, store, routes } = await setup();
+  const fs = await import('node:fs');
+  try {
+    let res = mockResponse();
+    await routes.handle(mockRequest({ method: 'POST', url: '/lane-bridge/api/kb', body: { action: 'create', name: '宝具' } }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', '宝具')));
+    assert.ok(store.get().knowledgeBases.some((kb) => kb.id === '宝具'));
+
+    // Bind the new base to the default domain.
+    res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/domains',
+      body: { domains: [{ ...store.get().domains[0], knowledgeScopes: ['宝具'] }] },
+    }), res);
+    assert.equal(res.status, 200, res.body);
+
+    // Renaming moves the directory and repoints every domain that bound it.
+    fs.writeFileSync(path.join(dir, 'knowledge', '宝具', '机制.md'), '# 宝具\n', 'utf8');
+    res = mockResponse();
+    await routes.handle(mockRequest({ method: 'POST', url: '/lane-bridge/api/kb', body: { action: 'rename', id: '宝具', name: '宝具资料' } }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', '宝具资料', '机制.md')));
+    assert.deepEqual(store.get().domains[0].knowledgeScopes, ['宝具资料']);
+
+    // A non-empty base is not deleted by accident.
+    res = mockResponse();
+    await routes.handle(mockRequest({ method: 'POST', url: '/lane-bridge/api/kb', body: { action: 'delete', id: '宝具资料' } }), res);
+    assert.equal(res.status, 400);
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', '宝具资料')));
+
+    res = mockResponse();
+    await routes.handle(mockRequest({ method: 'POST', url: '/lane-bridge/api/kb', body: { action: 'delete', id: '宝具资料', force: true } }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.ok(!fs.existsSync(path.join(dir, 'knowledge', '宝具资料')));
+    assert.deepEqual(store.get().domains[0].knowledgeScopes, [], 'deleting a base unbinds it');
+    assert.ok(!store.get().knowledgeBases.some((kb) => kb.id === '宝具资料'));
+
+    // The state payload carries the registry so the UI can offer a dropdown.
+    res = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/state' }), res);
+    assert.ok(Array.isArray(res.json().state.knowledgeBases));
+  } finally {
+    cleanup(dir);
+  }
+});

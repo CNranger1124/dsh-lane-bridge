@@ -2,6 +2,29 @@
 
 # Changelog
 
+## 0.5.0
+
+- **Knowledge bases are first-class**: one subdirectory of `knowledge/` is one
+  knowledge base, registered in `state.knowledgeBases` with a display name. New
+  `/api/kb` endpoint (create/rename/delete): renaming moves the directory and
+  repoints every domain that bound it; deleting a non-empty base requires an
+  explicit `force` and unbinds it from all domains.
+- **Domains bind knowledge bases**: the Domains page no longer asks for a scope
+  name — it picks from a dropdown, adds with + and removes with x (same editor as
+  the operator whitelist). Several can be bound, and every role in the domain then
+  hits each document's own triggers.
+- **Documents no longer declare domains**: the `domains` frontmatter field and the
+  editor's "bound domains" checkboxes are gone. Ownership is the knowledge base a
+  document lives in; leftover `domains:` lines are ignored instead of silently
+  hiding documents.
+- **Two dedicated pages**: "Knowledge" (pick/create/rename/delete a base, list and
+  edit its documents) and "Memory" (domain dropdown + editor). The role card keeps
+  only the role and its domain.
+- Fixed an edge case: a domain with no bound knowledge base no longer falls back to
+  "read every knowledge base"; it injects nothing (the model can still call
+  `lane_kb_*`).
+- Tests: 152 (base CRUD + domain rewiring, document ownership, both new pages).
+
 ## 0.4.6
 
 - **No more one-write-per-message in full-message groups**: `touchConversation`

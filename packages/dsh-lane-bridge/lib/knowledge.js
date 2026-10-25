@@ -32,6 +32,56 @@ export function listScopes(knowledgeDir) {
   }
 }
 
+// ── 知识库（目录）管理 ───────────────────────────────────────────────────────
+//
+// A "knowledge base" is one directory under `knowledge/`; its documents each
+// carry their own triggers. Domains bind several knowledge bases, and a
+// conversation reaches them through its role → domain.
+
+export function knowledgeBaseInfo(knowledgeDir, id) {
+  const kbId = safeScope(id);
+  if (!kbId || kbId.startsWith('_')) return { id: '', name: '', docs: 0 };
+  let docs = 0;
+  try {
+    docs = walkScope(knowledgeDir, kbId).length;
+  } catch {
+    docs = 0;
+  }
+  return { id: kbId, name: kbId, docs };
+}
+
+export function createKnowledgeBase(knowledgeDir, name) {
+  const id = safeScope(name);
+  if (!id) return { ok: false, message: `知识库名不合法：${name}；不能为空、不超过 60 字，且不能包含 \\ / : * ? " < > | 或 ..` };
+  if (id.startsWith('_')) return { ok: false, message: '知识库名不能以下划线开头' };
+  if (fs.existsSync(path.join(knowledgeDir, id))) return { ok: false, message: `知识库已存在：${id}` };
+  fs.mkdirSync(path.join(knowledgeDir, id), { recursive: true });
+  return { ok: true, id };
+}
+
+export function renameKnowledgeBase(knowledgeDir, from, to) {
+  const id = safeScope(from);
+  const next = safeScope(to);
+  if (!id) return { ok: false, message: `知识库不存在：${from}` };
+  if (!next) return { ok: false, message: `新名字不合法：${to}` };
+  if (id === next) return { ok: true, id };
+  if (!fs.existsSync(path.join(knowledgeDir, id))) return { ok: false, message: `知识库不存在：${id}` };
+  if (fs.existsSync(path.join(knowledgeDir, next))) return { ok: false, message: `知识库已存在：${next}` };
+  fs.renameSync(path.join(knowledgeDir, id), path.join(knowledgeDir, next));
+  return { ok: true, id: next };
+}
+
+export function removeKnowledgeBase(knowledgeDir, id, { force = false } = {}) {
+  const kbId = safeScope(id);
+  if (!kbId) return { ok: false, message: `知识库不存在：${id}` };
+  const abs = path.join(knowledgeDir, kbId);
+  if (!fs.existsSync(abs)) return { ok: false, message: `知识库不存在：${kbId}` };
+  const docs = walkScope(knowledgeDir, kbId).length;
+  if (docs > 0 && !force) return { ok: false, message: `知识库「${kbId}」里还有 ${docs} 篇文档，确认后再删除`, docs };
+  fs.rmSync(abs, { recursive: true, force: true });
+  return { ok: true, id: kbId, docs };
+}
+
 function walkScope(knowledgeDir, scope) {
   const base = path.join(knowledgeDir, scope);
   const out = [];
@@ -55,9 +105,13 @@ function walkScope(knowledgeDir, scope) {
 
 function selectedScopes(knowledgeDir, scopes) {
   const existing = listScopes(knowledgeDir);
-  const wanted = Array.isArray(scopes) ? scopes.map(safeScope).filter(Boolean) : [];
-  const picked = wanted.filter((scope) => existing.includes(scope));
-  return picked.length > 0 ? picked : existing;
+  if (!Array.isArray(scopes)) return existing;
+  const wanted = scopes.map(safeScope).filter(Boolean);
+  // An explicitly empty binding means "no knowledge", not "everything": a
+  // domain whose knowledge bases were all deleted must not inherit every
+  // document on disk.
+  if (wanted.length === 0) return [];
+  return wanted.filter((scope) => existing.includes(scope));
 }
 
 // ── 文档头部（frontmatter）──────────────────────────────────────────────────
@@ -150,20 +204,6 @@ export function formatDocument({ meta = {}, body = '' } = {}) {
   return `${lines.join('\n')}${String(body ?? '').replace(/^\n+/u, '')}`;
 }
 
-/**
- * Is this document visible to the given domain?
- *
- * No binding (`domains` empty) keeps the historical behaviour: visible to any
- * domain whose knowledge scopes include the document's folder.
- */
-export function documentVisibleTo(meta, domainId) {
-  const wanted = String(domainId ?? '').trim().toLowerCase();
-  if (!wanted) return true;
-  const domains = Array.isArray(meta?.domains) ? meta.domains : [];
-  if (domains.length === 0) return true;
-  return domains.some((entry) => String(entry).trim().toLowerCase() === wanted);
-}
-
 /** Title for display: frontmatter, else the first heading, else the file name. */
 export function documentTitle(meta, body, fallback) {
   if (meta?.title) return meta.title;
@@ -171,7 +211,7 @@ export function documentTitle(meta, body, fallback) {
   return heading || String(fallback ?? '');
 }
 
-export function listKnowledge(knowledgeDir, scopes = null, domainId = '') {
+export function listKnowledge(knowledgeDir, scopes = null) {
   const available = listScopes(knowledgeDir);
   const picked = selectedScopes(knowledgeDir, scopes);
   const files = [];
@@ -181,14 +221,12 @@ export function listKnowledge(knowledgeDir, scopes = null, domainId = '') {
       let text = '';
       try { text = fs.readFileSync(abs, 'utf8'); } catch { continue; }
       const parsed = parseDocument(text);
-      if (!documentVisibleTo(parsed.meta, domainId)) continue;
       files.push({
         scope,
         path: rel,
         size: fs.statSync(abs).size,
         title: documentTitle(parsed.meta, parsed.body, rel),
         triggers: parsed.meta.triggers,
-        domains: parsed.meta.domains,
         always: parsed.meta.always,
       });
     }
@@ -223,14 +261,11 @@ function resolveReadPath(knowledgeDir, scopes, requested) {
   return { ok: false, message: `没有这个文件：${raw}` };
 }
 
-export function readKnowledge(knowledgeDir, scopes, requested, domainId = '') {
+export function readKnowledge(knowledgeDir, scopes, requested) {
   const found = resolveReadPath(knowledgeDir, scopes, requested);
   if (!found.ok) return found;
   const raw = fs.readFileSync(found.abs, 'utf8').replace(/\r\n/gu, '\n');
   const parsed = parseDocument(raw);
-  if (!documentVisibleTo(parsed.meta, domainId)) {
-    return { ok: false, message: '这篇文档绑定了其他领域，当前领域不能读取' };
-  }
   const text = parsed.body;
   const truncated = text.length > MAX_READ_CHARS;
   return {
@@ -240,7 +275,6 @@ export function readKnowledge(knowledgeDir, scopes, requested, domainId = '') {
     title: documentTitle(parsed.meta, text, found.rel),
     meta: parsed.meta,
     triggers: parsed.meta.triggers,
-    domains: parsed.meta.domains,
     always: parsed.meta.always,
     chars: text.length,
     truncated,
@@ -255,7 +289,7 @@ export function readKnowledge(knowledgeDir, scopes, requested, domainId = '') {
  * carrying its own triggers. `always: true` documents are included regardless,
  * which is how a "product overview" stays in context.
  */
-export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4, domainId = '') {
+export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4) {
   const lower = String(text ?? '').toLowerCase();
   const picked = selectedScopes(knowledgeDir, scopes);
   const scored = [];
@@ -264,7 +298,6 @@ export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4
       let raw = '';
       try { raw = fs.readFileSync(abs, 'utf8'); } catch { continue; }
       const parsed = parseDocument(raw);
-      if (!documentVisibleTo(parsed.meta, domainId)) continue;
       const rel = path.relative(path.join(knowledgeDir, scope), abs).replace(/\\/gu, '/');
       const matched = parsed.meta.triggers.filter((trigger) => lower.includes(String(trigger).toLowerCase()));
       if (matched.length === 0 && parsed.meta.always !== true) continue;
@@ -277,7 +310,6 @@ export function matchDocuments(knowledgeDir, scopes = null, text = '', limit = 4
         title: documentTitle(parsed.meta, parsed.body, rel),
         body: parsed.body,
         triggers: parsed.meta.triggers,
-        domains: parsed.meta.domains,
         matched,
         always: parsed.meta.always === true,
         score: matched.length * 100 + longest * 10 + (parsed.meta.always ? 1 : 0),
@@ -307,12 +339,12 @@ function sectionsOf(text) {
   return sections;
 }
 
-export function searchKnowledge(knowledgeDir, scopes, query, limit = 8, domainId = '') {
+export function searchKnowledge(knowledgeDir, scopes, query, limit = 8) {
   const terms = String(query ?? '').trim().toLowerCase().split(/\s+/u).filter(Boolean);
   if (terms.length === 0) return { ok: false, message: 'query 不能为空' };
   const max = Math.max(1, Math.min(30, Number(limit) || 8));
   const hits = [];
-  for (const file of listKnowledge(knowledgeDir, scopes, domainId).files) {
+  for (const file of listKnowledge(knowledgeDir, scopes).files) {
     const abs = path.join(knowledgeDir, file.scope, file.path);
     let text = '';
     try {

@@ -5,7 +5,19 @@
 // `/lane-bridge`, so no second port or cookie jar exists.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { approveDraft, discardDraft, listDrafts, listKnowledge, readKnowledge, writeKnowledge } from './knowledge.js';
+import {
+  approveDraft,
+  createKnowledgeBase,
+  discardDraft,
+  knowledgeBaseInfo,
+  listDrafts,
+  listKnowledge,
+  listScopes,
+  readKnowledge,
+  removeKnowledgeBase,
+  renameKnowledgeBase,
+  writeKnowledge,
+} from './knowledge.js';
 import { redactState } from './store.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
 import { normalizeOperators, parseConversationKey } from './defaults.js';
@@ -270,14 +282,51 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
         triggers: Array.isArray(body.meta.triggers)
           ? [...new Set(body.meta.triggers.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30)
           : [],
-        domains: Array.isArray(body.meta.domains)
-          ? [...new Set(body.meta.domains.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30)
-          : [],
+        // `domains` is deprecated: a document is owned by its knowledge base and
+        // a domain reaching that base sees all of it.
+        domains: [],
         always: body.meta.always === true,
       }
       : null;
     const result = writeKnowledge(knowledgeDir, body.scope, body.path, body.content, meta);
     return sendJson(res, 200, { ok: true, ...result });
+  }
+
+  // Knowledge bases: the named containers a domain binds. Renaming or deleting
+  // one is a filesystem move, so it also repoints every domain that bound it.
+  async function handleKnowledgeBases(req, res) {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      if (!trustedOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const registered = store.get().knowledgeBases;
+      const onDisk = new Set(listScopes(knowledgeDir));
+      const bases = registered.map((kb) => ({ ...knowledgeBaseInfo(knowledgeDir, kb.id), name: kb.name, id: kb.id, missing: !onDisk.has(kb.id) }));
+      return sendJson(res, 200, { ok: true, bases, orphanDirs: [...onDisk].filter((id) => !registered.some((kb) => kb.id === id)) });
+    }
+    if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    const body = await readBody(req);
+    const action = String(body.action ?? '').trim();
+    if (action === 'create') {
+      const result = createKnowledgeBase(knowledgeDir, body.name);
+      if (!result.ok) return sendJson(res, 400, { ok: false, error: result.message });
+      await store.upsertKnowledgeBase({ id: result.id, name: String(body.name ?? result.id).trim() || result.id });
+      return sendJson(res, 200, { ok: true, id: result.id, bases: store.get().knowledgeBases });
+    }
+    if (action === 'rename') {
+      const from = String(body.id ?? '').trim();
+      const to = String(body.name ?? '').trim();
+      const result = renameKnowledgeBase(knowledgeDir, from, to);
+      if (!result.ok) return sendJson(res, 400, { ok: false, error: result.message });
+      await store.renameKnowledgeBase(from, result.id);
+      return sendJson(res, 200, { ok: true, id: result.id, bases: store.get().knowledgeBases });
+    }
+    if (action === 'delete') {
+      const id = String(body.id ?? '').trim();
+      const result = removeKnowledgeBase(knowledgeDir, id, { force: body.force === true });
+      if (!result.ok) return sendJson(res, 400, { ok: false, error: result.message, docs: result.docs });
+      await store.removeKnowledgeBase(id);
+      return sendJson(res, 200, { ok: true, bases: store.get().knowledgeBases });
+    }
+    return sendJson(res, 400, { ok: false, error: 'action 必须是 create/rename/delete' });
   }
 
   async function handleKnowledgeRead(req, res) {
@@ -428,6 +477,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (route === '/api/channels/restart' && req.method === 'POST') return await handleRestart(req, res);
       if (route === '/api/channels/logs') return await handleChannelLogs(req, res);
       if (route === '/api/knowledge') return await handleKnowledge(req, res);
+      if (route === '/api/kb') return await handleKnowledgeBases(req, res);
       if (route === '/api/knowledge/read') return await handleKnowledgeRead(req, res);
       if (route === '/api/kb/drafts') return await handleKbDrafts(req, res);
       if (route.startsWith('/api/github/')) return await handleGithub(req, res);

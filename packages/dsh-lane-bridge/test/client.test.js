@@ -168,6 +168,9 @@ test('domain cards expose a save button in the header and footer', async () => {
         memoryEnabled: false, memoryMaxChars: 2000, kbDraftEnabled: true,
         repoEnabled: true, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
       }],
+      // Knowledge bases are an enumerated set: the domain card picks them from a
+      // dropdown instead of asking for a folder name.
+      knowledgeBases: [{ id: 'default', name: '默认知识库' }, { id: 'game', name: '游戏知识库' }],
       roles: [{ name: '客服', content: '' }],
     },
   };
@@ -198,7 +201,7 @@ test('domain cards expose a save button in the header and footer', async () => {
 
   // Multi-value fields are chip lists, not comma-joined text boxes: every stored
   // value appears as its own chip and no input carries a "a, b" string.
-  for (const value of ['存档', '闪退', 'web_search', 'default', 'game']) {
+  for (const value of ['存档', '闪退', 'web_search', '默认知识库（default）', '游戏知识库（game）']) {
     assert.ok(text.includes(value), `missing chip for ${value}: ${text.join(' ')}`);
   }
   assert.ok(!inputs.some((props) => String(props.value ?? '').includes(', ')), 'a comma-joined field is still rendered');
@@ -389,11 +392,15 @@ test('the roles card binds a role to a domain', async () => {
     },
   };
   await import('../lib/client.js?roles');
-  const { RolesAndKnowledge } = globalThis.__laneBundle.__components;
+  const { Roles } = globalThis.__laneBundle.__components;
   const data = {
     state: {
       config: { defaultDomainId: 'default' },
-      domains: [{ id: 'default', name: '默认客服' }, { id: 'game', name: '游戏客服' }],
+      domains: [
+        { id: 'default', name: '默认客服', knowledgeScopes: ['default'] },
+        { id: 'game', name: '游戏客服', knowledgeScopes: ['game'] },
+      ],
+      knowledgeBases: [{ id: 'default', name: '默认知识库' }, { id: 'game', name: '游戏知识库' }],
       roles: [{ name: '客服', content: '# A', domainId: 'game' }],
       conversations: {},
       bindings: {},
@@ -401,7 +408,7 @@ test('the roles card binds a role to a domain', async () => {
     },
     paths: { dataDir: '/tmp/lane-bridge' },
   };
-  const tree = RolesAndKnowledge({ data, refresh: async () => {} });
+  const tree = Roles({ data, refresh: async () => {} });
   const text = [];
   const selects = [];
   traverse(tree, (node) => {
@@ -411,7 +418,11 @@ test('the roles card binds a role to a domain', async () => {
   assert.ok(text.includes('所属领域'), text.join(' '));
   assert.ok(selects.some((props) => props.value === 'game'), 'the role must show its domain');
   // The role card no longer picks a domain on the domain side.
-  assert.ok(!text.some((line) => line === '角色卡'), 'the domain card must not name a role');
+  assert.ok(!text.some((line) => line === '角色卡'), 'the role card must not be labelled as a domain field');
+  // The role card keeps only the role itself; knowledge and memory have pages.
+  assert.ok(!text.includes('领域共享记忆'), text.join(' '));
+  assert.ok(!text.includes('共享知识库'), text.join(' '));
+  assert.ok(text.some((line) => line.includes('游戏知识库')), 'the bound knowledge bases are shown on the role card');
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;
@@ -588,6 +599,83 @@ test('push renders a checkbox per discovered conversation instead of one select'
   assert.ok(text.some((line) => line.includes('已选 0 个')), text.join(' '));
   assert.ok(text.some((line) => line.includes('全选（2）')), text.join(' '));
   assert.ok(text.some((line) => line.includes('发送到 0 个会话')), text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('knowledge and memory have their own pages instead of living in the role card', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+      setState() {}
+    },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?kbpages');
+  const { Knowledge, Memory } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { defaultDomainId: 'default' },
+      domains: [{ id: 'default', name: '默认客服', knowledgeScopes: ['default'] }],
+      knowledgeBases: [{ id: 'default', name: '默认知识库' }],
+      roles: [{ name: '客服', content: '', domainId: 'default' }],
+      conversations: {},
+      bindings: {},
+      sessions: {},
+    },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const collect = (tree) => {
+    const text = [];
+    traverse(tree, (node) => {
+      if (typeof node?.children === 'string') text.push(node.children);
+      if (node?.type === 'select') text.push(`select:${node.props?.value ?? ''}`);
+    });
+    return text;
+  };
+  let kbTree;
+  assert.doesNotThrow(() => { kbTree = Knowledge({ data, refresh: async () => {} }); });
+  const kbText = collect(kbTree);
+  assert.ok(kbText.includes('当前知识库'), kbText.join(' '));
+  assert.ok(kbText.includes('+ 新建知识库'), kbText.join(' '));
+  assert.ok(kbText.some((line) => line.includes('默认知识库（default）')), kbText.join(' '));
+  assert.ok(!kbText.includes('领域共享记忆'), 'memory must not be on the knowledge page');
+
+  let memTree;
+  assert.doesNotThrow(() => { memTree = Memory({ data }); });
+  const memText = collect(memTree);
+  assert.ok(memText.includes('领域共享记忆'), memText.join(' '));
+  assert.ok(memText.includes('select:default'), memText.join(' '));
+  assert.ok(!memText.includes('当前知识库'), 'knowledge must not be on the memory page');
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

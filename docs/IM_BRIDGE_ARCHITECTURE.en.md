@@ -26,7 +26,7 @@ not a second product surface.
 | --- | --- |
 | **Channel** | A transport account: `snowluma` (OneBot v11), `qqbot` (official QQ Bot), later `discord`. |
 | **Conversation** | One chat thread seen by a channel: a group or a private chat. Key: `<channel>:<group|private>:<externalId>`. |
-| **Domain** | **Infrastructure**: KB scopes, shared memory, GitHub repo, host-tool allow-list, operator whitelist, group trigger policy (all/mention/keyword/off; mention and keyword can be enabled together), agent preset/model, reply policy. A domain never names a role. |
+| **Domain** | **Infrastructure**: bound knowledge bases (several), shared memory, GitHub repo, host-tool allow-list, operator whitelist, group trigger policy (all/mention/keyword/off; mention and keyword can be enabled together), agent preset/model, reply policy. A domain never names a role. |
 | **Binding** | Conversation → role. There is no domain on a binding; it only picks a role card. A conversation without a binding is *discovered* but does not call a model. |
 | **Role card** | A Markdown persona plus its **domain**. The conversation picks the role; the role decides which infrastructure is used. |
 | **Knowledge base** | Shared Markdown tree (`knowledge/<scope>/...`). Each document carries `triggers` / `domains` frontmatter, read by `lane_kb_*` and by auto retrieval. |
@@ -39,7 +39,7 @@ not a second product surface.
 ```
 binding.role (else config.defaultRole / the first role card)
   → the role card's domainId
-  → the domain (KB scopes, memory, repo, operators, triggers, preset/model)
+  → the domain (bound knowledge bases, memory, repo, operators, triggers, preset/model)
   → the global default domain (role missing / legacy data)
 ```
 

@@ -9,6 +9,7 @@ import path from 'node:path';
 import {
   defaultConfig,
   defaultDomain,
+  defaultKnowledgeBases,
   defaultState,
   normalizeOperators,
   normalizeTriggers,
@@ -17,6 +18,7 @@ import {
   sampleRoleCard,
   STATE_VERSION,
 } from './defaults.js';
+import { knowledgeBaseInfo, listScopes } from './knowledge.js';
 
 const ROLE_EXT = '.md';
 
@@ -87,6 +89,31 @@ function rememberSender(senders, entry, name, at) {
   const next = { ...senders, [entry]: { name: String(name ?? '').slice(0, 80), at } };
   const rows = Object.entries(next).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
   return Object.fromEntries(rows.slice(0, MAX_SENDERS_PER_CONVERSATION));
+}
+
+/**
+ * Knowledge bases are named containers of documents (one directory each). They
+ * live in state so a domain can bind them by name in the UI and so a rename can
+ * be reflected everywhere at once.
+ */
+function normalizeKnowledgeBases(raw) {
+  // Missing field = state written before knowledge bases existed.
+  if (raw === undefined || raw === null) return defaultKnowledgeBases();
+  const list = Array.isArray(raw) ? raw : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    const id = String(typeof item === 'string' ? item : item?.id ?? '').trim();
+    if (!id || id.startsWith('_') || /[\\/:*?"<>|]/u.test(id) || id.includes('..') || id.length > 60) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: String(item?.name ?? '').trim().slice(0, 60) || id,
+      updatedAt: Number(item?.updatedAt) || 0,
+    });
+  }
+  return out;
 }
 
 function normalizeRoleList(raw, domains = null, fallbackDomainId = 'default') {
@@ -311,6 +338,7 @@ export function normalizeState(raw) {
     revision: Number(src.revision) || 0,
     config,
     domains,
+    knowledgeBases: normalizeKnowledgeBases(src.knowledgeBases),
     roles,
     bindings,
     conversations,
@@ -453,8 +481,25 @@ export class LaneStore {
     }
 
     await this.#seedKnowledge();
+    this.#syncKnowledgeBases();
     await this.save();
     return this.state;
+  }
+
+  /**
+   * A directory under `knowledge/` is a real knowledge base whether or not the
+   * registry knows it yet (hand-created, copied over, or seeded). Adopt the
+   * directories so the operator can bind them from the UI instead of typing a
+   * folder name from memory.
+   */
+  #syncKnowledgeBases() {
+    const known = new Set(this.state.knowledgeBases.map((kb) => kb.id));
+    for (const id of listScopes(this.knowledgeDir)) {
+      if (known.has(id)) continue;
+      const info = knowledgeBaseInfo(this.knowledgeDir, id);
+      this.state.knowledgeBases.push({ id: info.id, name: info.name || id, updatedAt: 0 });
+      known.add(id);
+    }
   }
 
   async #seedKnowledge() {
@@ -557,6 +602,43 @@ export class LaneStore {
   async setDomains(domains) {
     return this.update((draft) => {
       draft.domains = domains;
+    });
+  }
+
+  /** Register a knowledge base / update its display name. */
+  async upsertKnowledgeBase(kb) {
+    return this.update((draft) => {
+      const id = String(kb?.id ?? '').trim();
+      if (!id) return;
+      const existing = draft.knowledgeBases.find((item) => item.id === id);
+      if (existing) existing.name = String(kb.name ?? existing.name).trim() || existing.id;
+      else draft.knowledgeBases.push({ id, name: String(kb.name ?? id).trim() || id, updatedAt: Date.now() });
+    });
+  }
+
+  /** Rename a knowledge base and repoint every domain that binds it. */
+  async renameKnowledgeBase(from, to) {
+    return this.update((draft) => {
+      for (const kb of draft.knowledgeBases) {
+        if (kb.id !== from) continue;
+        kb.id = to;
+        if (kb.name === from) kb.name = to;
+      }
+      for (const domain of draft.domains) {
+        if (!Array.isArray(domain.knowledgeScopes)) continue;
+        domain.knowledgeScopes = domain.knowledgeScopes.map((scope) => (scope === from ? to : scope));
+      }
+    });
+  }
+
+  /** Drop a knowledge base and unbind it from every domain. */
+  async removeKnowledgeBase(id) {
+    return this.update((draft) => {
+      draft.knowledgeBases = draft.knowledgeBases.filter((kb) => kb.id !== id);
+      for (const domain of draft.domains) {
+        if (!Array.isArray(domain.knowledgeScopes)) continue;
+        domain.knowledgeScopes = domain.knowledgeScopes.filter((scope) => scope !== id);
+      }
     });
   }
 

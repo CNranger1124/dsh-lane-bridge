@@ -253,23 +253,28 @@ export function sampleRoleCard() {
 }
 
 export function sampleKnowledge() {
-  // One flat starter document. The knowledge base is not split into manuals:
-  // a document is a self-contained unit with its own triggers, and the operator
-  // writes as many (or as few) as the product actually needs.
+  // One flat starter document. A document is a self-contained unit with its own
+  // triggers, and the operator writes as many (or as few) as the product needs.
+  // Documents no longer declare domains: which domain sees a document is decided
+  // by the knowledge bases that domain binds.
   return {
     'default/知识库.md': `---
 title: 知识库
 triggers:
-domains: default
 ---
 
 # 知识库
 
-> 一篇文档就是一条知识单元。在设置页给它配上触发词（写在上面的 \`triggers\` 里），
+> 一篇文档就是一条知识单元。在「知识库」页给它配上触发词（写在上面的 \`triggers\` 里），
 > 入站消息命中其中之一时才会把这篇注入提示词。
 > 这篇目前是空的，直接改写成你自己的产品口径即可。
 `,
   };
+}
+
+/** Knowledge bases are named containers of documents; domains bind several. */
+export function defaultKnowledgeBases() {
+  return [{ id: 'default', name: '默认知识库', updatedAt: 0 }];
 }
 
 export function defaultState() {
@@ -279,8 +284,10 @@ export function defaultState() {
     revision: 0,
     config: defaultConfig(),
     domains: [defaultDomain()],
+    // Knowledge bases live here so a domain can bind them by name in the UI.
+    knowledgeBases: defaultKnowledgeBases(),
     // Conversation → role → domain. The role carries the domain binding; the
-    // domain carries the infrastructure (knowledge scopes, memory).
+    // domain carries the infrastructure (knowledge bases, memory).
     roles: [{ name: '客服', content: role, domainId: 'default', updatedAt: 0 }],
     bindings: {},
     conversations: {},
