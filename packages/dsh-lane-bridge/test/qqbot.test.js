@@ -99,3 +99,37 @@ test('QQ Bot adapter reports missing credentials without starting', async () => 
   assert.match(adapter.status().lastError, /appId/u);
   await adapter.stop();
 });
+
+test('QQ Bot group @ events count as mentions even without a mentions array', async () => {
+  const adapter = await readyAdapter();
+  try {
+    const messages = [];
+    adapter.on('message', (message) => messages.push(message));
+    adapter.bot.emit('message', {}, {
+      kind: 'group',
+      rawEventType: 'GROUP_AT_MESSAGE_CREATE',
+      senderId: 'u-3',
+      senderName: 'Carol',
+      content: 'Bug 反馈',
+      messageId: 'm-3',
+      groupOpenid: 'g-9',
+    });
+    adapter.bot.emit('message', {}, {
+      kind: 'group',
+      rawEventType: 'GROUP_MESSAGE_CREATE',
+      senderId: 'u-4',
+      senderName: 'Dave',
+      content: '闲聊',
+      messageId: 'm-4',
+      groupOpenid: 'g-9',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0].mentionsBot, true);
+    assert.equal(messages[0].externalId, 'g-9');
+    // A full-message event that does not mention the bot stays a non-mention.
+    assert.equal(messages[1].mentionsBot, false);
+  } finally {
+    await adapter.stop();
+  }
+});

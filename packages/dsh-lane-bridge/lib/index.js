@@ -142,8 +142,16 @@ export async function apply(ctx, config = {}) {
     }
     const text = String(message.text ?? '').trim();
     if (!text && (!message.images || message.images.length === 0)) return;
+    logger.debug?.(
+      `[lane-bridge] 入站 ${key}（${message.kind}，mentionsBot=${message.mentionsBot === true}`
+      + `，replyToBot=${message.replyToBot === true}）：${text.slice(0, 40)}`
+    );
     if (!shouldTrigger(state, key, message)) {
-      logger.debug?.(`[lane-bridge] ${key} 未命中触发策略（${resolved.triggers.join('+')}），只记录不回复`);
+      logger.debug?.(
+        `[lane-bridge] ${key} 未命中触发策略（${resolved.triggers.join('+')}`
+        + `；mentionsBot=${message.mentionsBot === true}，replyToBot=${message.replyToBot === true}`
+        + `，kind=${message.kind}），只记录不回复`
+      );
       return;
     }
     inboundQueue.push(key, message);

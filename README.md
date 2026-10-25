@@ -72,7 +72,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 ## v0.2 包含什么
 
 - 渠道适配器接口 + SnowLuma（OneBot v11）适配器（QQ）。
-- 官方 QQ Bot 适配器（实验性；需要 AppID/AppSecret）。
+- 官方 QQ Bot 适配器（实验性；需要 AppID/AppSecret）。注意：官方平台的群聊只会推送 **@ 机器人**的消息（`GROUP_AT_MESSAGE_CREATE`），普通群消息不会下发，所以「关键词触发」在官方 QQ Bot 群聊里不可用；需要看全部群消息请用 SnowLuma。
 - Discord 适配器（`discord.js`；私聊 + 服务器频道，可选 mention gate）。
 - 领域/绑定模型：每个群或私聊一个 DSH session，领域级角色卡、preset（下拉选择，带作用说明）、模型、知识库 scope、宿主工具白名单；群聊触发策略可多选（「@ 或回复」和「命中关键词」可同时生效，命中任意一条就回复；也可选「所有消息」或「关闭」）。
 - 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。

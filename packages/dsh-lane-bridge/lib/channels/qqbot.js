@@ -64,6 +64,10 @@ export class QqbotAdapter extends ChannelAdapter {
       bot.on('message', async (_ctx, msg) => {
         try {
           if (!msg || msg.senderIsBot) return;
+          // GROUP_AT_MESSAGE_CREATE is only delivered when the bot is @-ed, and
+          // the payload has no `mentions` array. Without this, a mention-only
+          // trigger policy would treat every group @ as "not mentioning me".
+          const rawEventType = String(msg.rawEventType ?? '');
           const kind = msg.kind === 'c2c' || msg.kind === 'dm' ? 'private' : 'group';
           const externalId = String(msg.replyTarget?.targetId ?? msg.groupOpenid ?? msg.channelId ?? msg.senderId ?? '');
           if (!externalId) return;
@@ -83,10 +87,11 @@ export class QqbotAdapter extends ChannelAdapter {
             senderName: String(msg.senderName ?? ''),
             text,
             images,
-            mentionsBot: Array.isArray(msg.mentions) && msg.mentions.length > 0,
+            mentionsBot: (Array.isArray(msg.mentions) && msg.mentions.length > 0)
+              || rawEventType === 'GROUP_AT_MESSAGE_CREATE',
             replyToBot: Boolean(msg.refMsgIdx),
             replyToId: String(msg.messageId ?? ''),
-            raw: { kind: msg.kind, messageId: msg.messageId, timestamp: msg.timestamp },
+            raw: { kind: msg.kind, rawEventType, messageId: msg.messageId, timestamp: msg.timestamp },
           });
         } catch (error) {
           this.logger?.warn?.(`[lane-bridge] QQ Bot 入站消息处理失败：${error?.message ?? error}`);

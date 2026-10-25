@@ -951,7 +951,7 @@ window.__ModuleLoader__.load({
               '允许自动回复（关闭后只记录消息）'
             ),
             h('div', { className: 'lb-grid' },
-              h(Field, { label: '群聊触发策略（可多选）', hint: '命中任意一条就回复；「所有消息」「关闭」与其它互斥；私聊除「关闭」外始终回复' },
+              h(Field, { label: '群聊触发策略（可多选）', hint: '命中任意一条就回复；「所有消息」「关闭」与其它互斥；官方 QQ Bot 群聊只推 @ 消息，关键词要配 SnowLuma' },
                 h('div', { className: 'lb-actions', style: { flexWrap: 'wrap', rowGap: 6 } },
                   ...TRIGGER_OPTIONS.map(([value, label]) => h('label', { key: value, className: 'lb-check' },
                     h('input', {

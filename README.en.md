@@ -93,7 +93,10 @@ only a one-shot legacy migration script for moving an existing install.
 ## What is in the box (v0.2 scope)
 
 - Channel adapter interface + SnowLuma (OneBot v11) adapter (QQ).
-- Official QQ Bot adapter (experimental; requires an app id/secret).
+- Official QQ Bot adapter (experimental; requires an app id/secret). The official
+  platform only pushes **@-mentions** in group chats (`GROUP_AT_MESSAGE_CREATE`),
+  never ordinary group traffic, so keyword triggers cannot work there; use
+  SnowLuma when you need every group message.
 - Discord adapter (`discord.js`; DM + guild channels, optional mention gate).
 - Domain / binding model: one DSH session per group or private chat, with a
   domain-level role card, preset, model, KB scopes, and host-tool allow-list.

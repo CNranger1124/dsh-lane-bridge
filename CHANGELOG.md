@@ -2,6 +2,13 @@
 
 # 变更记录
 
+## 0.2.13
+
+- 修复官方 QQ Bot 群聊「@ 了也不回」：`GROUP_AT_MESSAGE_CREATE` 本身就代表被 @，这个事件里没有 `mentions` 数组，适配器却按 `mentions.length > 0` 判断，导致 `mentionsBot=false`。触发策略改成「@ + 关键词」后，@ 消息会被当成没 @ 丢掉。现在按事件类型判定。
+- 入站日志补充 `mentionsBot` / `replyToBot` / `kind`，触发失败时能直接看出原因。
+- 文档写清：官方 QQ Bot 群聊只推送 @ 机器人的消息，普通群消息不会下发，「关键词」触发只适用于能收到全部群消息的渠道（SnowLuma）。
+- 测试增至 108 项。
+
 ## 0.2.12
 
 - 修复 DSH 重启后第一次收到消息（冷会话恢复）必定失败的问题：`prompt variable "{{model}}" has no value for this assembly`。原因是插件直接调用 `agents.resume` 恢复会话，绕过了 Session Controller 的 setup，会话没有安装 model selection，人格模板里的 `{{model}}` 取不到值。现在优先用 `sessionController.resolveAgent()` 恢复（控制器会安装 model selection 并重新挂载会话头里的 preset），`agents.resume` 仅作兜底。
