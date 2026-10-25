@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.5.1
+
+- **Rename a document from the editor**: the edit card now has a "file name" field,
+  which accepts subdirectories too (`mechanics/relic.md`); saving writes to that
+  location.
+- **Transfer documents between knowledge bases**: the edit card gained a
+  "knowledge base" dropdown. Rename and transfer are the same operation
+  (`POST /api/knowledge` with `action: "move"`): the file is moved first, then the
+  content is written. An existing target is **refused with a reason** instead of
+  being overwritten silently; overwriting needs an explicit `force`.
+- Server-side guards added: the target base must exist, paths cannot escape the
+  directory, and the draft area cannot be moved into or out of.
+- Tests: 154 (rename, cross-base transfer, clash refusal, traversal refusal, route
+  round-trip).
+
 ## 0.5.0
 
 - **Knowledge bases are first-class**: one subdirectory of `knowledge/` is one

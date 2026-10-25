@@ -231,6 +231,10 @@ knowledge bases (a directory each, many)  <-- domain "bound knowledge bases"
   role in that domain can hit the triggers of every document inside them.
 - **Documents no longer carry a `domains` list**: the knowledge base they live in
   is their owner. A leftover `domains:` line in an old file is ignored.
+- In the editor you can **rename a document** (subdirectories allowed, e.g.
+  `mechanics/relic.md`) and **transfer it to another knowledge base**: change
+  "knowledge base" + "file name" and save. The file is moved first, then written;
+  an existing target is refused rather than overwritten.
 - Binding nothing means the domain injects **no** knowledge automatically (it does
   not fall back to "everything"). The model can still call `lane_kb_*`.
 - **Memory** is domain-scoped too and has its own page; the knowledge base wins on

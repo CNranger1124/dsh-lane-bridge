@@ -505,3 +505,57 @@ test('knowledge bases are created, renamed, and unbound from domains', async () 
     cleanup(dir);
   }
 });
+
+test('the knowledge route renames and transfers documents', async () => {
+  const { dir, routes } = await setup();
+  const fs = await import('node:fs');
+  try {
+    // Create a second knowledge base to move into.
+    let res = mockResponse();
+    await routes.handle(mockRequest({ method: 'POST', url: '/lane-bridge/api/kb', body: { action: 'create', name: '存档' } }), res);
+    assert.equal(res.status, 200, res.body);
+
+    res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/knowledge',
+      body: { scope: 'default', path: '知识库.md', content: '# 知识库\n\n正文\n', meta: { title: '知识库', triggers: ['存档'], always: false } },
+    }), res);
+    assert.equal(res.status, 200, res.body);
+
+    // Rename in place, then transfer to the other base.
+    res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/knowledge',
+      body: { action: 'move', scope: 'default', path: '知识库.md', targetScope: 'default', targetPath: '客服知识.md' },
+    }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.equal(res.json().path, '客服知识.md');
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', 'default', '客服知识.md')));
+
+    res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/knowledge',
+      body: { action: 'move', scope: 'default', path: '客服知识.md', targetScope: '存档', targetPath: '存档位置.md' },
+    }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.deepEqual(res.json().scope, '存档');
+    assert.ok(fs.existsSync(path.join(dir, 'knowledge', '存档', '存档位置.md')));
+    assert.ok(!fs.existsSync(path.join(dir, 'knowledge', 'default', '客服知识.md')));
+
+    // Moving onto an existing document is refused with a readable reason.
+    fs.writeFileSync(path.join(dir, 'knowledge', '存档', '占位.md'), '# 占位\n', 'utf8');
+    res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/knowledge',
+      body: { action: 'move', scope: '存档', path: '存档位置.md', targetScope: '存档', targetPath: '占位.md' },
+    }), res);
+    assert.equal(res.status, 400);
+    assert.match(res.json().error, /目标已存在/u);
+  } finally {
+    cleanup(dir);
+  }
+});

@@ -13,6 +13,7 @@ import {
   listDrafts,
   listKnowledge,
   listScopes,
+  moveKnowledge,
   readKnowledge,
   removeKnowledgeBase,
   renameKnowledgeBase,
@@ -276,6 +277,18 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     }
     if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
     const body = await readBody(req);
+    // Renaming a document and moving it between knowledge bases are the same
+    // filesystem operation, so they share one action.
+    if (body.action === 'move') {
+      const result = moveKnowledge(knowledgeDir, {
+        scope: body.scope,
+        path: body.path,
+        targetScope: body.targetScope,
+        targetPath: body.targetPath,
+        force: body.force === true,
+      });
+      return sendJson(res, result.ok ? 200 : 400, result.ok ? { ok: true, ...result } : { ok: false, error: result.message });
+    }
     const meta = body.meta && typeof body.meta === 'object'
       ? {
         title: String(body.meta.title ?? '').trim().slice(0, 120),

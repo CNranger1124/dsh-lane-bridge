@@ -396,8 +396,43 @@ export function writeKnowledge(knowledgeDir, scope, relPath, content, meta = nul
   return { scope: safe, path: rel.replace(/\\/gu, '/'), bytes: Buffer.byteLength(payload) };
 }
 
-// ── 待审草稿（AI 起草 → 人工采纳/丢弃）──────────────────────────────────────
-//
+/**
+ * Rename a document, move it to another knowledge base, or both.
+ *
+ * The editor sends whatever the operator typed, so every hop is re-validated
+ * here: the target base must exist, the target must stay inside it, drafts stay
+ * off-limits, and an existing target file is only replaced when asked.
+ */
+export function moveKnowledge(knowledgeDir, { scope, path: relPath, targetScope, targetPath, force = false } = {}) {
+  const fromScope = safeScope(scope);
+  const toScope = safeScope(targetScope) || fromScope;
+  const fromRel = String(relPath ?? '').trim().replace(/\\/gu, '/');
+  const toRel = (String(targetPath ?? '').trim().replace(/\\/gu, '/') || fromRel);
+  if (!fromScope) return { ok: false, message: `知识库不存在：${scope}` };
+  if (!toScope) return { ok: false, message: `目标知识库不合法：${targetScope}` };
+  if (!fromRel || !toRel) return { ok: false, message: '文件名不能为空' };
+  if (!fs.existsSync(path.join(knowledgeDir, toScope))) return { ok: false, message: `目标知识库不存在：${toScope}` };
+  if (!ALLOWED_EXT.has(path.extname(toRel).toLowerCase())) return { ok: false, message: '只支持 .md / .txt 文本文件' };
+  if (fromRel.split('/').includes(DRAFT_DIR)) return { ok: false, message: '草稿区只能通过审批流程处理' };
+  if (toRel.split('/').includes(DRAFT_DIR)) return { ok: false, message: '不能移入草稿区' };
+
+  const fromBase = path.resolve(path.join(knowledgeDir, fromScope));
+  const fromAbs = path.resolve(fromBase, fromRel);
+  if (!fromAbs.startsWith(`${fromBase}${path.sep}`)) return { ok: false, message: '源路径不合法' };
+  if (!fs.existsSync(fromAbs)) return { ok: false, message: `没有这个文件：${fromScope}/${fromRel}` };
+
+  const toBase = path.resolve(path.join(knowledgeDir, toScope));
+  const toAbs = path.resolve(toBase, toRel);
+  if (!toAbs.startsWith(`${toBase}${path.sep}`)) return { ok: false, message: '目标路径不合法' };
+  if (fromAbs === toAbs) return { ok: true, scope: toScope, path: toRel, unchanged: true };
+  if (fs.existsSync(toAbs) && !force) return { ok: false, message: `目标已存在：${toScope}/${toRel}` };
+
+  fs.mkdirSync(path.dirname(toAbs), { recursive: true });
+  fs.renameSync(fromAbs, toAbs);
+  return { ok: true, scope: toScope, path: toRel, from: { scope: fromScope, path: fromRel } };
+}
+
+// ── 待审草稿（AI 起草 → 人工采纳/丢弃）──────────────────────────────────────//
 // Drafts live under `knowledge/<scope>/_待审/`. `walkScope` skips every `_`
 // entry, so unapproved drafts cannot be listed, searched or read by the model.
 

@@ -1463,6 +1463,10 @@ window.__ModuleLoader__.load({
       const [file, setFile] = useState(null);
       const [content, setContent] = useState('');
       const [meta, setMeta] = useState({ title: '', triggers: [], always: false });
+      // Where this document should end up. Renaming and moving between
+      // knowledge bases both go through the same target fields.
+      const [targetKb, setTargetKb] = useState('');
+      const [targetPath, setTargetPath] = useState('');
       const [newBase, setNewBase] = useState('');
       const [renameTo, setRenameTo] = useState('');
       const [newDoc, setNewDoc] = useState('');
@@ -1520,6 +1524,8 @@ window.__ModuleLoader__.load({
           const query = new URLSearchParams({ scope: docFile.scope, path: docFile.path });
           const result = await api(`/knowledge/read?${query.toString()}`);
           setFile(docFile);
+          setTargetKb(docFile.scope);
+          setTargetPath(docFile.path);
           setContent(result.content ?? '');
           setMeta({
             title: String(result.meta?.title ?? ''),
@@ -1532,13 +1538,30 @@ window.__ModuleLoader__.load({
         if (!file) return;
         setError(''); setMessage('');
         try {
+          let scope = file.scope;
+          let docPath = file.path;
+          const wantedScope = String(targetKb ?? '').trim() || file.scope;
+          const wantedPath = String(targetPath ?? '').trim() || file.path;
+          if (wantedScope !== file.scope || wantedPath !== file.path) {
+            const moved = await api('/knowledge', {
+              method: 'POST',
+              body: JSON.stringify({ action: 'move', scope: file.scope, path: file.path, targetScope: wantedScope, targetPath: wantedPath }),
+            });
+            scope = moved.scope ?? wantedScope;
+            docPath = moved.path ?? wantedPath;
+          }
           await api('/knowledge', {
             method: 'POST',
-            body: JSON.stringify({ scope: file.scope, path: file.path, content, meta }),
+            body: JSON.stringify({ scope, path: docPath, content, meta }),
           });
-          setMessage('已保存');
+          const nextFile = { ...file, scope, path: docPath, title: meta.title || file.title };
+          setFile(nextFile);
+          setTargetKb(scope);
+          setTargetPath(docPath);
+          setMessage(scope === file.scope && docPath === file.path ? '已保存' : `已保存并移动到 ${scope}/${docPath}`);
           await loadBases();
-          await loadDocs(current?.id);
+          if (scope !== current?.id) setKbId(scope);
+          await loadDocs(scope);
         } catch (err) { setError(String(err.message ?? err)); }
       };
       const createDoc = async () => {
@@ -1620,6 +1643,21 @@ window.__ModuleLoader__.load({
           h('div', { className: 'lb-grid' },
             h(Field, { label: '标题', hint: '展示用；留空则取文档第一个标题' },
               h('input', { className: 'lb-input', value: meta.title, onChange: (e) => setMeta((m) => ({ ...m, title: e.target.value })) })
+            ),
+            h(Field, { label: '所属知识库', hint: '换一个＝把这篇文档转移到另一个知识库；保存时生效' },
+              h('select', { className: 'lb-select', value: targetKb || file.scope, onChange: (e) => setTargetKb(e.target.value) },
+                ...bases.map((kb) => h('option', { key: kb.id, value: kb.id },
+                  `${kb.name && kb.name !== kb.id ? `${kb.name}（${kb.id}）` : kb.id}`
+                ))
+              )
+            ),
+            h(Field, { label: '文件名', hint: '可以改名，也可以带子目录（例如 机制/宝具.md）；保存时按这里的位置移动' },
+              h('input', {
+                className: 'lb-input',
+                value: targetPath || file.path,
+                onChange: (e) => setTargetPath(e.target.value),
+                placeholder: '例如 存档位置.md',
+              })
             )
           ),
           h(Field, { label: '触发词', hint: '入站消息命中任意一个，才会把这篇注入提示词；加号添加、× 移除' },

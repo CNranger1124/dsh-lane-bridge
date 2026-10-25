@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  approveDraft, discardDraft, formatDocument, listDrafts, listKnowledge, matchDocuments, parseDocument,
-  readKnowledge, searchKnowledge, writeDraft, writeKnowledge,
+  approveDraft, discardDraft, formatDocument, listDrafts, listKnowledge, matchDocuments, moveKnowledge,
+  parseDocument, readKnowledge, searchKnowledge, writeDraft, writeKnowledge,
 } from '../lib/knowledge.js';
 import { tempDir, cleanup } from './helpers.js';
 
@@ -231,6 +231,41 @@ test('documents belong to their knowledge base, not to a per-document domain lis
     // An empty binding means "no knowledge", never "everything on disk".
     assert.equal(listKnowledge(dir, []).count, 0);
     assert.deepEqual(matchDocuments(dir, [], '宝具不生效'), []);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('documents can be renamed and moved between knowledge bases', async () => {
+  const dir = tempDir();
+  try {
+    writeKnowledge(dir, '宝具', '机制.md', '# 宝具机制\n\n正文\n', { title: '宝具机制', triggers: ['宝具'] });
+    fs.mkdirSync(path.join(dir, '存档'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '存档', '占位.md'), '# 占位\n', 'utf8');
+
+    const renamed = moveKnowledge(dir, { scope: '宝具', path: '机制.md', targetScope: '宝具', targetPath: '宝具机制.md' });
+    assert.equal(renamed.ok, true);
+    assert.ok(fs.existsSync(path.join(dir, '宝具', '宝具机制.md')));
+    assert.ok(!fs.existsSync(path.join(dir, '宝具', '机制.md')));
+
+    const moved = moveKnowledge(dir, { scope: '宝具', path: '宝具机制.md', targetScope: '存档', targetPath: '图鉴.md' });
+    assert.equal(moved.ok, true);
+    assert.deepEqual({ scope: moved.scope, path: moved.path }, { scope: '存档', path: '图鉴.md' });
+    assert.ok(fs.existsSync(path.join(dir, '存档', '图鉴.md')));
+    assert.equal(listKnowledge(dir, ['宝具']).count, 0, 'the source base is empty');
+    assert.deepEqual(listKnowledge(dir, ['存档']).files.map((file) => file.path).sort(), ['占位.md', '图鉴.md']);
+
+    // Overwriting an existing document needs an explicit force.
+    const clash = moveKnowledge(dir, { scope: '存档', path: '图鉴.md', targetScope: '存档', targetPath: '占位.md' });
+    assert.equal(clash.ok, false);
+    assert.match(clash.message, /目标已存在/u);
+    const forced = moveKnowledge(dir, { scope: '存档', path: '图鉴.md', targetScope: '存档', targetPath: '占位.md', force: true });
+    assert.equal(forced.ok, true);
+
+    // Missing source / unknown target base are reported, not thrown.
+    assert.equal(moveKnowledge(dir, { scope: '存档', path: '不存在.md', targetScope: '存档', targetPath: 'x.md' }).ok, false);
+    assert.equal(moveKnowledge(dir, { scope: '存档', path: '占位.md', targetScope: '没有这个库', targetPath: 'x.md' }).ok, false);
+    assert.equal(moveKnowledge(dir, { scope: '存档', path: '../默认/逃逸.md', targetScope: '存档', targetPath: 'x.md' }).ok, false);
   } finally {
     cleanup(dir);
   }
