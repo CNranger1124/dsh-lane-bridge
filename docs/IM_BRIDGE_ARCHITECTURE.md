@@ -119,6 +119,19 @@ adapter.onMessage(cb)                 // cb({ channel, kind, externalId, senderI
 
 注意这仍是**渠道身份**，不是强认证：SnowLuma 的 QQ 号可信度取决于 OneBot 网关；openid 由官方平台签发，才具备跨会话唯一性。
 
+### 上下文预算
+
+一个 IM 会话的上下文由四块拼成，各有各的上限：
+
+| 块 | 注入方式 | 上限 |
+| --- | --- | --- |
+| 角色卡 / 领域附加说明 | 新建会话时注入，身份或角色卡内容变化时重新注入 | 角色卡 8000 字 |
+| 领域共享记忆 | `memoryEnabled` 时**全量**注入，最近的优先 | `memoryMaxChars`（200~8000，默认 2000） |
+| 知识库 | 默认**不注入**，模型按需调 `lane_kb_*` | 单次调用上限 |
+| 知识库自动检索 | 触发词命中才检索并注入片段 | `kbRetrieveChars`（默认 1500） |
+
+`sessionMaxTurns > 0` 时，回合结束后计数，达到阈值触发归档：`prompt()` 发一条内部指令 → 模型调用 `lane_retire` 写记忆 / 知识库草稿 → `reset()` 丢弃 DSH 会话。归档期间 `isRetiring(key)` 为真，`index.js` 的 `onTurnEnd` 直接返回，所以归档指令和模型对它的回应都不会发到群里。等待归档回合有上限（默认 90 秒），到点无论如何都重置——宁可丢一次沉淀，也不让上下文无限增长。
+
 ## 4. 数据模型
 
 默认都在 `$DSH_HOME/lane-bridge/` 下（可用插件行的 `dataDir` 覆盖）：

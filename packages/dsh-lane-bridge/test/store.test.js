@@ -90,7 +90,36 @@ test('normalizeState combines multi-select triggers and keeps the legacy field i
   assert.deepEqual(state.domains.find((d) => d.id === 'd').triggers, ['all'], 'empty falls back to all');
 });
 
-test('normalizeState keeps per-domain repository overrides', () => {  const state = normalizeState({
+test('normalizeState clamps the context-budget and retrieval knobs', () => {
+  const state = normalizeState({
+    domains: [{
+      id: 'game',
+      sessionMaxTurns: '12',
+      kbAutoRetrieve: 'yes',
+      kbTriggerKeywords: [' 存档 ', '存档', '', '闪退'],
+      kbRetrieveChars: 99999,
+      memoryMaxChars: 1,
+    }],
+    roles: [{ name: '客服', content: 'x' }],
+  });
+  const domain = state.domains[0];
+  assert.equal(domain.sessionMaxTurns, 12);
+  assert.equal(domain.kbAutoRetrieve, false, 'only a real true enables retrieval');
+  assert.deepEqual(domain.kbTriggerKeywords, ['存档', '闪退']);
+  assert.equal(domain.kbRetrieveChars, 8000);
+  assert.equal(domain.memoryMaxChars, 200);
+
+  const defaults = normalizeState({ domains: [{ id: 'x' }], roles: [{ name: '客服', content: 'x' }] });
+  assert.equal(defaults.domains[0].sessionMaxTurns, 0);
+  assert.equal(defaults.domains[0].kbRetrieveChars, 1500);
+  assert.deepEqual(defaults.domains[0].kbTriggerKeywords, []);
+
+  const bad = normalizeState({ domains: [{ id: 'x', sessionMaxTurns: -5 }], roles: [{ name: '客服', content: 'x' }] });
+  assert.equal(bad.domains[0].sessionMaxTurns, 0);
+});
+
+test('normalizeState keeps per-domain repository overrides', () => {
+  const state = normalizeState({
     domains: [{
       id: 'game',
       name: '游戏',

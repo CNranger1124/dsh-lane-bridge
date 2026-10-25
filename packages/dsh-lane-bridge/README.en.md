@@ -185,6 +185,52 @@ Identity: {{identity}} | from: {{kind}} | channel: {{channel}}
 If ordinary members must not obtain some information at all, do not rely on the
 prompt — put it in another domain with another knowledge scope.
 
+## Context budget: archival, memory length, knowledge retrieval
+
+Three different things reach the prompt in three different ways:
+
+| What | How it enters | Cap |
+| --- | --- | --- |
+| Role card + domain extra instructions | injected when the session is created; re-injected when the speaker identity flips | role card 8000 chars |
+| Domain shared memory | **injected in full** when `memoryEnabled`, newest first | `memoryMaxChars` 200–8000, default 2000 |
+| Knowledge base | **never injected by default**; only when the model calls `lane_kb_*` | per-call limits |
+| KB auto retrieval | when enabled, snippets are injected only if the inbound text matches a **trigger word** | `kbRetrieveChars` 200–8000, default 1500 |
+
+In other words: only memory is injected wholesale. The knowledge base is never
+sent in full — the default behaviour already matches what you want.
+
+### Session archival (`sessionMaxTurns`)
+
+`0` disables it (default). With N:
+
+1. Every answered turn increments `state.sessions[key].turns` (persisted, survives restarts).
+2. At N the bridge starts an **internal archival turn**: the model is asked to
+   call `lane_retire` and split what matters into
+   - `memory`: facts needed beyond this conversation → domain memory;
+   - `kb`: product facts confirmed here and not covered yet → a KB **draft**
+     (still requires human approval).
+3. The DSH session is then reset; the next message starts clean, with the freshly
+   written memory and KB matches.
+
+Boundaries:
+
+- The archival turn's text **never reaches the chat** (replies are suppressed while
+  `isRetiring`).
+- A model that ignores the instruction cannot pin the conversation: the wait is
+  capped at 90 s and the reset happens anyway (the log says
+  `归档回合未沉淀任何内容`).
+- Archival runs only after an answered turn; it never interrupts a live exchange.
+- Each archival costs one extra model call. Very small N (5) makes both cost and
+  the "memory wipe" feeling obvious; 30–80 is the sane range for support.
+
+### Memory length
+
+- One entry ≤500 chars, ≤200 entries per domain; injection takes the newest
+  entries until `memoryMaxChars` (default 2000, max 8000) is reached and drops the
+  rest.
+- 8000 Chinese chars ≈ 4k tokens; unless you keep long checklists, 2000–3000 is
+  the better trade.
+
 ## Migrating from `qq-bridge`
 
 ```sh

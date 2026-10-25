@@ -153,6 +153,25 @@ This is still *channel identity*, not strong authentication: the SnowLuma QQ
 number is only as trustworthy as the OneBot gateway, whereas openids are issued
 by the platform and are unique per bot.
 
+### Context budget
+
+Four blocks make up a conversation's prompt, each with its own cap:
+
+| Block | How it is injected | Cap |
+| --- | --- | --- |
+| Role card / domain instructions | at session creation, re-injected when the identity or the card changes | role card 8000 chars |
+| Domain shared memory | **in full** when `memoryEnabled`, newest first | `memoryMaxChars` (200–8000, default 2000) |
+| Knowledge base | **not injected** by default; the model calls `lane_kb_*` | per-call limits |
+| KB auto retrieval | only when a trigger word matches | `kbRetrieveChars` (default 1500) |
+
+With `sessionMaxTurns > 0`, answered turns are counted and the threshold starts an
+archival turn: `prompt()` sends an internal instruction, the model calls
+`lane_retire` to write memory / KB drafts, then `reset()` drops the DSH session.
+While `isRetiring(key)` is true, `index.js`'s `onTurnEnd` returns early, so neither
+the instruction nor the model's reply reaches the chat. The wait for that turn is
+bounded (90 s by default) and the reset happens regardless — losing one
+sedimentation is preferable to unbounded context growth.
+
 ## 4. Data model
 
 Everything lives under `$DSH_HOME/lane-bridge/` by default (override with the

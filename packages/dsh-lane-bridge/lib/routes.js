@@ -132,6 +132,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (!/^[a-zA-Z0-9._-]{1,60}$/u.test(String(domain.id ?? ''))) throw new Error('domain.id 只允许字母数字 . _ -');
       if (domain.role && !roles.has(String(domain.role))) throw new Error(`domain.role 不存在：${domain.role}`);
       if (domain.knowledgeScopes !== undefined && !Array.isArray(domain.knowledgeScopes)) throw new Error('knowledgeScopes 必须是数组');
+      if (domain.kbTriggerKeywords !== undefined && !Array.isArray(domain.kbTriggerKeywords)) throw new Error('kbTriggerKeywords 必须是数组');
       if (domain.allowedHostTools !== undefined && !Array.isArray(domain.allowedHostTools)) throw new Error('allowedHostTools 必须是数组');
       if (domain.operators !== undefined) {
         if (!Array.isArray(domain.operators)) throw new Error('domain.operators 必须是数组');

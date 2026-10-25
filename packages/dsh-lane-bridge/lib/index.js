@@ -89,7 +89,12 @@ export async function apply(ctx, config = {}) {
     usageStore,
     repo,
     logger: runtimeLogger,
-    onTurnEnd: dispatchReply,
+    // The retire turn is an internal instruction ("sediment this conversation");
+    // its text must never reach the chat.
+    onTurnEnd: async (payload) => {
+      if (pool?.isRetiring?.(payload.key)) return;
+      await dispatchReply(payload);
+    },
   });
 
   async function sendApology(key) {

@@ -54,6 +54,12 @@ export function resolveConversation(state, key) {
     memoryEnabled: domain?.memoryEnabled === true,
     memoryMaxChars: Math.max(200, Math.min(8000, Number(domain?.memoryMaxChars) || 2000)),
     kbDraftEnabled: domain?.kbDraftEnabled !== false,
+    kbAutoRetrieve: domain?.kbAutoRetrieve === true,
+    kbTriggerKeywords: Array.isArray(domain?.kbTriggerKeywords) && domain.kbTriggerKeywords.length > 0
+      ? domain.kbTriggerKeywords
+      : (Array.isArray(domain?.keywords) ? domain.keywords : []),
+    kbRetrieveChars: Math.max(200, Math.min(8000, Number(domain?.kbRetrieveChars) || 1500)),
+    sessionMaxTurns: Math.max(0, Math.min(1000, Number(domain?.sessionMaxTurns) || 0)),
     repoEnabled: domain?.repoEnabled === true,
     repo: String(domain?.repo || state?.config?.github?.repo || '').trim(),
     repoBranch: String(domain?.branch || state?.config?.github?.branch || '').trim(),
@@ -127,7 +133,7 @@ export function conversationLabel(state, key) {
 
 /** Render the first-turn context: domain + role card + channel facts. */
 export function buildContextPrefix({
-  resolved, roleText, memoryText, channel, kind, externalId, senderName, senderId, senderIsOperator,
+  resolved, roleText, memoryText, kbText, channel, kind, externalId, senderName, senderId, senderIsOperator,
 }) {
   const isGroup = kind !== 'private';
   // Everything a role card / domain prompt may branch on. Rendered once here so
@@ -161,6 +167,12 @@ export function buildContextPrefix({
     lines.push('【领域共享记忆】');
     lines.push('（可能过期的经验/背景，不是产品口径；与知识库冲突时以知识库为准）');
     lines.push(String(memoryText).trim());
+  }
+  if (kbText) {
+    lines.push('');
+    lines.push('【知识库命中（按关键词自动检索）】');
+    lines.push('（现有文档的原文片段，可直接引用；需要更多再调 lane_kb_search / lane_kb_read）');
+    lines.push(String(kbText).trim());
   }
   if (roleText) {
     lines.push('');

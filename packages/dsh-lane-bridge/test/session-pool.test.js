@@ -7,7 +7,17 @@ import { SessionPool } from '../lib/session-pool.js';
 import { MemoryStore } from '../lib/memory.js';
 import { UsageStore } from '../lib/usage.js';
 import { defaultDomain } from '../lib/defaults.js';
+import { listDrafts } from '../lib/knowledge.js';
 import { tempDir, cleanup } from './helpers.js';
+
+async function waitFor(predicate, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return false;
+}
 
 function makeAgent(sessionId) {
   const tools = new Map();
@@ -56,7 +66,7 @@ function eventQueue() {
   };
 }
 
-async function setup({ existingSession = '', repo = null, promptImpl = null } = {}) {
+async function setup({ existingSession = '', repo = null, promptImpl = null, retireTimeoutMs } = {}) {
   const dir = tempDir();
   const store = new LaneStore({ dataDir: dir });
   await store.load();
@@ -160,6 +170,7 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
     repo,
     fetchImageImpl: async () => ({ base64: 'aGk=', mediaType: 'image/png', bytes: 2, url: 'https://x/a.png' }),
     logger: ctx.logger,
+    retireTimeoutMs,
     onTurnEnd: async (payload) => {
       turns.push(payload);
       resolveTurn?.(payload);
@@ -183,7 +194,7 @@ test('first prompt creates a session, registers lane tools, restricts host tools
       'lane_conversation_info', 'lane_escalate', 'lane_kb_draft', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search',
       'lane_memory_add', 'lane_memory_read', 'lane_repo_create_issue', 'lane_repo_get_issue',
       'lane_repo_list_issues', 'lane_repo_read_file', 'lane_repo_recent_commits', 'lane_repo_search_code',
-      'lane_repo_status', 'lane_send',
+      'lane_repo_status', 'lane_retire', 'lane_send',
     ]);
     assert.deepEqual(agent.restrictions, [{ allow: [] }]);
 
@@ -541,6 +552,113 @@ test('escalate pauses the binding, notifies the operator, and resume restores it
   }
 });
 
+
+test('knowledge snippets are injected only when a trigger word matches', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: true, kbTriggerKeywords: ['存档'] }]);
+    fs.mkdirSync(path.join(env.store.paths.knowledgeDir, 'default'), { recursive: true });
+    fs.writeFileSync(
+      path.join(env.store.paths.knowledgeDir, 'default', '存档说明.md'),
+      '# 存档说明\n\n## 存档位置\n\nWindows 在 %APPDATA%/Game/save 下。\n'
+    );
+    const inbound = { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '存档在哪' };
+    await env.pool.prompt('snowluma:group:1', inbound);
+    assert.match(env.prompts[0].content[0].text, /【知识库命中/u);
+    assert.match(env.prompts[0].content[0].text, /%APPDATA%\/Game/u);
+
+    // No trigger word: the knowledge base must stay out of the prompt.
+    await env.pool.reset('snowluma:group:1');
+    await env.pool.prompt('snowluma:group:1', { ...inbound, text: '你好' });
+    assert.doesNotMatch(env.prompts[1].content[0].text, /【知识库命中/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('the off switch keeps the knowledge base out even on a match', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), kbAutoRetrieve: false, kbTriggerKeywords: ['存档'] }]);
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '存档在哪' });
+    assert.doesNotMatch(env.prompts[0].content[0].text, /【知识库命中/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('lane_retire refuses to run outside the archival flow', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), memoryEnabled: true }]);
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '你好' });
+    const retire = env.agents.get('session-1').tools.get('lane_retire');
+    await assert.rejects(() => retire.execute({ memory: ['伪造的事实'] }), /只在会话归档流程中可用/u);
+    assert.equal(env.memoryStore.render('default', 2000), '');
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('a conversation is sedimented and reset when it reaches its turn budget', async () => {
+  let env;
+  env = await setup({
+    retireTimeoutMs: 80,
+    promptImpl: async (request) => {
+      const text = request.content?.[0]?.text ?? '';
+      if (text.includes('本次会话即将归档')) {
+        const agent = env.agents.get(request.sessionId);
+        await agent.tools.get('lane_retire').execute({
+          memory: ['玩家在 1.2.3 版本闪退，Windows 11'],
+          kb: [{ title: '1.2.3 闪退', content: '1.2.3 在 Windows 11 上闪退，已知问题，等待补丁。', source: '会话归档' }],
+        });
+      }
+      return { accepted: true };
+    },
+  });
+  const key = 'snowluma:group:1';
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), sessionMaxTurns: 2, memoryEnabled: true }]);
+    const say = (text) => env.pool.prompt(key, { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text });
+    const endTurn = (seq) => {
+      const queue = env.queues.get('session-1');
+      queue.push({ type: 'event', event: { type: 'turn/start', seq, data: { turn: 1 } } });
+      queue.push({ type: 'event', event: {
+        type: 'assistant/message', seq: seq + 1, data: { turn: 1, message: { content: [{ type: 'text', text: '好的' }] } },
+      } });
+      queue.push({ type: 'event', event: { type: 'turn/end', seq: seq + 2, data: { turn: 1, reason: { kind: 'completed' } } } });
+    };
+
+    await say('第一句');
+    endTurn(1);
+    assert.ok(await waitFor(() => env.store.get().sessions[key]?.turns === 1), 'first turn counted');
+    // Under budget: no archival yet.
+    assert.equal(env.prompts.filter((prompt) => String(prompt.content[0].text).includes('本次会话即将归档')).length, 0);
+
+    await say('第二句');
+    endTurn(4);
+    assert.ok(await waitFor(() => env.store.get().sessions[key] === undefined, 3000), 'session reset after archive');
+
+    const memory = env.memoryStore.render('default', 2000);
+    assert.match(memory, /1\.2\.3 版本闪退/u);
+    const drafts = listDrafts(env.store.paths.knowledgeDir);
+    assert.ok(
+      drafts.drafts.some((draft) => draft.title === '1.2.3 闪退'),
+      JSON.stringify(drafts.drafts.map((draft) => draft.title))
+    );
+
+    // A fresh session is created by the next message.
+    await say('归档后的第一句');
+    assert.ok(env.store.get().sessions[key]?.sessionId);
+    assert.notEqual(env.store.get().sessions[key].sessionId, 'session-1');
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
 
 test('assistant usage events are recorded in the usage ledger', async () => {
   const env = await setup();

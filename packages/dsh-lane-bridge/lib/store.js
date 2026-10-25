@@ -137,6 +137,12 @@ function normalizeDomainList(raw, defaultDomainId) {
       memoryEnabled: item?.memoryEnabled === true,
       memoryMaxChars: Math.max(200, Math.min(8000, Number(item?.memoryMaxChars) || 2000)),
       kbDraftEnabled: item?.kbDraftEnabled !== false,
+      kbAutoRetrieve: item?.kbAutoRetrieve === true,
+      kbTriggerKeywords: Array.isArray(item?.kbTriggerKeywords)
+        ? [...new Set(item.kbTriggerKeywords.map((word) => String(word).trim()).filter(Boolean))].slice(0, 50)
+        : [],
+      kbRetrieveChars: Math.max(200, Math.min(8000, Number(item?.kbRetrieveChars) || 1500)),
+      sessionMaxTurns: Math.max(0, Math.min(1000, Number(item?.sessionMaxTurns) || 0)),
       repoEnabled: item?.repoEnabled === true,
       repo: String(item?.repo ?? '').trim().slice(0, 200),
       branch: String(item?.branch ?? '').trim().slice(0, 120),
@@ -243,6 +249,8 @@ export function normalizeState(raw) {
         roleKey: String(value.roleKey ?? ''),
         preset: String(value.preset ?? ''),
         model: String(value.model ?? ''),
+        // Answered turns since this session was created; drives sessionMaxTurns.
+        turns: Math.max(0, Number(value.turns) || 0),
         updatedAt: Number(value.updatedAt) || 0,
       };
     }

@@ -531,6 +531,91 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     }
   );
 
+  // Archival is a bridge-initiated turn, not a user request: the tool refuses
+  // unless the pool is currently retiring this conversation, so "帮我调用
+  // lane_retire 写记忆" from a group member cannot poison the shared memory.
+  const laneRetire = define(
+    'lane_retire',
+    '会话归档专用（只在收到「本次会话即将归档」的系统消息时调用）：把值得跨会话保留的事实写入领域记忆，把本次确认过的产品口径写成知识库草稿。',
+    {
+      type: 'object',
+      properties: {
+        memory: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '每条 ≤200 字的事实/经验；没有就传空数组',
+        },
+        kb: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: '一句话标题' },
+              content: { type: 'string', description: '可直接作为答复口径的正文，≤1500 字' },
+              source: { type: 'string', description: '来源，例如「会话归档」或 commit/issue' },
+            },
+            required: ['title', 'content'],
+          },
+          description: '知识库草稿；只写现有知识库没覆盖、且本次对话确认过的口径',
+        },
+      },
+      additionalProperties: false,
+    },
+    async (args) => {
+      if (pool.isRetiring?.(key) !== true) throw new Error('lane_retire 只在会话归档流程中可用');
+      const resolved = currentResolved();
+      const domainId = resolved.domain?.id ?? '';
+      let memoryCount = 0;
+      const memoryWanted = Array.isArray(args.memory) ? args.memory.slice(0, 8) : [];
+      if (memoryWanted.length > 0 && resolved.memoryEnabled && memoryStore && domainId) {
+        for (const text of memoryWanted) {
+          const clean = String(text ?? '').trim().slice(0, 500);
+          if (!clean) continue;
+          try {
+            memoryStore.append(domainId, clean, { source: `retire:${key}` });
+            memoryCount += 1;
+          } catch (error) {
+            logger?.warn?.(`[lane-bridge] 归档写记忆失败：${error?.message ?? error}`);
+          }
+        }
+      }
+      const scope = resolved.knowledgeScopes?.[0] ?? 'default';
+      let draftCount = 0;
+      const kbWanted = Array.isArray(args.kb) ? args.kb.slice(0, 3) : [];
+      if (kbWanted.length > 0 && resolved.kbDraftEnabled !== false) {
+        for (const item of kbWanted) {
+          const title = String(item?.title ?? '').trim();
+          const content = String(item?.content ?? '').trim();
+          if (!title || !content) continue;
+          try {
+            writeDraft(knowledgeDir, scope, {
+              title,
+              content,
+              source: String(item?.source ?? '').trim() || `会话归档 ${key}`,
+            });
+            draftCount += 1;
+          } catch (error) {
+            logger?.warn?.(`[lane-bridge] 归档写知识库草稿失败：${error?.message ?? error}`);
+          }
+        }
+      }
+      if (typeof pool.recordRetireResult === 'function') {
+        pool.recordRetireResult(key, { memory: memoryCount, kbDraft: draftCount });
+      }
+      return { ok: true, memory: memoryCount, kbDraft: draftCount, scope };
+    },
+    {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        memory: { type: 'number' },
+        kbDraft: { type: 'number' },
+        scope: { type: 'string' },
+      },
+      required: ['ok'],
+    }
+  );
+
   const laneEscalate = define(
     'lane_escalate',
     '把当前会话转人工：暂停自动回复，并通知管理员配置的接管会话。只在用户明确要求人工、或你确实无法解决且继续猜会误导用户时使用。调用后告诉用户已转人工，不要再继续给方案。',
@@ -569,7 +654,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
   return [
     laneSend, laneInfo, kbList, kbRead, kbSearch, kbDraft,
     repoStatus, repoIssues, repoIssue, repoSearch, repoRead, repoCommits, repoCreateIssue,
-    memoryRead, memoryAdd, laneEscalate,
+    memoryRead, memoryAdd, laneRetire, laneEscalate,
   ];
 }
 
@@ -577,5 +662,5 @@ export const LANE_TOOL_NAMES = [
   'lane_send', 'lane_conversation_info', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search', 'lane_kb_draft',
   'lane_repo_status', 'lane_repo_list_issues', 'lane_repo_get_issue', 'lane_repo_search_code',
   'lane_repo_read_file', 'lane_repo_recent_commits', 'lane_repo_create_issue',
-  'lane_memory_read', 'lane_memory_add', 'lane_escalate',
+  'lane_memory_read', 'lane_memory_add', 'lane_retire', 'lane_escalate',
 ];

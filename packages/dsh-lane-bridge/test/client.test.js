@@ -191,6 +191,10 @@ test('domain cards expose a save button in the header and footer', async () => {
   assert.ok(text.some((line) => line.includes('所有人都是管理员')), text.join(' '));
   // The domain prompt field documents the identity template syntax.
   assert.ok(text.some((line) => line.includes('{{#if operator}}')), text.join(' '));
+  // Context budget + retrieval controls live on the same card.
+  for (const label of ['会话归档轮数', '知识库自动检索', '检索片段上限', '记忆注入上限']) {
+    assert.ok(text.includes(label), `missing ${label}`);
+  }
 
   // Multi-value fields are chip lists, not comma-joined text boxes: every stored
   // value appears as its own chip and no input carries a "a, b" string.

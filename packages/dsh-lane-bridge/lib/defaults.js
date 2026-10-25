@@ -190,6 +190,14 @@ export function defaultDomain() {
     memoryEnabled: false,
     memoryMaxChars: 2000,
     kbDraftEnabled: true,
+    // Automatic knowledge retrieval: when the inbound text matches a trigger
+    // word, matching document snippets are injected into the prompt. The KB is
+    // never sent wholesale, and `lane_kb_*` stays available to dig further.
+    kbAutoRetrieve: false,
+    kbTriggerKeywords: [],
+    kbRetrieveChars: 1500,
+    // Retire (sediment + reset) after N answered turns. 0 = never.
+    sessionMaxTurns: 0,
     repoEnabled: false,
     repo: '',
     branch: '',

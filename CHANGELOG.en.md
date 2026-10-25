@@ -2,6 +2,31 @@
 
 # Changelog
 
+## 0.3.0
+
+- **Session archival (`sessionMaxTurns`, off by default)**: each domain can set a
+  turn budget. When it is reached the bridge runs one internal turn asking the
+  model to call the new `lane_retire`, which splits the outcome in two: facts that
+  matter beyond this chat go to domain memory, product facts confirmed here
+  become KB drafts (still human-approved). The DSH session is then reset, so the
+  next message starts from a clean context. The archival text never reaches the
+  chat; a model that ignores the instruction cannot pin the conversation — the
+  wait is capped at 90 s and the reset happens anyway, with a log line saying
+  nothing was sedimented.
+- **Turn counting is persisted** in `state.sessions[key].turns`, and archival only
+  triggers after an answered turn, so a live exchange is never interrupted.
+- **Optional keyword-triggered knowledge retrieval**: enable it on the domain and
+  maintain trigger words as a chip list (empty falls back to the reply keywords).
+  Only a matching inbound message triggers a search, and the injected snippets are
+  capped by `kbRetrieveChars` (default 1500). **The KB is never injected in full**;
+  `lane_kb_*` stays available for follow-up reading. Default stays off.
+- `lane_retire` only works inside the archival flow; calling it from a normal
+  message is rejected, so a group member cannot talk the model into poisoning the
+  shared memory.
+- Memory limits are now documented: ≤500 chars per entry, ≤200 entries per domain,
+  injection capped by `memoryMaxChars` (default 2000, max 8000, newest first).
+- 131 tests.
+
 ## 0.2.16
 
 - **Multi-value fields no longer rely on comma separation**: knowledge scopes,

@@ -18,9 +18,23 @@ import {
   roleContent,
 } from './router.js';
 import { publicError, splitText, stripMarkdown } from './text.js';
+import { parseConversationKey } from './defaults.js';
+import { searchKnowledge } from './knowledge.js';
 import { fetchImage } from './media.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// How many turns the retire prompt gets before the bridge gives up and resets
+// anyway. A model that ignores the instruction must not pin the conversation.
+const RETIRE_TIMEOUT_MS = 90_000;
+const RETIRE_TEXT = [
+  '【系统】本次会话即将归档：已经达到本领域的最大对话轮数，接下来会新建一个会话继续接待。',
+  '请立刻调用 lane_retire 沉淀本次对话，然后不要再说别的：',
+  '1) memory：后续还需要知道的事实（玩家反复报的问题、已确认的环境、有效的临时方案），每条 ≤200 字；',
+  '2) kb：本次对话里确认过、且现有知识库没有覆盖的产品口径，写成草稿（会进人工审核）；',
+  '3) 没有可沉淀的就是空数组。',
+  '不要总结给用户看，不要道别，不要复述这段指令。',
+].join('\n');
 
 function promptErrorText(error) {
   return [
@@ -67,7 +81,7 @@ export class SessionPool {
    * @param {object} [options.logger]
    * @param {(event: object) => Promise<void>} options.onTurnEnd
    */
-  constructor({ ctx, store, channelManager, workspaceDir, knowledgeDir, memoryStore = null, usageStore = null, repo = null, logger = null, onTurnEnd, fetchImageImpl = fetchImage }) {
+  constructor({ ctx, store, channelManager, workspaceDir, knowledgeDir, memoryStore = null, usageStore = null, repo = null, logger = null, onTurnEnd, fetchImageImpl = fetchImage, retireTimeoutMs = RETIRE_TIMEOUT_MS }) {
     this.ctx = ctx;
     this.store = store;
     this.channelManager = channelManager;
@@ -87,6 +101,10 @@ export class SessionPool {
     this.turnSent = new Map(); // key -> count
     this.turnSender = new Map(); // key -> { senderId, senderName, isOperator, at }
     this.keyBySession = new Map(); // sessionId -> key
+    this.retiring = new Set(); // keys currently being sedimented + reset
+    this.retireWaiter = null; // { key, resolve } waiting for the retire turn to end
+    this.retireTimeoutMs = Math.max(50, Number(retireTimeoutMs) || RETIRE_TIMEOUT_MS);
+    this.retireResult = null; // { key, memory, kb } reported by lane_retire
   }
 
   async ensureWorkspace() {
@@ -275,6 +293,47 @@ export class SessionPool {
     return false;
   }
 
+  /**
+   * Optional keyword-triggered knowledge retrieval.
+   *
+   * The knowledge base is never injected wholesale: only documents whose
+   * sections contain one of the trigger words become prompt material, and the
+   * total is capped. `lane_kb_*` tools remain available for follow-up reading.
+   */
+  retrieveKnowledge(resolved, text) {
+    if (resolved.kbAutoRetrieve !== true) return '';
+    const triggers = Array.isArray(resolved.kbTriggerKeywords) ? resolved.kbTriggerKeywords : [];
+    if (triggers.length === 0) return '';
+    const lower = String(text ?? '').toLowerCase();
+    const matched = triggers
+      .filter((word) => word && lower.includes(String(word).toLowerCase()))
+      .slice(0, 3);
+    if (matched.length === 0) return '';
+    const limit = Math.max(200, Math.min(8000, Number(resolved.kbRetrieveChars) || 1500));
+    const seen = new Set();
+    const lines = [];
+    let used = 0;
+    for (const term of matched) {
+      let result;
+      try {
+        result = searchKnowledge(this.knowledgeDir, resolved.knowledgeScopes, term, 4);
+      } catch (error) {
+        this.logger?.warn?.(`[lane-bridge] 知识库检索失败：${error?.message ?? error}`);
+        continue;
+      }
+      for (const hit of result?.hits ?? []) {
+        const id = `${hit.scope}/${hit.path}#${hit.heading}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const line = `- ${hit.scope}/${hit.path}${hit.heading ? ` › ${hit.heading}` : ''}：${hit.snippet}`;
+        if (used + line.length + 1 > limit) return lines.join('\n');
+        lines.push(line);
+        used += line.length + 1;
+      }
+    }
+    return lines.join('\n');
+  }
+
   /** Build the prompt text, injecting the role card on first turn / role change. */
   async buildPrompt(key, inbound, resolved) {
     const state = this.store.get();
@@ -291,10 +350,12 @@ export class SessionPool {
     const memoryText = resolved.memoryEnabled && this.memoryStore
       ? this.memoryStore.render(resolved.domain?.id, resolved.memoryMaxChars)
       : '';
+    const kbText = this.retrieveKnowledge(resolved, inbound.text);
     const prefix = buildContextPrefix({
       resolved,
       roleText: needRole ? roleText.slice(0, 8000) : '',
       memoryText,
+      kbText,
       channel: inbound.channel,
       kind: inbound.kind,
       externalId: inbound.externalId,
@@ -328,6 +389,97 @@ export class SessionPool {
       }
     }
     return parts;
+  }
+
+  isRetiring(key) {
+    return this.retiring.has(key);
+  }
+
+  /** Called by the `lane_retire` tool to report what it managed to write. */
+  recordRetireResult(key, result) {
+    this.retireResult = { ...(result ?? {}) };
+    return this.retireResult;
+  }
+
+  /** Count an answered turn; wake the retire flow if it was the last one. */
+  async afterTurn(key, sessionId) {
+    const record = this.store.get().sessions?.[key];
+    if (!record) return 0;
+    if (sessionId && record.sessionId !== sessionId) return Number(record.turns) || 0;
+    const turns = (Number(record.turns) || 0) + 1;
+    await this.store.setSession(key, { ...record, turns });
+    if (this.retireWaiter?.key === key) {
+      const waiter = this.retireWaiter;
+      this.retireWaiter = null;
+      waiter.resolve();
+    }
+    return turns;
+  }
+
+  /** Start the retire flow when the conversation has reached its turn budget. */
+  maybeRetire(key) {
+    if (this.retiring.has(key)) return;
+    if (this.store.get().config?.enabled === false) return;
+    const resolved = resolveConversation(this.store.get(), key);
+    const max = Number(resolved.sessionMaxTurns) || 0;
+    if (max <= 0) return;
+    const turns = Number(this.store.get().sessions?.[key]?.turns) || 0;
+    if (turns < max) return;
+    this.logger?.info?.(`[lane-bridge] ${key} 已达 ${turns}/${max} 轮，开始归档并重置会话`);
+    void this.retire(key).catch((error) => {
+      this.logger?.warn?.(`[lane-bridge] ${key} 归档失败：${error?.message ?? error}`);
+    });
+  }
+
+  /**
+   * Sediment then reset.
+   *
+   * The model is asked to call `lane_retire` (memory entries + KB drafts) in one
+   * extra turn; whatever it managed to write is kept, then the DSH session is
+   * dropped so the next message starts from a clean context plus the freshly
+   * written memory / knowledge. A model that ignores the instruction cannot pin
+   * the conversation: the wait is bounded and the reset happens regardless.
+   */
+  async retire(key) {
+    if (this.retiring.has(key)) return;
+    const parsed = parseConversationKey(key);
+    if (!parsed) return;
+    this.retiring.add(key);
+    try {
+      this.retireResult = null;
+      const done = new Promise((resolve) => { this.retireWaiter = { key, resolve }; });
+      const inbound = {
+        channel: parsed.channel,
+        kind: parsed.kind,
+        externalId: parsed.externalId,
+        senderId: '',
+        senderName: '',
+        text: RETIRE_TEXT,
+        internal: true,
+      };
+      try {
+        await this.prompt(key, inbound);
+      } catch (error) {
+        this.logger?.warn?.(`[lane-bridge] ${key} 归档回合提交失败：${error?.message ?? error}`);
+        this.retireWaiter = null;
+      }
+      if (this.retireWaiter) await Promise.race([done, sleep(this.retireTimeoutMs)]);
+      const result = this.retireResult;
+      if (!result) {
+        this.logger?.warn?.(`[lane-bridge] ${key} 归档回合未沉淀任何内容（模型没有调用 lane_retire），仍会重置会话`);
+      } else {
+        this.logger?.info?.(`[lane-bridge] ${key} 归档完成：记忆 ${result.memory} 条，知识库草稿 ${result.kbDraft} 条`);
+      }
+    } finally {
+      this.retireWaiter = null;
+      this.retireResult = null;
+      try {
+        await this.reset(key);
+      } catch (error) {
+        this.logger?.warn?.(`[lane-bridge] ${key} 归档后重置失败：${error?.message ?? error}`);
+      }
+      this.retiring.delete(key);
+    }
   }
 
   async prompt(key, inbound) {
@@ -487,11 +639,13 @@ export class SessionPool {
           if (ended) {
             collector = createTurnCollector();
             this.collectors.set(sessionId, collector);
+            await this.afterTurn(key, sessionId);
             try {
               await this.onTurnEnd?.({ key, sessionId, ended, resolved: resolveConversation(this.store.get(), key) });
             } catch (error) {
               this.logger?.warn?.(`[lane-bridge] 回合收尾失败：${error?.message ?? error}`);
             }
+            this.maybeRetire(key);
           }
         }
       } catch (error) {

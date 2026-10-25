@@ -1007,6 +1007,7 @@ window.__ModuleLoader__.load({
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
           knowledgeScopes: ['default'], allowedHostTools: [], operators: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
           kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
+          kbAutoRetrieve: false, kbTriggerKeywords: [], kbRetrieveChars: 1500, sessionMaxTurns: 0,
         }]);
         setSelected(id);
       };
@@ -1116,8 +1117,29 @@ window.__ModuleLoader__.load({
                   '启用领域共享记忆'
                 )
               ),
-              h(Field, { label: '记忆注入上限', hint: '字符数' },
+              h(Field, { label: '记忆注入上限', hint: '字符数；超出后从最旧的条目开始丢掉' },
                 h('input', { className: 'lb-input', type: 'number', min: 200, max: 8000, value: current.memoryMaxChars ?? 2000, onChange: (e) => patch('memoryMaxChars', Number(e.target.value)) })
+              ),
+              h(Field, { label: '会话归档轮数', hint: '0=不归档。达到轮数后先让模型把要点写进记忆/知识库草稿，再重置 DSH 会话，避免上下文无限增长' },
+                h('input', { className: 'lb-input', type: 'number', min: 0, max: 1000, value: current.sessionMaxTurns ?? 0, onChange: (e) => patch('sessionMaxTurns', Number(e.target.value)) })
+              ),
+              h(Field, { label: '知识库自动检索', hint: '只有触发词命中时才注入片段，不做全量发送；没命中就靠 lane_kb_* 自己去查' },
+                h('div', { className: 'lb-field' },
+                  h('label', { className: 'lb-check' },
+                    h('input', { type: 'checkbox', checked: current.kbAutoRetrieve === true, onChange: (e) => patch('kbAutoRetrieve', e.target.checked) }),
+                    '触发词命中时自动检索知识库'
+                  ),
+                  h(ChipList, {
+                    values: current.kbTriggerKeywords,
+                    onChange: (next) => patch('kbTriggerKeywords', next),
+                    placeholder: '触发词，例如 存档',
+                    addLabel: '+ 添加',
+                    emptyText: '留空＝沿用上面的「关键词」',
+                  })
+                )
+              ),
+              h(Field, { label: '检索片段上限', hint: '字符数，避免把上下文塞满' },
+                h('input', { className: 'lb-input', type: 'number', min: 200, max: 8000, value: current.kbRetrieveChars ?? 1500, onChange: (e) => patch('kbRetrieveChars', Number(e.target.value)) })
               ),
               h(Field, { label: '知识库草稿' },
                 h('label', { className: 'lb-check' },
