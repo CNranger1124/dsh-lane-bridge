@@ -2,6 +2,26 @@
 
 # Changelog
 
+## 0.4.3
+
+- **Corrects the 0.4.1 behaviour**: the bridge used to strip `msg_id` after a
+  self-invented 4-minute window, which turned a valid passive reply into an active
+  message and produced `40034105`. A `msg_id` is now always sent when the
+  conversation has one, and the platform decides whether it is still valid.
+  `passiveMinutes` is gone.
+- **QQ rules taken from the official docs**: passive `msg_id` is valid for 5
+  minutes with at most 5 replies per message; active messages are rate-limited at
+  60 qpm (certified) / 30 qpm (uncertified) per bot, 20 qpm per relationship and
+  1000/day per group. The adapter caps passive replies at 5 bubbles and logs the
+  overflow.
+- **Error-code translation**: `40034105` (no permission — usually not published or
+  sandboxed), `40034100` (rate limit), `40034005`/`40034128` (passive reply
+  expired), `40034024`, `40034101`/`40054003`, `40054002`, `40054005`, `40054007`,
+  `40054010`, `40054016` all get a concrete fix hint.
+- Sends without a `msg_id` (push, cross-group, never-received conversations) are
+  still refused locally unless "allow active messages" is ticked.
+- 145 tests.
+
 ## 0.4.2
 
 - **Partial push failures no longer show a bare "HTTP 207"**: `POST /api/push`

@@ -642,24 +642,13 @@ window.__ModuleLoader__.load({
                   checked: entry.allowActive === true,
                   onChange: (e) => setChannel('qqbot', 'allowActive', e.target.checked),
                 }),
-                '允许主动消息（需要 QQ 开放平台权限）'
+                '允许主动消息（不使用 msg_id 直接发送）'
               ),
               h('div', { className: 'lb-muted' },
-                'QQ 只允许「被动回复」：收到消息后若干分钟内、带着那条消息的 msg_id 回复。'
-                + '超过窗口、或主动往群里推送，都属于主动消息，平台会返回「主动消息失败, 无权限」。'
-                + '不勾选时，桥接会在本地直接拦下并说明原因，不会去撞平台接口。'
-              ),
-              h('div', { className: 'lb-row' },
-                h('span', { className: 'lb-label' }, '被动回复窗口（分钟）'),
-                h('input', {
-                  className: 'lb-input',
-                  type: 'number',
-                  min: 1,
-                  max: 60,
-                  style: { maxWidth: 90 },
-                  value: entry.passiveMinutes ?? 4,
-                  onChange: (e) => setChannel('qqbot', 'passiveMinutes', Number(e.target.value)),
-                })
+                'QQ 的规则：被动回复带 msg_id，5 分钟内有效、同一条消息最多回 5 次，不需要额外权限；'
+                + '不带宽 msg_id 的是主动消息，受频控（认证 60 qpm / 未认证 30 qpm，单关系 20 qpm，每个群每天 1000 条），'
+                + '机器人没有这项能力时平台返回「40034105 主动消息发送失败，无权限」。'
+                + '不勾选时，桥接会在本地拦下没有 msg_id 的发送，不会去撞平台接口。'
               )
             ) : null,
             status?.lastError ? h('div', { className: 'lb-muted' }, `状态：${status.lastError}`) : null,

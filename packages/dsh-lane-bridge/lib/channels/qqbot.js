@@ -120,59 +120,88 @@ export class QqbotAdapter extends ChannelAdapter {
   /**
    * Send text to a c2c/group target.
    *
-   * QQ Open Platform only lets a bot answer **the message it just received**
-   * (passive reply, carried by `msgId`, valid for a few minutes). Anything else
-   * is an *active message* which needs an explicit permission/配额 on the
-   * platform — without it the API answers `主动消息失败, 无权限`.
+   * Two kinds of request hit the same endpoint:
+   *   - **passive reply**: carries `msg_id` (+ auto `msg_seq`) of a message the
+   *     bot received. Always allowed.
+   *   - **active message**: no `msg_id`. Subject to a platform permission/额度; on
+   *     a bot without it the API answers `主动消息失败, 无权限`.
    *
-   * The bridge therefore never silently degrades into an active message: the
-   * passive window is checked here, and an out-of-window send fails fast with an
-   * actionable error unless `allowActive` was switched on deliberately.
+   * The rule here is therefore about *having a msg_id*, not about its age: if we
+   * have one we always send it and let the platform decide whether it is still
+   * acceptable (stripping it ourselves would silently turn a valid reply into a
+   * rejected active message).
    */
   async send(conversation, messages) {
     if (!this.bot) throw new Error('QQ Bot 未连接');
     const cfg = this.config ?? {};
-    const ttlMinutes = Math.max(1, Number(cfg.passiveMinutes) || 4);
-    const replyAt = Number(conversation.replyToAt) || 0;
-    const hasReply = Boolean(conversation.replyToId);
-    // No timestamp means a caller that built the target by hand; trust it.
-    const inWindow = hasReply && (!replyAt || Date.now() - replyAt <= ttlMinutes * 60 * 1000);
     const allowActive = cfg.allowActive === true;
-    if (!inWindow && !allowActive) {
+    const replyToId = String(conversation.replyToId ?? '').trim();
+    const passive = replyToId !== '';
+    if (!passive && !allowActive) {
       const scope = conversation.kind === 'private' ? '私聊' : '群';
       throw new Error(
-        `QQ ${scope}主动消息没有权限：这条不属于「被动回复窗口」`
-        + `（收到消息后 ${ttlMinutes} 分钟内才算），平台会拒绝并返回「主动消息失败, 无权限」。`
-        + ' 需要主动推送时，先在 QQ 开放平台申请主动消息权限，再到 Settings → IM 桥接 → 官方 QQ Bot 勾选「允许主动消息」。'
+        `QQ ${scope}主动消息没有权限：这条不是「回复某条收到的消息」（没有 msg_id），属于主动消息。`
+        + ' 需要主动推送时，先确认机器人具备主动消息能力，再到 Settings → IM 桥接 → 官方 QQ Bot 勾选「允许主动消息」。'
       );
     }
     const target = {
       scope: conversation.kind === 'private' ? 'c2c' : 'group',
       targetId: String(conversation.externalId),
-      ...(inWindow ? { msgId: String(conversation.replyToId) } : {}),
+      ...(passive ? { msgId: replyToId } : {}),
     };
     const results = [];
-    for (const message of messages) {
+    // A passive reply may be used at most 5 times per received message; going
+    // past that is a hard platform error, so drop (and log) the overflow instead.
+    const queue = passive ? messages.slice(0, 5) : messages;
+    if (passive && messages.length > 5) {
+      this.logger?.warn?.(`[lane-bridge] QQ 被动回复上限 5 条，已丢弃 ${messages.length - 5} 条（${conversation.externalId}）`);
+    }
+    for (const message of queue) {
       const text = String(message ?? '').trim();
       if (!text) continue;
       try {
         results.push(await this.bot.sendText(target, text));
       } catch (error) {
-        throw this.decorateSendError(error, { active: !inWindow });
+        throw this.decorateSendError(error, { active: !passive });
       }
     }
     return results;
   }
 
-  /** Turn the platform's raw API error into something an operator can act on. */
+  /**
+   * Turn the platform's raw API error into something an operator can act on.
+   *
+   * The codes come from the official 发送群聊消息 / 发送单聊消息 pages; the SDK
+   * mostly forwards the Chinese text, so match either form.
+   */
   decorateSendError(error, { active }) {
     const message = String(error?.message ?? error);
-    if (!/无权限|not allowed|permission|403/iu.test(message)) return error;
-    const hint = active
-      ? '（这是主动消息：需要在 QQ 开放平台申请主动消息权限/额度）'
-      : '（被动回复被拒：消息可能已过期，或该消息不属于本机器人）';
-    const wrapped = new Error(`${message} ${hint}`);
+    const matched = QQ_SEND_ERROR_HINTS.find(([pattern]) => pattern.test(message));
+    if (!matched) {
+      if (!active || !/无权限|not allowed|permission|403/iu.test(message)) return error;
+      const wrapped = new Error(`${message} （这是主动消息：机器人需要具备主动消息权限）`);
+      wrapped.code = error?.code;
+      return wrapped;
+    }
+    const wrapped = new Error(`${message} （${matched[1]}）`);
     wrapped.code = error?.code;
     return wrapped;
   }
 }
+
+// [matcher, 排查建议] — order matters: the first hit wins.
+const QQ_SEND_ERROR_HINTS = [
+  [/40034105|主动消息发送失败[，,]\s*无权限/u,
+    '主动消息无权限 40034105：机器人没有主动发送能力（常见原因：机器人尚未上线 / 沙箱环境，或未在开放平台开启主动消息）。被动回复不受影响'],
+  [/40034100|主动消息发送超过频控/u,
+    '主动消息超出频控 40034100：认证机器人 60 qpm、未认证 30 qpm，单关系 20 qpm，每个群每天最多 1000 条'],
+  [/40034005|40034024|40034026|40034128|消息ID已过期|msg_id\s*已过期|被动回复时间或次数超限/u,
+    '被动回复已失效（40034005/40034128）：msg_id 只有 5 分钟有效期，且同一条消息最多回复 5 次'],
+  [/40034101|40054003|机器人非群成员|机器人不是群成员/u,
+    '机器人不在这个群里（40034101/40054003），先把机器人拉进群'],
+  [/40054002|机器人被禁言/u, '机器人在这个群里被禁言（40054002）'],
+  [/40054005|消息被去重/u, '消息被判为重复（40054005）：同一个 msg_id 的 msg_seq 必须递增'],
+  [/40054007|消息长度超限/u, '消息太长（40054007）'],
+  [/40054010|不允许发送URL/u, '这条消息不允许包含 URL（40054010）'],
+  [/40054016|机器人已下线/u, '机器人已下线（40054016）'],
+];

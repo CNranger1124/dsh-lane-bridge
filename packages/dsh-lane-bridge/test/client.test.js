@@ -472,7 +472,7 @@ test('operator rows round-trip through the channel dropdown without losing the i
   delete globalThis.__LANE_TEST__;
 });
 
-test('the official QQ Bot card exposes the active-message switch and window', async () => {
+test('the official QQ Bot card exposes the active-message switch', async () => {
   globalThis.__LANE_TEST__ = true;
   const react = {
     createElement(type, props, ...children) {
@@ -522,8 +522,8 @@ test('the official QQ Bot card exposes the active-message switch and window', as
   const text = [];
   traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
   assert.ok(text.some((line) => line.includes('允许主动消息')), text.join(' '));
-  assert.ok(text.some((line) => line.includes('被动回复窗口')), text.join(' '));
-  assert.ok(text.some((line) => line.includes('主动消息失败, 无权限')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('40034105')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('60 qpm')), text.join(' '));
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

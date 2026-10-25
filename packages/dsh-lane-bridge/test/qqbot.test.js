@@ -76,22 +76,31 @@ test('QQ Bot adapter connects and normalizes c2c/group messages', async () => {
   }
 });
 
-test('QQ Bot adapter replies passively inside the window and refuses active sends', async () => {
+test('QQ Bot keeps msg_id for replies and refuses msg_id-less sends', async () => {
   const adapter = await readyAdapter();
   try {
+    // A reply always carries msg_id, however old it is: the platform decides
+    // whether it is still valid (5 minutes), we must not strip it ourselves.
     await adapter.send({ kind: 'private', externalId: 'u-1', replyToId: 'm-1', replyToAt: Date.now() }, ['第一条', '第二条']);
     assert.equal(adapter.bot.sent.length, 2);
     assert.deepEqual(adapter.bot.sent[0].target, { scope: 'c2c', targetId: 'u-1', msgId: 'm-1' });
+    await adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-old', replyToAt: Date.now() - 60 * 60 * 1000 }, ['旧消息也带 msg_id']);
+    assert.deepEqual(adapter.bot.sent[2].target, { scope: 'group', targetId: 'g-1', msgId: 'm-old' });
 
-    // Outside the passive window there is no msgId to reply to: QQ would treat
-    // this as an active message, which needs a platform permission we do not have.
-    await assert.rejects(
-      () => adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-old', replyToAt: Date.now() - 10 * 60 * 1000 }, ['群']),
-      /主动消息没有权限/u
-    );
-    assert.equal(adapter.bot.sent.length, 2, 'must not hit the API');
-    // A conversation that never received a message is active too.
+    // No msg_id at all = an active message; default is to refuse locally.
     await assert.rejects(() => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']), /主动消息没有权限/u);
+    assert.equal(adapter.bot.sent.length, 3, 'must not hit the API');
+  } finally {
+    await adapter.stop();
+  }
+});
+
+test('a passive reply is capped at five bubbles per received message', async () => {
+  const adapter = await readyAdapter();
+  try {
+    await adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-1' }, ['1', '2', '3', '4', '5', '6', '7']);
+    assert.equal(adapter.bot.sent.length, 5);
+    assert.equal(adapter.bot.sent.every((item) => item.target.msgId === 'm-1'), true);
   } finally {
     await adapter.stop();
   }
@@ -110,13 +119,22 @@ test('allowing active messages sends without msgId and decorates permission erro
     await adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']);
     assert.deepEqual(adapter.bot.sent[0].target, { scope: 'group', targetId: 'g-1' });
 
-    // The platform rejecting an active message gets an actionable hint.
+    // 40034105 is a permission error, not the 60 qpm rate limit.
     adapter.bot.sendText = async () => {
-      throw new Error('API Error [/v2/groups/g-1/messages]: 主动消息失败, 无权限');
+      throw new Error('API Error [/v2/groups/g-1/messages]: 40034105 主动消息发送失败，无权限');
     };
     await assert.rejects(
       () => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']),
-      /主动消息权限\/额度/u
+      /未上线|主动消息无权限/u
+    );
+
+    // Rate-limit errors get their own explanation.
+    adapter.bot.sendText = async () => {
+      throw new Error('40034100 主动消息发送超过频控限制');
+    };
+    await assert.rejects(
+      () => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']),
+      /60 qpm|频控/u
     );
   } finally {
     await adapter.stop();
