@@ -2,6 +2,22 @@
 
 # Changelog
 
+## 0.2.3
+
+- GitHub is now a **global default plus per-domain overrides**: each domain can
+  choose its own `repo` / `branch`, so different projects and groups can point at
+  different repositories. Empty fields inherit the global repo.
+- **Load repos** now lists every repository visible to the GitHub account
+  (`gh repo list` or paginated `/user/repos`), not just the current workspace.
+  The picker is a real `select`, so a prefilled input no longer hides matches.
+- Every channel card has its own **Save** button (SnowLuma / official QQ Bot /
+  Discord) with explicit success and error feedback.
+- Every settings module can be **collapsed/expanded** from its title row.
+- Fix the GitHub `branch` setting not being applied to file reads and recent
+  commits.
+- Test suite grows to 95, covering domain repo overrides, repo pagination,
+  channel saving, and collapsible cards.
+
 ## 0.2.2
 
 - The Settings save bar is now **sticky to the viewport bottom**, so Save is

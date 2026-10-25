@@ -89,6 +89,44 @@ test('client bundle registers settings section and sidebar tab, then cleans up',
   delete globalThis.__laneBundle;
 });
 
+test('cards render a collapsible header with an explicit toggle', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) { return { type, props, children }; },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {},
+  };
+  globalThis.document = { getElementById: () => ({ remove() {} }), createElement: () => ({}), head: { appendChild() {} } };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?card');
+  const { Card } = globalThis.__laneBundle.__components;
+  const tree = Card({ title: '官方 QQ Bot', extra: { type: 'button' } });
+  const nodes = [];
+  traverse(tree, (node) => nodes.push(node));
+  const head = nodes.find((node) => node?.props?.role === 'button');
+  assert.equal(head.props['aria-expanded'], true);
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  assert.ok(text.includes('官方 QQ Bot'));
+  assert.ok(text.includes('▾'));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
 test('empty conversation list renders a placeholder instead of throwing', async () => {
   globalThis.__LANE_TEST__ = true;
   const react = {

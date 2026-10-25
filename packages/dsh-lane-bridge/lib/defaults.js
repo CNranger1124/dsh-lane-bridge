@@ -94,6 +94,8 @@ export function defaultDomain() {
     memoryMaxChars: 2000,
     kbDraftEnabled: true,
     repoEnabled: false,
+    repo: '',
+    branch: '',
     systemPrompt: '',
     maxReplyChars: 0,
   };

@@ -23,7 +23,7 @@
 | --- | --- |
 | **Channel / 渠道** | 一个传输账号：`snowluma`（OneBot v11）、`qqbot`（官方 QQ Bot），以及 `discord`。 |
 | **Conversation / 会话** | 渠道看到的一个聊天线程：群或私聊。Key：`<channel>:<group|private>:<externalId>`。 |
-| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、群聊触发策略（all/mention/keyword/off）、回复策略。可以理解为“租户”或“产品线”。 |
+| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、群聊触发策略（all/mention/keyword/off）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
 | **Binding / 绑定** | 会话 → 领域（可选按会话覆盖角色/preset/模型）。没有绑定的会话会被 *发现*，但不会调用模型。 |
 | **Role card / 角色卡** | 共享角色库里的 Markdown 人格。领域和绑定按名字引用。 |
 | **Knowledge base / 知识库** | 共享 Markdown 目录树（`knowledge/<scope>/...`），由 `lane_kb_*` 工具读取。领域选择 scope。 |

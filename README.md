@@ -77,11 +77,12 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - 领域/绑定模型：每个群或私聊一个 DSH session，领域级角色卡、preset、模型、知识库 scope、宿主工具白名单。
 - 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。
 - **知识库草稿与人工审批**：`lane_kb_draft` 只写 `_待审/`；Settings 新增「知识库审批」页，采纳/丢弃后才影响检索。
-- **GitHub 仓库只读**：固定仓库、路径校验、token 脱敏、ETag 缓存；支持从 `gh` CLI 自动读取仓库/分支下拉，装了 `gh auth login` 就不用填 token；`lane_repo_*` 查 issue、读文件、搜代码、看提交；建 issue 默认关闭。
+- **GitHub 仓库只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；路径校验、token 脱敏、ETag 缓存；支持从 `gh` CLI 读取账号可见的全部仓库/分支并下拉选择，`gh auth login` 后不用填 token；`lane_repo_*` 查 issue、读文件、搜代码、看提交；建 issue 默认关闭。
 - **通道日志**：启动卡里的「查看日志」显示最近 300 条连接/重连/错误，不再只有一个「未连接」。
 - 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`。
 - 原生 DSH 设置卡片 + 右侧栏面板：渠道、会话、领域、角色、知识库、审批、推送；两处共用同一份状态。
 - 页面顶部「启动通道」：每个渠道一个启动/停止/重试按钮 + 查看日志；未连接时显示可操作原因（例如 SnowLuma 未启动）。
+- 每个通道配置卡都有自己的保存按钮；所有模块都能点标题折叠。
 - 保存栏固定在页面底部，滚动到哪都能保存。
 - 入站图片理解：安全下载（SSRF/字节上限）+ 多模态 prompt part；非视觉模型自动降级为纯文本。
 - 人工接管：`lane_escalate` 暂停自动回复、通知接管会话，并可在设置页恢复。
@@ -92,7 +93,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 状态
 
-`0.2.2` 把旧项目的 GitHub 只读和知识库草稿审批迁进来了，并加了明确的「启动通道」按钮、通道日志、GitHub 仓库/分支下拉和固定保存栏。旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；架构文档会跟踪。
+`0.2.3` 把 GitHub 仓库改成「全局默认 + 领域覆盖」，仓库下拉读取账号全部可见仓库，通道配置增加独立保存按钮，所有模块支持折叠。`0.2.2` 把旧项目的 GitHub 只读和知识库草稿审批迁进来了，并加了明确的「启动通道」按钮、通道日志和固定保存栏。旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；架构文档会跟踪。
 
 当前代码、测试和发布物已经完成；**尚未在真实 DSH 上做安装验收**，也没有在真实 SnowLuma/QQ Bot/Discord 账号上做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
 

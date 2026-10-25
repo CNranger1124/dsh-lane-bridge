@@ -64,11 +64,14 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   (`lane_memory_*`) accumulates cross-conversation experience.
 - **KB drafts + approval**: `lane_kb_draft` writes only to `_待审/`; the Settings
   "KB approval" tab approves/discards before drafts affect retrieval.
-- **Read-only GitHub**: fixed repo, issue/file/code/commit queries; repo/branch
-  dropdowns from the `gh` CLI (no manual token after `gh auth login`), token
-  redaction, path guards, ETag cache. Issue creation is off by default.
+- **Read-only GitHub**: global default repo with per-domain repo/branch
+  overrides; issue/file/code/commit queries; repo/branch dropdowns list every
+  repo visible to the account via the `gh` CLI (no manual token after
+  `gh auth login`), token redaction, path guards, ETag cache. Issue creation is
+  off by default.
 - **Channel launcher**: Start/Stop/Retry and View logs per channel at the top,
-  with an actionable reason when disconnected. The save bar is sticky.
+  with an actionable reason when disconnected. Each channel card has its own
+  Save button, every module collapses, and the save bar is sticky.
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as
   multimodal prompt parts; non-vision models fall back to text.
@@ -82,7 +85,8 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 - **Channels** live in `state.json` (`config.channels.*`).
 - **Domains** describe behavior: role card name, agent preset, optional
-  `provider/model`, knowledge scopes, allowed host tools, reply limit.
+  `provider/model`, knowledge scopes, allowed host tools, reply limit, and
+  optional `repo` / `branch` (empty inherits the global GitHub repo).
 - **Bindings** attach a conversation key (`snowluma:group:123456`,
   `qqbot:private:openid`) to a domain.
 - Unbound conversations are recorded but never prompt a model. Use

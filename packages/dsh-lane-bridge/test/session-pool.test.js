@@ -56,7 +56,7 @@ function eventQueue() {
   };
 }
 
-async function setup({ existingSession = '' } = {}) {
+async function setup({ existingSession = '', repo = null } = {}) {
   const dir = tempDir();
   const store = new LaneStore({ dataDir: dir });
   await store.load();
@@ -140,6 +140,7 @@ async function setup({ existingSession = '' } = {}) {
     knowledgeDir: store.paths.knowledgeDir,
     memoryStore,
     usageStore,
+    repo,
     fetchImageImpl: async () => ({ base64: 'aGk=', mediaType: 'image/png', bytes: 2, url: 'https://x/a.png' }),
     logger: ctx.logger,
     onTurnEnd: async (payload) => {
@@ -181,6 +182,30 @@ test('first prompt creates a session, registers lane tools, restricts host tools
       () => agent.tools.get('lane_repo_status').execute({}, {}),
       /当前领域未开启 GitHub/
     );
+  } finally {
+    cleanup(env.dir);
+  }
+});
+
+test('repo tools use the current domain repository and branch', async () => {
+  const calls = [];
+  const fakeRepo = {
+    forRepo(args) {
+      calls.push(args);
+      return {
+        status: () => ({ repoConfigured: true }),
+        listIssues: async () => ({ repo: 'studio/game', issues: [] }),
+      };
+    },
+  };
+  const env = await setup({ repo: fakeRepo });
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), autoReply: true, repoEnabled: true, repo: 'studio/game', branch: 'dev' }]);
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '查 issue' });
+    const agent = env.agents.get('session-1');
+    const result = await agent.tools.get('lane_repo_list_issues').execute({}, {});
+    assert.deepEqual(result.issues, []);
+    assert.deepEqual(calls.at(-1), { repo: 'studio/game', branch: 'dev' });
   } finally {
     cleanup(env.dir);
   }

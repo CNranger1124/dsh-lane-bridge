@@ -69,9 +69,34 @@ test('GitHub repo lists repos and branches for the settings dropdowns', async ()
   });
   try {
     const repos = await repo.listRepos({});
+    assert.equal(repos.count, 1);
     assert.deepEqual(repos.repos, [{ repo: 'owner/repo', private: true, defaultBranch: 'main' }]);
     const branches = await repo.listBranches({ repo: 'owner/repo' });
     assert.deepEqual(branches.branches, ['main', 'dev']);
+  } finally {
+    delete process.env.QQ_GITHUB_DISABLE_GH;
+  }
+});
+
+test('GitHub repo scopes reads to a domain repository and branch', async () => {
+  process.env.QQ_GITHUB_DISABLE_GH = '1';
+  const calls = [];
+  const repo = makeRepo(async (url) => {
+    calls.push(url);
+    return jsonResponse(200, {
+      path: 'src/app.js', size: 2, sha: 'abc', encoding: 'base64',
+      content: Buffer.from('ok').toString('base64'),
+    });
+  });
+  try {
+    const scoped = repo.forRepo({ repo: 'other/project', branch: 'dev' });
+    assert.equal(scoped.config().repo, 'other/project');
+    assert.equal(scoped.config().branch, 'dev');
+    assert.equal(repo.forRepo({ repo: 'other/project', branch: 'dev' }), scoped);
+    await scoped.readFile({ path: 'src/app.js' });
+    assert.match(calls[0], /\/repos\/other\/project\/contents\/src\/app\.js/);
+    assert.match(calls[0], /ref=dev/);
+    assert.equal(repo.forRepo({ repo: '', branch: '' }), repo);
   } finally {
     delete process.env.QQ_GITHUB_DISABLE_GH;
   }

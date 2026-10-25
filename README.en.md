@@ -101,8 +101,9 @@ only a one-shot legacy migration script for moving an existing install.
   domain-scoped shared memory (`lane_memory_*`).
 - **KB drafts + human approval**: `lane_kb_draft` writes only to `_待审/`; a new
   Settings "KB approval" tab approves/discards before drafts affect retrieval.
-- **Read-only GitHub repo**: fixed repository, path guards, token redaction, ETag
-  cache; repo/branch dropdowns load from the `gh` CLI (so `gh auth login` removes
+- **Read-only GitHub repo**: one global default repo, with per-domain repo/branch
+  overrides; path guards, token redaction, ETag cache; repo/branch dropdowns list
+  every repo visible to the account from the `gh` CLI (so `gh auth login` removes
   the need for a manual token); `lane_repo_*` tools for issues/files/code/commits.
   Issue creation is off by default.
 - **Channel logs**: "View logs" in the launcher shows the last 300
@@ -112,6 +113,8 @@ only a one-shot legacy migration script for moving an existing install.
   domains, roles, KB, approval, and push, sharing one state.
 - The top **启动通道** card has Start/Stop/Retry per channel plus View logs, with
   actionable connection hints (for example, "SnowLuma is not running").
+- Every channel card has its own Save button; every module collapses from its
+  title row.
 - The save bar is sticky at the bottom of the page, so Save is always visible.
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
   prompt parts, with a text-only fallback for non-vision models.
@@ -128,9 +131,11 @@ installation details.
 
 ## Status
 
-`0.2.2` ports the legacy GitHub read-only tools and KB draft approval, and adds
-explicit channel launch buttons, channel logs, GitHub repo/branch dropdowns, and
-a sticky save bar. The legacy
+`0.2.3` makes GitHub repos a global default with per-domain overrides, lists every
+repo visible to the account in the dropdown, adds per-channel Save buttons, and
+makes every module collapsible. `0.2.2` ports the legacy GitHub read-only tools
+and KB draft approval, and adds explicit channel launch buttons, channel logs,
+and a sticky save bar. The legacy
 standalone `qq-bridge` project still has features the plugin does not yet port:
 group slang learning, sticker library, voice messages, cost conversion, and the
 simulation scheduler. The architecture doc tracks the migration.

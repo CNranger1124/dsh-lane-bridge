@@ -66,9 +66,27 @@ test('normalizeState repairs broken bindings/domains and keeps the default domai
   });
   assert.equal(state.domains.length, 1);
   assert.equal(state.config.defaultDomainId, 'a');
+  assert.equal(state.domains[0].repo, '');
+  assert.equal(state.domains[0].branch, '');
   assert.equal(state.bindings['snowluma:group:1'], undefined);
   assert.equal(state.bindings['bad-key'], undefined);
   assert.equal(state.bindings['snowluma:private:2'].enabled, false);
+});
+
+test('normalizeState keeps per-domain repository overrides', () => {
+  const state = normalizeState({
+    domains: [{
+      id: 'game',
+      name: '游戏',
+      repo: '  studio/game  ',
+      branch: ' release ',
+      repoEnabled: true,
+    }],
+    roles: [{ name: '客服', content: 'x' }],
+  });
+  assert.equal(state.domains[0].repo, 'studio/game');
+  assert.equal(state.domains[0].branch, 'release');
+  assert.equal(state.domains[0].repoEnabled, true);
 });
 
 test('role files are the editable source of truth and deleted roles remove files', async () => {

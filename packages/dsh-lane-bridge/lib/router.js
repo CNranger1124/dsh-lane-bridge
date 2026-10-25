@@ -20,6 +20,7 @@ export function bindingFor(state, key) {
  *   role: string, preset: string, model: string,
  *   knowledgeScopes: string[], allowedHostTools: string[],
  *   autoReply: boolean, maxReplyChars: number,
+ *   repo: string, repoBranch: string,
  *   source: 'binding'|'domain'|'default'|'unbound'
  * }}
  */
@@ -51,6 +52,8 @@ export function resolveConversation(state, key) {
     memoryMaxChars: Math.max(200, Math.min(8000, Number(domain?.memoryMaxChars) || 2000)),
     kbDraftEnabled: domain?.kbDraftEnabled !== false,
     repoEnabled: domain?.repoEnabled === true,
+    repo: String(domain?.repo || state?.config?.github?.repo || '').trim(),
+    repoBranch: String(domain?.branch || state?.config?.github?.branch || '').trim(),
     allowedHostTools: Array.isArray(domain?.allowedHostTools) ? domain.allowedHostTools : [],
     autoReply: autoReply && domain?.autoReply !== false,
     paused: binding?.paused === true,

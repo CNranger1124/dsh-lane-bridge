@@ -52,6 +52,7 @@ export class GitHubRepo {
     this.logger = logger;
     this.fetchImpl = fetchImpl ?? fetch;
     this.cache = new Map();
+    this.scoped = new Map();
     this.ghCache = { at: 0, token: '', account: '' };
     this.auditFile = dataDir ? path.join(dataDir, 'github-repo-audit.log') : '';
     this.counterFile = dataDir ? path.join(dataDir, 'github-repo-calls.json') : '';
@@ -73,6 +74,40 @@ export class GitHubRepo {
       maxCreatesPerHour: Math.max(0, Math.min(20, Number(raw.maxCreatesPerHour) || 3)),
       maxFileChars: Math.max(2000, Math.min(60000, Number(raw.maxFileChars) || 20000)),
     };
+  }
+
+  /**
+   * A repo client scoped to one domain's repository/branch. Empty overrides
+   * inherit the global GitHub config. Instances are cached so ETag caches are
+   * not rebuilt for every tool call.
+   */
+  forRepo({ repo, branch } = {}) {
+    const base = this.config();
+    const target = String(repo ?? '').trim() || base.repo;
+    const targetBranch = String(branch ?? '').trim() || base.branch;
+    if (target === base.repo && targetBranch === base.branch) return this;
+    const key = `${target}|${targetBranch}`;
+    const cached = this.scoped.get(key);
+    if (cached) return cached;
+    const parent = this;
+    const scoped = new GitHubRepo({
+      getConfig: () => {
+        const state = parent.getConfig?.() ?? {};
+        return {
+          ...state,
+          github: {
+            ...(state.github ?? {}),
+            repo: target,
+            branch: targetBranch,
+          },
+        };
+      },
+      dataDir: this.dataDir,
+      logger: this.logger,
+      fetchImpl: this.fetchImpl,
+    });
+    this.scoped.set(key, scoped);
+    return scoped;
   }
 
   ghAuth(force = false) {
@@ -253,28 +288,51 @@ export class GitHubRepo {
     };
   }
 
-  async listRepos({ limit = 100 } = {}) {
+  async listRepos({ limit = 300 } = {}) {
     const auth = this.auth();
     if (!auth.token) throw new Error('没有 GitHub 凭据：请先 gh auth login，或填 token');
-    const gh = this.#ghJson(['repo', 'list', '--limit', String(Math.min(200, Math.max(1, Number(limit) || 100))), '--json', 'nameWithOwner,isPrivate,defaultBranchRef']);
+    const max = Math.min(500, Math.max(1, Number(limit) || 300));
+    const gh = this.#ghJson(['repo', 'list', '--limit', String(max), '--json', 'nameWithOwner,isPrivate,defaultBranchRef']);
     if (Array.isArray(gh)) {
-      return {
-        source: 'gh-cli',
-        repos: gh.map((item) => ({
-          repo: item.nameWithOwner,
+      const repos = [];
+      const seen = new Set();
+      for (const item of gh) {
+        const full = String(item.nameWithOwner ?? '').trim();
+        if (!full || seen.has(full)) continue;
+        seen.add(full);
+        repos.push({
+          repo: full,
           private: item.isPrivate === true,
           defaultBranch: item.defaultBranchRef?.name ?? '',
-        })),
-      };
+        });
+      }
+      return { source: 'gh-cli', count: repos.length, repos };
     }
-    const data = await this.#apiJson(`/user/repos?per_page=${Math.min(100, Math.max(1, Number(limit) || 100))}&sort=updated`, auth);
+    const repos = [];
+    const seen = new Set();
+    for (let page = 1; page <= 5 && repos.length < max; page += 1) {
+      const data = await this.#apiJson(
+        `/user/repos?per_page=100&page=${page}&sort=updated&affiliation=${encodeURIComponent('owner,collaborator,organization_member')}`,
+        auth
+      );
+      const items = Array.isArray(data) ? data : [];
+      for (const item of items) {
+        const full = String(item.full_name ?? '').trim();
+        if (!full || seen.has(full)) continue;
+        seen.add(full);
+        repos.push({
+          repo: full,
+          private: item.private === true,
+          defaultBranch: item.default_branch ?? '',
+        });
+      }
+      if (items.length < 100) break;
+    }
     return {
       source: 'api',
-      repos: (Array.isArray(data) ? data : []).map((item) => ({
-        repo: item.full_name,
-        private: item.private === true,
-        defaultBranch: item.default_branch ?? '',
-      })),
+      count: repos.length,
+      truncated: repos.length >= max,
+      repos: repos.slice(0, max),
     };
   }
 
@@ -378,7 +436,7 @@ export class GitHubRepo {
     const cfg = this.config();
     const normalized = normalizePath(filePath);
     if (!normalized.ok) throw new Error(normalized.message);
-    const refValue = normalizeRef(ref);
+    const refValue = normalizeRef(ref || cfg.branch);
     const encoded = normalized.path.split('/').map((part) => encodeURIComponent(part)).join('/');
     const query = refValue ? `?ref=${encodeURIComponent(refValue)}` : '';
     const result = await this.request(`/repos/${cfg.owner}/${cfg.name}/contents/${encoded}${query}`);
@@ -403,6 +461,7 @@ export class GitHubRepo {
     const cfg = this.config();
     const n = Math.min(30, Math.max(1, Number(limit) || 15));
     const params = new URLSearchParams({ per_page: String(n) });
+    if (cfg.branch) params.set('sha', cfg.branch);
     if (pathFilter) {
       const normalized = normalizePath(pathFilter);
       if (!normalized.ok) throw new Error(normalized.message);

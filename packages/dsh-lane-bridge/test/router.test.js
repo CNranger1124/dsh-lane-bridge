@@ -68,6 +68,25 @@ test('bindings override domain and per-conversation role/model', () => {
   assert.equal(canReply(state, 'snowluma:group:123'), true);
 });
 
+test('domains can override the global GitHub repository and branch', () => {
+  const state = defaultState();
+  state.config.github = { ...(state.config.github ?? {}), repo: 'global/repo', branch: 'main' };
+  state.domains.push({
+    ...state.domains[0],
+    id: 'game',
+    name: '游戏客服',
+    repo: 'studio/game',
+    branch: 'release',
+  });
+  state.bindings['snowluma:group:9'] = { domainId: 'game', enabled: true };
+  const bound = resolveConversation(state, 'snowluma:group:9');
+  assert.equal(bound.repo, 'studio/game');
+  assert.equal(bound.repoBranch, 'release');
+  const fallback = resolveConversation(state, 'snowluma:group:10');
+  assert.equal(fallback.repo, 'global/repo');
+  assert.equal(fallback.repoBranch, 'main');
+});
+
 test('disabled bindings fall back to unbound behavior', () => {
   const state = defaultState();
   state.bindings['snowluma:group:1'] = { domainId: 'default', enabled: false };

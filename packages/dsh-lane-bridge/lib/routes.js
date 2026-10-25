@@ -123,6 +123,10 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (domain.role && !roles.has(String(domain.role))) throw new Error(`domain.role 不存在：${domain.role}`);
       if (domain.knowledgeScopes !== undefined && !Array.isArray(domain.knowledgeScopes)) throw new Error('knowledgeScopes 必须是数组');
       if (domain.allowedHostTools !== undefined && !Array.isArray(domain.allowedHostTools)) throw new Error('allowedHostTools 必须是数组');
+      if (domain.repo && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(String(domain.repo).trim())) {
+        throw new Error(`domain.repo 格式应为 owner/repo：${domain.repo}`);
+      }
+      if (domain.branch && /[\\\s]/u.test(String(domain.branch))) throw new Error('domain.branch 不能包含空白或反斜杠');
     }
     await store.setDomains(domains);
     return handleState(req, res);

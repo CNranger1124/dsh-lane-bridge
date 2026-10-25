@@ -101,6 +101,8 @@ function normalizeDomainList(raw, defaultDomainId) {
       memoryMaxChars: Math.max(200, Math.min(8000, Number(item?.memoryMaxChars) || 2000)),
       kbDraftEnabled: item?.kbDraftEnabled !== false,
       repoEnabled: item?.repoEnabled === true,
+      repo: String(item?.repo ?? '').trim().slice(0, 200),
+      branch: String(item?.branch ?? '').trim().slice(0, 120),
       systemPrompt: String(item?.systemPrompt ?? ''),
       maxReplyChars: Number(item?.maxReplyChars) > 0 ? Number(item.maxReplyChars) : 0,
     });

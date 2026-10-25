@@ -22,8 +22,11 @@ window.__ModuleLoader__.load({
       .lb-tab:hover { background:var(--dsw-alias-bg-hover,#f3f4f6); }
       .lb-tab--on { background:var(--dsw-alias-bg-selected,#eceff3); color:var(--dsw-alias-text-primary,#111827); font-weight:600; }
       .lb-card { border:1px solid var(--dsw-alias-border,#e5e7eb); border-radius:10px; padding:14px; background:var(--dsw-alias-bg-primary,#fff); display:flex; flex-direction:column; gap:10px; }
-      .lb-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+      .lb-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; user-select:none; }
+      .lb-card-head:focus-visible { outline:2px solid var(--dsw-alias-accent,#2563eb); outline-offset:2px; border-radius:6px; }
       .lb-card-title { font-weight:620; font-size:13px; }
+      .lb-card-body { display:flex; flex-direction:column; gap:10px; }
+      .lb-chev { color:var(--dsw-alias-text-secondary,#6b7280); font-size:11px; width:12px; flex:none; }
       .lb-muted { color:var(--dsw-alias-text-secondary,#6b7280); font-size:12px; }
       .lb-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
       .lb-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
@@ -100,10 +103,30 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function Card({ title, extra, children }) {
+    function Card({ title, extra, children, defaultOpen = true }) {
+      const [open, setOpen] = useState(defaultOpen);
+      const toggle = () => setOpen((value) => !value);
       return h('div', { className: 'lb-card' },
-        h('div', { className: 'lb-card-head' }, h('div', { className: 'lb-card-title' }, title), extra ?? null),
-        children
+        h('div', {
+          className: 'lb-card-head',
+          role: 'button',
+          tabIndex: 0,
+          'aria-expanded': open,
+          onClick: toggle,
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggle();
+            }
+          },
+        },
+          h('div', { className: 'lb-row', style: { gap: 8, minWidth: 0 } },
+            h('span', { className: 'lb-chev', 'aria-hidden': true }, open ? '▾' : '▸'),
+            h('div', { className: 'lb-card-title' }, title)
+          ),
+          extra ? h('div', { onClick: (event) => event.stopPropagation() }, extra) : null
+        ),
+        open ? h('div', { className: 'lb-card-body' }, children) : null
       );
     }
 
@@ -130,6 +153,8 @@ window.__ModuleLoader__.load({
       const [ghBusy, setGhBusy] = useState('');
       const [ghError, setGhError] = useState('');
       const [ghAuth, setGhAuth] = useState(null);
+      const [manualRepo, setManualRepo] = useState(false);
+      const [manualBranch, setManualBranch] = useState(false);
       const setChannel = (id, key, value) => {
         setCfg((current) => {
           const next = clone(current);
@@ -137,11 +162,11 @@ window.__ModuleLoader__.load({
           return next;
         });
       };
-      const save = async () => {
+      const save = async (label) => {
         setBusy(true); setError(''); setMessage('');
         try {
           await api('/config', { method: 'POST', body: JSON.stringify({ config: cfg }) });
-          setMessage('已保存');
+          setMessage(typeof label === 'string' ? label : '已保存');
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
@@ -174,6 +199,10 @@ window.__ModuleLoader__.load({
         } catch (err) { setLogError(String(err.message ?? err)); }
       };
       const gh = cfg.github ?? {};
+      const repoKnown = ghRepos.some((item) => item.repo === gh.repo);
+      const branchKnown = ghBranches.includes(gh.branch);
+      const repoValue = gh.repo ? (repoKnown ? gh.repo : '__custom__') : '';
+      const branchValue = gh.branch ? (branchKnown ? gh.branch : '__custom__') : '';
       const setGithub = (key, value) => setCfg((current) => {
         const next = clone(current);
         next.github = { ...(next.github ?? {}), [key]: value };
@@ -186,9 +215,10 @@ window.__ModuleLoader__.load({
       const loadRepos = async () => {
         setGhBusy('repos'); setGhError('');
         try {
-          const result = await api('/github/repos');
-          setGhRepos(result.repos ?? []);
-          if (!gh.repo && result.repos?.length) setGithub('repo', result.repos[0].repo);
+          const result = await api('/github/repos?limit=300');
+          const repos = result.repos ?? [];
+          setGhRepos(repos);
+          setMessage(`已读取 ${repos.length} 个仓库`);
         } catch (err) { setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
       };
       const loadBranches = async (repoValue) => {
@@ -198,7 +228,7 @@ window.__ModuleLoader__.load({
         try {
           const result = await api(`/github/branches?repo=${encodeURIComponent(target)}`);
           setGhBranches(result.branches ?? []);
-        } catch (err) { setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
+        } catch (err) { setGhBranches([]); setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
       };
       const channels = [
         ['snowluma', 'SnowLuma / QQ', 'OneBot v11 WebSocket；可填 SnowLuma 安装目录自动读 token', [
@@ -217,6 +247,8 @@ window.__ModuleLoader__.load({
       const anyEnabled = channels.some(([id]) => cfg.channels?.[id]?.enabled === true);
       return h('div', { className: 'lb-root' },
         !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启动任何聊天通道。用下面的「启动通道」卡片逐个启动；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
+        message ? h('div', { className: 'lb-ok' }, message) : null,
+        error ? h('div', { className: 'lb-error' }, error) : null,
         h(Card, {
           title: '启动通道',
           extra: h('div', { className: 'lb-actions' },
@@ -351,7 +383,7 @@ window.__ModuleLoader__.load({
             status?.hint ? h('div', { className: 'lb-muted' }, status.hint) : null,
             h('label', { className: 'lb-check' },
               h('input', { type: 'checkbox', checked: entry.enabled === true, onChange: (e) => setChannel(id, 'enabled', e.target.checked) }),
-              '启用该通道（改完记得保存）'
+              '启用该通道'
             ),
             h('div', { className: 'lb-grid' },
               ...fields.map(([key, labelText, type]) => h(Field, { key, label: labelText },
@@ -372,11 +404,18 @@ window.__ModuleLoader__.load({
               }),
               '群聊里必须 @ 或回复机器人才响应'
             ) : null,
-            status?.lastError ? h('div', { className: 'lb-muted' }, `状态：${status.lastError}`) : null
+            status?.lastError ? h('div', { className: 'lb-muted' }, `状态：${status.lastError}`) : null,
+            h('div', { className: 'lb-actions' },
+              h('button', {
+                className: 'lb-btn lb-btn--primary',
+                disabled: busy,
+                onClick: () => void save(`已保存 ${label} 设置`),
+              }, busy ? '保存中…' : `保存 ${label} 设置`)
+            )
           );
         }),
         h(Card, { title: 'GitHub 仓库（可选）', extra: data.github?.repo ? h('span', { className: 'lb-mono lb-muted' }, data.github.repo) : null },
-          h('div', { className: 'lb-muted' }, '给客服一个只读的远程仓库入口：查 issue、读文件、搜代码、看最近提交。仓库由这里固定，模型不能换仓库；token 不会回显。'),
+          h('div', { className: 'lb-muted' }, '给客服一个只读的远程仓库入口：查 issue、读文件、搜代码、看最近提交。这里填的是全局默认仓库；每个领域可以在「领域」里覆盖成不同仓库。token 不会回显。'),
           h('div', { className: 'lb-grid' },
             h(Field, { label: '启用' },
               h('label', { className: 'lb-check' },
@@ -384,26 +423,63 @@ window.__ModuleLoader__.load({
                 '允许仓库工具'
               )
             ),
-            h(Field, { label: '仓库', hint: '可从 GitHub 登录态读取后下拉选择，也可手填 owner/repo' },
+            h(Field, { label: '仓库', hint: '点「读取仓库」列出当前 GitHub 账号可见的全部仓库；也可手动输入' },
               h('div', { className: 'lb-row' },
-                h('input', {
-                  className: 'lb-input',
-                  list: 'lb-gh-repos',
-                  value: gh.repo ?? '',
-                  placeholder: 'CNranger1124/dsh-lane-bridge',
-                  onChange: (e) => setGithub('repo', e.target.value),
-                  onBlur: (e) => { if (e.target.value.trim()) void loadBranches(e.target.value.trim()); },
-                }),
-                h('datalist', { id: 'lb-gh-repos' }, ...ghRepos.map((item) => h('option', { key: item.repo, value: item.repo }, `${item.repo}${item.private ? '（私有）' : ''}`))),
+                h('select', {
+                  className: 'lb-select',
+                  style: { flex: '1 1 260px' },
+                  value: repoValue,
+                  onChange: (e) => {
+                    const value = e.target.value;
+                    if (value === '__custom__') { setManualRepo(true); return; }
+                    setManualRepo(false);
+                    setGithub('repo', value);
+                    setGithub('branch', '');
+                    setManualBranch(false);
+                    setGhBranches([]);
+                    if (value) void loadBranches(value);
+                  },
+                },
+                  h('option', { value: '' }, ghRepos.length ? `选择仓库（共 ${ghRepos.length} 个）` : '先点「读取仓库」'),
+                  ...ghRepos.map((item) => h('option', { key: item.repo, value: item.repo }, `${item.repo}${item.private ? '（私有）' : ''}`)),
+                  h('option', { value: '__custom__' }, '手动输入 owner/repo')
+                ),
                 h('button', { className: 'lb-btn', disabled: ghBusy === 'repos', onClick: () => void loadRepos() }, ghBusy === 'repos' ? '读取中…' : '读取仓库')
-              )
+              ),
+              (manualRepo || (gh.repo && !repoKnown)) ? h('input', {
+                className: 'lb-input',
+                value: gh.repo ?? '',
+                placeholder: 'owner/repo',
+                onChange: (e) => setGithub('repo', e.target.value),
+                onBlur: (e) => { if (e.target.value.trim()) void loadBranches(e.target.value.trim()); },
+              }) : null,
+              ghRepos.length ? h('div', { className: 'lb-muted' }, `已读取 ${ghRepos.length} 个仓库；下拉里是全部可见仓库，不是当前工作区` ) : null
             ),
-            h(Field, { label: '分支', hint: '留空=默认分支；从仓库读取后可选' },
+            h(Field, { label: '分支', hint: '留空=仓库默认分支' },
               h('div', { className: 'lb-row' },
-                h('input', { className: 'lb-input', list: 'lb-gh-branches', value: gh.branch ?? '', placeholder: 'main', onChange: (e) => setGithub('branch', e.target.value) }),
-                h('datalist', { id: 'lb-gh-branches' }, ...ghBranches.map((branch) => h('option', { key: branch, value: branch }))),
-                h('button', { className: 'lb-btn', disabled: ghBusy === 'branches', onClick: () => void loadBranches(gh.repo) }, ghBusy === 'branches' ? '读取中…' : '读取分支')
-              )
+                h('select', {
+                  className: 'lb-select',
+                  style: { flex: '1 1 200px' },
+                  value: branchValue,
+                  onChange: (e) => {
+                    const value = e.target.value;
+                    if (value === '__custom__') { setManualBranch(true); return; }
+                    setManualBranch(false);
+                    setGithub('branch', value);
+                  },
+                },
+                  h('option', { value: '' }, '默认分支'),
+                  ...ghBranches.map((branch) => h('option', { key: branch, value: branch }, branch)),
+                  h('option', { value: '__custom__' }, '手动输入分支')
+                ),
+                h('button', { className: 'lb-btn', disabled: ghBusy === 'branches' || !gh.repo, onClick: () => void loadBranches(gh.repo) }, ghBusy === 'branches' ? '读取中…' : '读取分支')
+              ),
+              (manualBranch || (gh.branch && !branchKnown)) ? h('input', {
+                className: 'lb-input',
+                value: gh.branch ?? '',
+                placeholder: 'main',
+                onChange: (e) => setGithub('branch', e.target.value),
+              }) : null
             ),
             h(Field, { label: 'Token', hint: data.secretStatus?.githubToken ? '已配置；留空表示不修改' : '填了 gh auth login 后可留空；公开仓库匿名请求可能被限流' },
               h('input', { className: 'lb-input', type: 'password', value: gh.token ?? '', placeholder: data.secretStatus?.githubToken ? '••••••••（留空不修改）' : 'ghp_... / github_pat_...', onChange: (e) => setGithub('token', e.target.value) })
@@ -432,6 +508,8 @@ window.__ModuleLoader__.load({
           )
         ),
         h('div', { className: 'lb-footer' },
+          message ? h('span', { className: 'lb-ok' }, message) : null,
+          error ? h('span', { className: 'lb-error' }, error) : null,
           h('button', { className: 'lb-btn', onClick: async () => { await api('/channels/restart', { method: 'POST', body: '{}' }); await refresh(); } }, '重启通道'),
           h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存通道设置')
         )
@@ -575,7 +653,31 @@ window.__ModuleLoader__.load({
       const [message, setMessage] = useState('');
       const [error, setError] = useState('');
       const [busy, setBusy] = useState(false);
+      const [repoOptions, setRepoOptions] = useState([]);
+      const [repoBranches, setRepoBranches] = useState([]);
+      const [branchRepo, setBranchRepo] = useState('');
+      const [repoBusy, setRepoBusy] = useState('');
+      const [repoError, setRepoError] = useState('');
       const current = draft.find((domain) => domain.id === selected) ?? draft[0];
+      const globalRepo = data.state.config.github?.repo ?? '';
+      const effectiveRepo = current?.repo || globalRepo;
+      const loadRepoOptions = async () => {
+        setRepoBusy('repos'); setRepoError('');
+        try {
+          const result = await api('/github/repos?limit=300');
+          setRepoOptions(result.repos ?? []);
+        } catch (err) { setRepoError(String(err.message ?? err)); } finally { setRepoBusy(''); }
+      };
+      const loadDomainBranches = async (target) => {
+        const repoValue = String(target ?? effectiveRepo ?? '').trim();
+        if (!repoValue) return;
+        setRepoBusy('branches'); setRepoError('');
+        try {
+          const result = await api(`/github/branches?repo=${encodeURIComponent(repoValue)}`);
+          setBranchRepo(repoValue);
+          setRepoBranches(result.branches ?? []);
+        } catch (err) { setRepoBranches([]); setRepoError(String(err.message ?? err)); } finally { setRepoBusy(''); }
+      };
       const patch = (key, value) => {
         setDraft((list) => list.map((domain) => domain.id === current.id ? { ...domain, [key]: value } : domain));
       };
@@ -583,7 +685,7 @@ window.__ModuleLoader__.load({
         const id = `domain-${Date.now().toString(36)}`;
         setDraft((list) => [...list, {
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
-          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, kbDraftEnabled: true, repoEnabled: false, systemPrompt: '', maxReplyChars: 0,
+          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
         }]);
         setSelected(id);
       };
@@ -658,9 +760,64 @@ window.__ModuleLoader__.load({
               h(Field, { label: 'GitHub 仓库' },
                 h('label', { className: 'lb-check' },
                   h('input', { type: 'checkbox', checked: current.repoEnabled === true, onChange: (e) => patch('repoEnabled', e.target.checked) }),
-                  '允许读取仓库（需全局配置）'
+                  '允许该领域读取仓库（需全局 GitHub 启用；每个领域可用不同仓库）'
                 )
-              )
+              ),
+              h(Field, { label: '仓库（可选）', hint: `留空=继承全局${globalRepo ? `（${globalRepo}）` : '（全局未设置）'}` },
+                h('div', { className: 'lb-row' },
+                  h('select', {
+                    className: 'lb-select',
+                    style: { flex: '1 1 220px' },
+                    value: current.repo ? (repoOptions.some((item) => item.repo === current.repo) ? current.repo : '__custom__') : '',
+                    onChange: (e) => {
+                      const value = e.target.value;
+                      if (value === '__custom__') return;
+                      patch('repo', value);
+                      patch('branch', '');
+                      setRepoBranches([]);
+                      setBranchRepo('');
+                      if (value) void loadDomainBranches(value);
+                    },
+                  },
+                    h('option', { value: '' }, globalRepo ? `继承全局（${globalRepo}）` : '继承全局（未设置）'),
+                    ...repoOptions.map((item) => h('option', { key: item.repo, value: item.repo }, `${item.repo}${item.private ? '（私有）' : ''}`)),
+                    h('option', { value: '__custom__' }, '手动输入 owner/repo')
+                  ),
+                  h('button', { className: 'lb-btn', disabled: repoBusy === 'repos', onClick: () => void loadRepoOptions() }, repoBusy === 'repos' ? '读取中…' : '读取仓库')
+                ),
+                h('input', {
+                  className: 'lb-input',
+                  value: current.repo ?? '',
+                  placeholder: 'owner/repo（留空继承全局）',
+                  onChange: (e) => patch('repo', e.target.value),
+                })
+              ),
+              h(Field, { label: '分支（可选）', hint: '留空=继承全局/仓库默认分支' },
+                h('div', { className: 'lb-row' },
+                  h('select', {
+                    className: 'lb-select',
+                    style: { flex: '1 1 200px' },
+                    value: current.branch ? (branchRepo === effectiveRepo && repoBranches.includes(current.branch) ? current.branch : '__custom__') : '',
+                    onChange: (e) => {
+                      const value = e.target.value;
+                      if (value === '__custom__') return;
+                      patch('branch', value);
+                    },
+                  },
+                    h('option', { value: '' }, '继承全局/默认分支'),
+                    ...(branchRepo === effectiveRepo ? repoBranches : []).map((branch) => h('option', { key: branch, value: branch }, branch)),
+                    h('option', { value: '__custom__' }, '手动输入分支')
+                  ),
+                  h('button', { className: 'lb-btn', disabled: repoBusy === 'branches' || !effectiveRepo, onClick: () => void loadDomainBranches(effectiveRepo) }, repoBusy === 'branches' ? '读取中…' : '读取分支')
+                ),
+                h('input', {
+                  className: 'lb-input',
+                  value: current.branch ?? '',
+                  placeholder: 'main（留空继承）',
+                  onChange: (e) => patch('branch', e.target.value),
+                })
+              ),
+              repoError ? h('div', { className: 'lb-error' }, repoError) : null
             ),
             h('label', { className: 'lb-check' },
               h('input', { type: 'checkbox', checked: current.autoReply !== false, onChange: (e) => patch('autoReply', e.target.checked) }),
@@ -1086,7 +1243,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'lb-head' },
           h('div', null,
             h('h2', { className: 'lb-title' }, 'IM 桥接'),
-            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。修改后点页面底部的保存按钮（会固定在底部）。')
+            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。每个模块可点标题折叠；通道、GitHub、领域都有各自的保存按钮，页面底部也有固定的保存栏。')
           ),
           h('button', { className: 'lb-btn', onClick: load }, '刷新')
         ),
@@ -1185,7 +1342,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Conversations, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
+      exportsObject.__components = { Card, Conversations, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
     }
     return exportsObject;
   },

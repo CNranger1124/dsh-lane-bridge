@@ -334,7 +334,14 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     const resolved = currentResolved();
     if (resolved.repoEnabled !== true) throw new Error('当前领域未开启 GitHub 仓库读取：在 Settings → IM 桥接 → 领域里勾选「允许读取 GitHub 仓库」');
     if (!repo) throw new Error('GitHub 仓库模块不可用');
-    return repo;
+    const scoped = typeof repo.forRepo === 'function'
+      ? repo.forRepo({ repo: resolved.repo, branch: resolved.repoBranch })
+      : repo;
+    const status = typeof scoped.status === 'function' ? scoped.status(false) : null;
+    if (status && !status.repoConfigured) {
+      throw new Error('当前领域没有可用的 GitHub 仓库：在 Settings → IM 桥接 → 领域里填写仓库，或留空继承全局仓库');
+    }
+    return scoped;
   }
 
   const repoStatus = define(
