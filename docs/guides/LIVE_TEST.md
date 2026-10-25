@@ -57,7 +57,8 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 - 两个入口都正常渲染，不是空白。
 - **会话** 页在没有会话时显示占位行（不会崩溃或清空整个界面）。
 - `GET /lane-bridge/api/health` 返回 `{ok:true}`。
-- `~/.dsh/lane-bridge/state.json` 存在，包含 `version`、`config`、`domains`、`roles`。
+- `~/.dsh/lane-bridge/state.json` 存在，包含 `version`、`config`、`domains`、`knowledgeBases`、`roles`。
+- 设置页有 9 个标签：概览与通道、会话、领域、角色卡、知识库、记忆、知识库审批、用量、推送。
 
 如果页面空白或出现「面板渲染失败」，打开浏览器 console：通常是 `settings.section` / `sidebarRightTabs` slot 不存在或 client bundle 加载失败；错误边界会尽量保留界面并显示错误信息。
 
@@ -75,7 +76,9 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
    - 显式填 WebSocket 地址和 access token。
 3. 在顶部 **启动通道** 里点 SnowLuma 的 **启动**；渠道应显示 **已连接**。
 4. 用允许的账号给 bot 发私聊。它应出现在 **会话**，key 形如 `snowluma:private:<id>`。
-5. 绑定到默认领域，再发一条。DSH 侧应出现一个 session，assistant 的回合会发回 QQ。
+5. 在 **会话** 页把它绑到「客服」角色（该角色属于默认客服领域），再发一条。DSH 侧应出现一个 session，assistant 的回合会发回 QQ。
+
+> 设置页标题旁会显示运行中的插件版本（`v0.6.0`），应与安装的版本一致；`GET /lane-bridge/api/health` 返回同一个 `version`。
 
 常见失败：
 
@@ -90,14 +93,14 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 ## 3. 官方 QQ Bot
 
 1. 在 QQ 开放平台创建应用，开启需要的 bot 能力。
-2. 在渠道卡片填 `AppID` / `AppSecret` 并启用。
+2. 在渠道卡片填 `AppID` / `AppSecret` 并点 **启动**。
 3. 等 **已连接**（gateway READY），然后发 c2c/群消息。
 4. 第一条回复使用入站 `msgId`；被动回复窗口过后，主动推送 c2c 可能被平台拒绝。
 
 ## 4. Discord
 
 1. 在 Discord Developer Portal 创建 bot，开启 **Message Content Intent**，用 `bot` + `applications.commands` scope 邀请。
-2. 凭据只需要 **Bot Token**（开发者门户 → 你的应用 → **Bot** 页 → `Reset Token`，只显示一次），填进 Discord 渠道卡片并启用。OAuth2 页的「客户端 ID / 客户端密钥」和 General Information 页的「公钥」都不需要——前者是授权码流程用的，后者是 HTTP Interactions 验签用的，我们走的是网关长连接。
+2. 凭据只需要 **Bot Token**（开发者门户 → 你的应用 → **Bot** 页 → `Reset Token`，只显示一次），填进 Discord 渠道卡片并点 **启动**。OAuth2 页的「客户端 ID / 客户端密钥」和 General Information 页的「公钥」都不需要——前者是授权码流程用的，后者是 HTTP Interactions 验签用的，我们走的是网关长连接。
 3. 等 **已连接**，然后发 DM 或在已绑定频道发消息。
 4. 建议打开 **群聊里必须 @ 或回复机器人才响应**，避免每条服务器消息都触发。
 5. 服务器频道绑 `discord:group:<channelId>`；DM 绑 `discord:private:<userId>`。
@@ -119,11 +122,14 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 
 `targets` 可以传数组做广播（最多 50 个）。
 
-## 6. 知识库与角色卡
+## 6. 角色卡、知识库与记忆
 
-- 在 **角色与知识** 编辑角色卡；使用它的会话下一轮会重新注入（内容 hash 变了）。
-- 在 `~/.dsh/lane-bridge/knowledge/<scope>/` 下加 Markdown；领域必须列出该 scope。agent 通过 `lane_kb_*` 读取。
-- `_` 前缀的文件/目录是私有草稿，不会被列出。
+- 在 **角色卡** 页编辑角色卡（独立的「角色卡」页，不再和知识库混在一起）；使用它的会话下一轮会重新注入（内容 hash 变了）。
+- 在 **知识库** 页：新建一个「测试库」，确认 `knowledge/测试库/` 目录出现；重命名它，确认目录名与绑定它的领域一起更新；删除空库应成功，删除非空库需要勾选/确认强制删除。
+- 在默认知识库新建/编辑一篇文档，frontmatter 写 `triggers`；保存后列表应显示触发词芯片。把文档改名为带子目录的名字（如 `机制/宝具.md`），再转移到「测试库」，确认目标重名时被拒绝而不是覆盖。
+- 在 **领域** 页把「绑定知识库」改成绑定两个库；再绑一个空库，应出现红字提示「自动检索和 AI 草稿都会落在空库上」。
+- 开启领域的 **知识库自动检索**，用文档里的触发词给机器人发一句话：命中的那篇文档应被注入，未命中的文档不应整库进来。完全没写 frontmatter 的旧文档，只能靠领域里的 **兜底触发词** + 全文检索命中。
+- `_` 前缀的文件/目录是私有草稿，不会被列出，也不参与检索。
 - 打开领域的 **共享记忆** 并写入一行；该领域下会话的下一轮 prompt 应包含这条记忆。关掉它再验证 prompt 不再带。
 - 在已绑定会话发一张图片。开启 **图片理解** 且模型支持视觉时，session 请求应包含 image part；非视觉模型会降级为文本，而不是让回合失败。
 - 几轮模型回合后打开 **用量**：会话应出现 input/output/cache token 统计。清空一次，表格应归零。
@@ -134,14 +140,22 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 1. 终端运行 `gh auth login`（已登录可跳过），在 **概览与通道 → GitHub 仓库** 点 **读取仓库**，从下拉选仓库；点 **读取分支** 选分支。也可以手填 `owner/repo` 或 token。
 2. 保存并勾选启用；在领域里勾选 **允许读取仓库**，保存。
 3. 在已绑定会话问一个需要查仓库的问题；模型应先调 `lane_repo_status`，再查 issue/文件/提交。
-4. 验证 `lane_repo_read_file` 不能读 `../`，错误里不出现 token；`lane_repo_create_issue` 默认报“未开启”。
+4. 验证 `lane_repo_read_file` 不能读 `../`，错误里不出现 token；`lane_repo_create_issue` 默认报“未开启”。开启后把 issue 标签填一个仓库里不存在的名字，再建一次：应自动改为不带标签创建，而不是整次失败。
 
 ### 6.2 知识库草稿审批
 
-1. 让模型查到一个知识库没有覆盖的新结论，调用 `lane_kb_draft`（title/content/source 必填）。
-2. **知识库审批** 页应出现草稿；`lane_kb_list/search/read` 不应看到它。
-3. 检查草稿下显示的「将写入知识库 X（绑定领域：…）」；触发词芯片为空时 **采纳** 是灰的，加一个词后点 **采纳**：该知识库里应出现一篇新的 `标题.md`，带 `title` / `triggers` frontmatter 和来源，草稿消失；点 **丢弃** 则只删除草稿。
-4. 确认 `~/.dsh/lane-bridge/kb-backups/` 有采纳前备份。
+1. 让模型查到一个知识库没有覆盖的新结论，调用 `lane_kb_draft`（`title` / `content` / `triggers` / `source` 必填；领域绑了多个库时还要 `scope`）。没有触发词的调用应被工具直接拒绝并说明原因。
+2. **知识库审批** 页应出现草稿；`lane_kb_list/search/read` 和自动检索都不应看到它。
+3. 检查卡片上显示的「将写入知识库 X（绑定领域：…）」。触发词芯片为空时 **采纳** 是灰的；加一个词后点 **采纳**：该知识库里应出现一篇新的 `标题.md`，带 `title` / `triggers` frontmatter 和来源，草稿消失。再采纳一篇同名草稿，应得到 `标题-2.md`，原文件不被覆盖。
+4. 再发一次用户会说的话，确认新文档能被检索命中；点 **丢弃** 只删除草稿，不产生文档。
+5. 领域一个知识库都没绑时调用 `lane_kb_draft`，应直接报错「先绑定知识库」，而不是写进默认库。
+
+### 6.3 会话归档（可选）
+
+1. 把领域的 **会话归档轮数**（`sessionMaxTurns`）设为 2，保存。
+2. 连续完成两个回合；达到轮数后桥接会发起一次内部归档调用（日志可见 `lane_retire`），随后 DSH 会话被重置。
+3. 模型写下的记忆/知识库草稿应分别出现在 **记忆** 页和 **知识库审批** 页；归档回合的文本不应发到群里。
+4. 模型不调用工具时，等待 90 秒后仍会重置，只写一条「归档回合未沉淀任何内容」的日志。
 
 ## 7. 失败时记录什么
 

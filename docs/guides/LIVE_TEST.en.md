@@ -62,7 +62,11 @@ Expected:
   crash or clear the whole UI).
 - `GET /lane-bridge/api/health` returns `{ok:true}`.
 - `~/.dsh/lane-bridge/state.json` exists with `version`, `config`, `domains`,
-  `roles`.
+  `knowledgeBases`, `roles`.
+- The Settings card has nine tabs: Overview & channels, Conversations, Domains,
+  Roles, Knowledge, Memory, KB approval, Usage, Push.
+- The Settings header shows the running plugin version (`v0.6.0`), and
+  `GET /lane-bridge/api/health` returns the same `version`.
 
 If the page is blank or shows “面板渲染失败”, open the browser console: a missing
 `settings.section` / `sidebarRightTabs` slot or a bundle load error is the usual
@@ -88,9 +92,9 @@ cause; the error boundary keeps the rest of the UI alive when it can.
    show **已连接**.
 4. Send a private message to the bot from an allowed account. It appears under
    **会话** with a `snowluma:private:<id>` key.
-5. Bind it to the default domain, then send another message. A DSH session
-   appears in the bridge workspace; the assistant's turn is delivered back to
-   QQ.
+5. Bind it to the 客服 role on the **Conversations** page (that role belongs to
+   the default domain), then send another message. A DSH session appears in the
+   bridge workspace; the assistant's turn is delivered back to QQ.
 
 Common failures:
 
@@ -146,13 +150,28 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 
 `targets` accepts an array for a broadcast (max 50).
 
-## 6. Knowledge and role cards
+## 6. Role cards, knowledge bases, and memory
 
-- Edit a role card in **角色与知识**; the next turn of a conversation using it
-  re-injects the card (the content hash changed).
-- Add a Markdown file under `~/.dsh/lane-bridge/knowledge/<scope>/`; the domain
-  must list that scope. The agent sees it through `lane_kb_*`.
-- `_`-prefixed files/directories are private (drafts) and are not listed.
+- Edit a role card on the **Roles** page (its own page; knowledge and memory no
+  longer live there). The next turn of a conversation using it re-injects the
+  card (the content hash changed).
+- On the **Knowledge** page, create a `测试库` base and confirm
+  `knowledge/测试库/` appears; rename it and confirm the directory and every
+  domain that bound it are updated; an empty base deletes cleanly, a non-empty one
+  asks for explicit confirmation.
+- Create/edit a document in the default base with `triggers` frontmatter; the list
+  should show trigger chips. Rename it to a path with a subdirectory (e.g.
+  `机制/宝具.md`), then move it to `测试库`; an existing target path must be
+  refused rather than overwritten.
+- On the **Domains** page bind two knowledge bases; also bind an empty base and
+  check for the red warning that retrieval and AI drafts will land on an empty
+  base.
+- Turn on **KB auto retrieval** on the domain and send a message containing a
+  document's trigger: only that document is injected, not the whole base. A
+  document with no frontmatter is reachable only through the domain's **fallback
+  trigger words** plus full-text search.
+- `_`-prefixed files/directories are private (drafts), are not listed, and are
+  excluded from retrieval.
 - Enable **共享记忆** on a domain and add a line in the memory editor; the next
   turn of a conversation in that domain should contain the memory. Disable it
   again to verify the prompt no longer carries it.
@@ -180,14 +199,31 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 ### 6.2 KB draft approval
 
 1. Have the model learn a new fact not covered by the KB and call `lane_kb_draft`
-   (title/content/triggers/source required; `scope` when the domain binds several).
-2. The **知识库审批** tab should list the draft; `lane_kb_list/search/read` must
-   not see it. The card names the base it will be written into and which domains
-   bind that base.
-3. With an empty trigger list **Approve** stays disabled; add a keyword and approve:
-   a new `title.md` appears in that base with `title`/`triggers` frontmatter and the
-   source, and the draft disappears. **Discard** just removes the draft.
+   (`title` / `content` / `triggers` / `source` required; `scope` when the domain
+   binds several). A call without triggers must be rejected by the tool with a
+   reason.
+2. The **知识库审批** tab should list the draft; `lane_kb_list/search/read` and
+   auto retrieval must not see it.
+3. The card names the base it will be written into and which domains bind that
+   base. With an empty trigger list **Approve** stays disabled; add a keyword and
+   approve: a new `title.md` appears in that base with `title`/`triggers`
+   frontmatter and the source, and the draft disappears. Approve a second draft
+   with the same title: it becomes `title-2.md` and the first file is untouched.
 4. Ask the player's phrasing again — the new document should now match.
+   **Discard** just removes the draft and creates no document.
+5. With no knowledge base bound to the domain, `lane_kb_draft` must fail with
+   "bind a knowledge base first" instead of silently writing to the default base.
+
+### 6.3 Session archival (optional)
+
+1. Set the domain's **会话归档轮数** (`sessionMaxTurns`) to 2 and save.
+2. Complete two answered turns; once the budget is reached the bridge starts an
+   internal archival turn (`lane_retire` visible in the log) and then resets the
+   DSH session.
+3. Memory / KB drafts written by the model appear on the **记忆** and
+   **知识库审批** pages; the archival text never reaches the chat.
+4. If the model ignores the instruction, the bridge still resets after 90 seconds
+   and only logs `归档回合未沉淀任何内容`.
 
 ## 7. What to record if it fails
 

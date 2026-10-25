@@ -41,9 +41,10 @@ skeleton.
 
 **Only seeing "not connected / stopped"?** Start SnowLuma first (double-click
 `launcher.bat` in its folder, or run `node index.mjs` there and wait for
-`127.0.0.1:3001` in its log), then click **Enable** on its card. The plugin does
-not start SnowLuma for you. For official QQ Bot / Discord, fill the credentials
-and click **Enable** the same way.
+`127.0.0.1:3001` in its log), then click **Start** on SnowLuma in the
+**启动通道** card at the top of the page. The plugin does not start SnowLuma for
+you. For official QQ Bot / Discord, fill the credentials and click **Start** in
+the same way.
 
 Local development:
 
@@ -57,8 +58,9 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   together. No second server or console token.
 - **One DSH session per conversation**: transcripts, tools, and token usage are
   visible in the normal DSH UI.
-- **Domains**: bind a group/private chat to a reusable policy (preset, model,
-  **bound knowledge bases**, host-tool allow-list, group trigger policy).
+- **Domains**: a reusable set of infrastructure (preset, model, **bound knowledge
+  bases**, host-tool allow-list, operator whitelist, group trigger policy); a
+  conversation reaches a domain through its role card.
 - **Shared libraries**: role cards and the Markdown knowledge bases are shared; a
   domain binds *several* knowledge bases, and every document inside them is
   reachable by its own triggers. Optional domain-scoped memory
@@ -432,45 +434,58 @@ SnowLuma.
 ## Security defaults
 
 - The default `lane-support` preset registers no built-in tools.
-- Every conversation's agent gets `lane_send` / `lane_kb_*` / `lane_kb_draft` /
-  `lane_repo_*` and a `tools.restrict({ allow: allowedHostTools })` mask; the
-  default allow-list is empty.
+- Every conversation's agent gets `lane_send` / `lane_conversation_info` /
+  `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` /
+  `lane_escalate` and a `tools.restrict({ allow: allowedHostTools })` mask; the
+  default allow-list is empty. `lane_retire` only works inside an archival turn.
 - KB tools read the official tree only; drafts write only to `_待审/` and are
   excluded from retrieval. GitHub is off per domain unless enabled.
 - Issue creation, cross-conversation push, and shared-memory writes are limited
   to the domain's operator whitelist; the whitelist defaults to empty (nobody).
 - Secrets are never returned to the browser; the UI only displays presence.
 - Browser writes require a same-origin request; external push requires the
-  configured bearer token.
+  configured bearer token, and a partial failure returns 207 with per-target
+  reasons.
+- Images are public http(s) only, with hop-by-hop redirect validation and
+  type/size caps.
+- The plugin never starts or stops SnowLuma or another vendor process.
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/lane-bridge/api/state` | Redacted state + channel status (same-origin) |
+| `GET` | `/lane-bridge/api/health` | Running plugin version and uptime |
+| `GET` | `/lane-bridge/api/presets` | Host preset registry (domain dropdown) |
 | `POST` | `/lane-bridge/api/config` | Merge channel/general config |
 | `POST` | `/lane-bridge/api/domains` | Replace domains |
 | `POST` | `/lane-bridge/api/roles` | Replace role cards |
 | `POST` | `/lane-bridge/api/bindings` | Replace bindings |
-| `POST` | `/lane-bridge/api/push` | Send to one `target` or many `targets` (bearer token or same-origin) |
+| `POST` | `/lane-bridge/api/conversations` | Delete a discovered conversation record (`{key, remove:true}`) |
+| `POST` | `/lane-bridge/api/push` | Send to one `target` or many `targets` (bearer token or same-origin, max 50) |
 | `POST` | `/lane-bridge/api/session/reset` | Forget a conversation's DSH session (next message starts fresh) |
 | `POST` | `/lane-bridge/api/channels/restart` | Reconnect adapters |
-| `GET`/`POST` | `/lane-bridge/api/knowledge` | List / write KB documents |
+| `GET` | `/lane-bridge/api/channels/logs` | Last 300 channel connect/error lines |
+| `GET`/`POST` | `/lane-bridge/api/knowledge` | List / write KB documents; `POST {action:'move', ...}` renames or moves across bases |
+| `GET` | `/lane-bridge/api/knowledge/read` | Read one document, including frontmatter |
+| `GET`/`POST` | `/lane-bridge/api/kb` | List / create / rename / delete knowledge bases |
 | `GET`/`POST` | `/lane-bridge/api/kb/drafts` | List / approve / discard pending drafts; approve takes `{action:'approve', scope, file, triggers:[...]}` and creates a new document with those triggers |
 | `GET`/`POST` | `/lane-bridge/api/memory` | Read / replace / clear domain memory |
 | `POST` | `/lane-bridge/api/handoff` | pause / escalate / resume a conversation |
 | `GET`/`POST` | `/lane-bridge/api/usage` | read / clear the local token ledger |
+| `GET` | `/lane-bridge/api/github/auth`, `/repos`, `/branches` | `gh` credential status and repo/branch dropdowns |
 
 ## Status
 
-The QQ / official QQ Bot / Discord adapters and the management surface are in
-place. The legacy simulation/sticker/voice/**cost-conversion** features are not
-ported yet; the token usage ledger is included. See the repository's
-`docs/IM_BRIDGE_ARCHITECTURE.en.md` for the design and live-verification
-checklist.
+`0.6.0`: the QQ / official QQ Bot / Discord adapters and the management surface
+are in place, with 156 passing tests. The legacy simulation/sticker/voice/**cost-conversion**
+features are not ported yet; the token usage ledger is included. See the
+repository's `docs/IM_BRIDGE_ARCHITECTURE.en.md` for the design and
+live-verification checklist.
 
-The code and tests are complete, but live DSH installation and real channel
-traffic are not verified yet.
+Live DSH installation and real-channel acceptance are still in progress: the
+official QQ Bot has entered acceptance, while SnowLuma / Discord have not had
+end-to-end traffic yet.
 
 ## Credits
 

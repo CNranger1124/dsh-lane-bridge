@@ -54,7 +54,7 @@ F:/GithubProject/dsh-lane-bridge/packages/dsh-lane-bridge
 
 前置：
 
-- DSH 0.2.1-rc.3+
+- DSH 0.2.1-rc.3+（插件按 `settings.section`、侧栏 tab 和鉴权路由编写；更新的 DSH 版本通常可用，以设置页能正常渲染为准）
 - Node 22+
 - `pnpm`（DSH CLI 安装插件依赖时使用）
 
@@ -98,7 +98,9 @@ cd packages/dsh-lane-bridge
 npm pack --dry-run
 ```
 
-预期：测试全部通过；tarball 约 65 KB，包含 `lib/`、`presets/`、`cordis.patch.yml`、`README.md`、`README.en.md`、`LICENSE`、`LICENSE.zh.md`、`NOTICE`、`scripts/`。
+预期：测试全部通过；tarball 约 130 KB（0.6.0 实测 133 KB），包含 `lib/`、`presets/`、`cordis.patch.yml`、`README.md`、`README.en.md`、`LICENSE`、`LICENSE.zh.md`、`NOTICE`、`scripts/`。
+
+发布前确认文档没有落后于代码：README（中英）、`CHANGELOG.md`/`CHANGELOG.en.md`、`docs/IM_BRIDGE_ARCHITECTURE.md`（中英），以及改动了验收步骤时的 `LIVE_TEST`。规则见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
 检查包名：
 

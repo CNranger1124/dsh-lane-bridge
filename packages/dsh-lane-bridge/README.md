@@ -37,7 +37,7 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 安装后完全重启 DSH，打开 **Settings → IM 桥接**。首次运行会创建
 `~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
 
-**只看到「未连接 / 已停用」？** 先启动 SnowLuma（双击其目录里的 `launcher.bat`，或在目录运行 `node index.mjs`，等日志出现 `127.0.0.1:3001`），然后在 SnowLuma 卡片右上角点 **启用**。插件不会代启动 SnowLuma；官方 QQ Bot / Discord 填好凭据后同样点 **启用**。
+**只看到「未连接 / 已停用」？** 先启动 SnowLuma（双击其目录里的 `launcher.bat`，或在目录运行 `node index.mjs`，等日志出现 `127.0.0.1:3001`），然后在页面顶部的 **启动通道** 卡片里点 SnowLuma 的 **启动**。插件不会代启动 SnowLuma；官方 QQ Bot / Discord 填好凭据后同样点 **启动**。
 
 本地开发：
 
@@ -49,7 +49,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 - **一个插件**：渠道、领域路由、角色卡、知识库和推送都在一起。不需要第二个服务或控制台 token。
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
-- **领域**：把群/私聊绑定到可复用策略（preset、模型、**绑定的知识库**、宿主工具白名单、管理者白名单、群聊触发策略）。
+- **领域**：一套可复用的基础设施（preset、模型、**绑定的知识库**、宿主工具白名单、管理者白名单、群聊触发策略）；会话通过角色卡选择领域。
 - **共享库**：角色卡和 Markdown 知识库共享；领域可以绑定**多个知识库**，绑定后就能按文档自己的触发词命中。领域记忆（`lane_memory_*`）跨会话积累经验。
 - **知识库草稿 + 人工审批**：`lane_kb_draft` 写的是**一篇文章草稿**（标题 + 触发词 + 正文 + 来源），落在该领域绑定知识库的 `_待审/` 里；「知识库审批」页可以改触发词，采纳后才变成那个知识库里一篇带触发词的正式文档（同名不覆盖，自动加序号）。
 - **GitHub 只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；issue/文件/代码/提交查询；支持 `gh` CLI 读取账号可见的全部仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
@@ -311,36 +311,44 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 ## 安全默认
 
 - 默认 `lane-support` preset 不注册任何内置工具。
-- 每个会话的 agent 会拿到 `lane_send` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。
+- 每个会话的 agent 会拿到 `lane_send` / `lane_conversation_info` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。`lane_retire` 只在归档回合内可用。
 - KB 工具只读正式区；草稿只能写 `_待审/`，且不参与检索。GitHub 默认关闭，按领域开启。
 - 建 issue、跨会话推送、写共享记忆只允许领域管理者白名单里的成员；白名单默认留空＝谁都不能。
 - 密钥永不返回浏览器；UI 只显示“已配置”。
-- 浏览器写操作要求同源；外部推送要求配置的 bearer token。
+- 浏览器写操作要求同源；外部推送要求配置的 bearer token，部分失败返回 207 并逐目标给出原因。
 - 图片只允许公网 http(s)，逐跳校验重定向，限制类型和字节数。
+- 插件不启动/停止 SnowLuma 或其他厂商进程。
 
 ## API
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | `GET` | `/lane-bridge/api/state` | 脱敏 state + 渠道状态（同源） |
+| `GET` | `/lane-bridge/api/health` | 运行中的插件版本与 uptime |
+| `GET` | `/lane-bridge/api/presets` | 宿主 preset 注册表（领域下拉用） |
 | `POST` | `/lane-bridge/api/config` | 合并渠道/通用配置 |
 | `POST` | `/lane-bridge/api/domains` | 替换领域 |
 | `POST` | `/lane-bridge/api/roles` | 替换角色卡 |
 | `POST` | `/lane-bridge/api/bindings` | 替换绑定 |
-| `POST` | `/lane-bridge/api/push` | 发到单个 `target` 或多个 `targets`（bearer token 或同源） |
+| `POST` | `/lane-bridge/api/conversations` | 删除已发现会话记录（`{key, remove:true}`） |
+| `POST` | `/lane-bridge/api/push` | 发到单个 `target` 或多个 `targets`（bearer token 或同源，最多 50 个） |
 | `POST` | `/lane-bridge/api/session/reset` | 忘记会话的 DSH session（下一条消息新建） |
 | `POST` | `/lane-bridge/api/channels/restart` | 重连适配器 |
-| `GET`/`POST` | `/lane-bridge/api/knowledge` | 列出/写入 KB 文档 |
+| `GET` | `/lane-bridge/api/channels/logs` | 最近 300 条渠道连接/错误日志 |
+| `GET`/`POST` | `/lane-bridge/api/knowledge` | 列出/写入知识库文档；`POST {action:'move', ...}` 改名或跨库转移 |
+| `GET` | `/lane-bridge/api/knowledge/read` | 读取单篇文档（含 frontmatter） |
+| `GET`/`POST` | `/lane-bridge/api/kb` | 列出/新建/重命名/删除知识库 |
 | `GET`/`POST` | `/lane-bridge/api/kb/drafts` | 列出/采纳/丢弃待审草稿；采纳参数 `{action:'approve', scope, file, triggers:[...]}`，在该知识库新建一篇带触发词的文档 |
 | `GET`/`POST` | `/lane-bridge/api/memory` | 读取/替换/清空领域记忆 |
 | `POST` | `/lane-bridge/api/handoff` | 暂停 / 转人工 / 恢复会话 |
 | `GET`/`POST` | `/lane-bridge/api/usage` | 读取/清空本地 token 账本 |
+| `GET` | `/lane-bridge/api/github/auth`、`/repos`、`/branches` | `gh` 凭据状态、账号可见的仓库/分支下拉 |
 
 ## 状态
 
-QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和 live 验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
+`0.6.0`：QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 156 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和 live 验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
 
-当前代码和测试完成，但尚未在真实 DSH 安装和真实渠道上验收。
+真实 DSH 安装和真实渠道验收仍在进行：官方 QQ Bot 已进入验收，SnowLuma / Discord 尚未做端到端收发。
 
 ## 来源与致谢
 

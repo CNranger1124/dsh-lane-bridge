@@ -20,9 +20,11 @@ npm test
 - **密钥不进浏览器**：新增密钥字段时，同时更新 `redactState` 和 `mergeConfig`，保证 UI 只看到“已配置”、空保存不会把值清掉。
 - **不控制厂商进程**：插件不启动/停止 SnowLuma 或其他厂商的原生组件。
 - **改行为先补测试**：尤其是 store、resolver、路由和适配器这些 seam。需要真实 DSH 才能验证的改动，写进 `docs/guides/LIVE_TEST.md`。
+- **文档跟代码一起改**：用户可见的行为/界面/配置变化，同一次改动里更新 `README.md`、`CHANGELOG.md`、`docs/IM_BRIDGE_ARCHITECTURE.md`；改了验收步骤还要更新 `docs/guides/LIVE_TEST.md`。中英文是成对的，不要只改一边。
 
 ## Pull Request
 
 - 保持发布包体积小；测试和文档不进 `files`。
 - 在 `packages/dsh-lane-bridge` 下跑 `npm test` 和 `npm pack --dry-run`。
 - 用户可见改动更新 `CHANGELOG.md`。
+- 行为变了而文档没跟着改，PR 视为未完成。

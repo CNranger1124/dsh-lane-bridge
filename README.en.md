@@ -2,9 +2,10 @@
 
 # dsh-lane-bridge
 
-A **DeepSeek Harness (DSH) plugin** that connects social chat channels to DSH agents:
-one plugin, many channels, shared knowledge, per-conversation personas, and a
-single outbound "push" API.
+A **DeepSeek Harness (DSH) plugin** that connects QQ (SnowLuma OneBot v11),
+the official QQ Bot, and Discord to DSH agents: **one plugin, many channels,
+shared knowledge bases, per-conversation personas, and a single outbound push
+API**. Current version: `0.6.0`.
 
 This repository started from `qq-bridge` (a standalone QQ ↔ DSH bridge). The
 plugin in [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge) is the new home
@@ -45,7 +46,7 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 Fully restart DSH and open **Settings → IM 桥接**. You can also open the **IM 桥接**
 panel from the DSH right sidebar's “+” menu to manage conversations, channels,
 and domains directly. The first run creates `~/.dsh/lane-bridge/` with a default
-domain, a sample role card, and a KB skeleton.
+domain, a sample role card, a default knowledge base, and a memory directory.
 
 Local development:
 
@@ -63,8 +64,7 @@ The plugin does not start SnowLuma for you (licence reasons). "Enabled but not
 connected" usually means SnowLuma is not running, or the WS port is wrong.
 
 1. Start SnowLuma yourself: double-click `launcher.bat` in its folder, or run
-   `node index.mjs` there; wait for `listening 127.0.0.1:3001` in its log. The
-   plugin does not start it for you (EULA reasons).
+   `node index.mjs` there; wait for `listening 127.0.0.1:3001` in its log.
 2. Open **Settings → IM 桥接 → 概览与通道**.
 3. In the **启动通道** card at the top, find **SnowLuma / QQ** and click
    **Start**. The pill should turn **已连接**. If not, the row shows the reason.
@@ -91,76 +91,115 @@ connected" usually means SnowLuma is not running, or the WS port is wrong.
 
 A standalone frontend would duplicate authentication, theme, session list, and
 deployment. We therefore build the management surface **inside DSH**, and keep
-only a one-shot legacy migration script for moving an existing install.
+only a one-shot legacy migration script.
 
-## What is in the box (v0.2 scope)
+## What 0.6 gives you
 
-- Channel adapter interface + SnowLuma (OneBot v11) adapter (QQ).
-- Official QQ Bot adapter (experimental; requires an app id/secret). The official
-  platform only pushes **@-mentions** in group chats (`GROUP_AT_MESSAGE_CREATE`),
-  never ordinary group traffic, so keyword triggers cannot work there; use
-  SnowLuma when you need every group message.
-- Discord adapter (`discord.js`; DM + guild channels, optional mention gate; the
-  only credential is a Bot Token).
-- Domain / binding model: one DSH session per group or private chat, with a
-  domain-level role card, preset, model, KB scopes, and host-tool allow-list.
-  Group attention policies are multi-select: mention/reply and keyword can be
-  enabled together and either one wakes the bot (`all` and `off` stay exclusive).
-- Shared role-card library, shared knowledge base (`lane_kb_*`), and optional
-  domain-scoped shared memory (`lane_memory_*`).
+- **Three channels**: SnowLuma (OneBot v11), official QQ Bot (AppID/AppSecret),
+  and Discord (Bot Token + Message Content Intent). The launcher card starts,
+  stops, and retries each channel, and shows the last 300 connect/error lines.
+- **Conversation → role → domain**: a conversation only picks a role card; the
+  role is bound to a domain; the domain owns the infrastructure (bound knowledge
+  bases, shared memory, repo, operators, attention policy, preset/model).
+  Swapping the role swaps the whole policy.
+- **Domains**: preset dropdown, model, host-tool allow-list, **operator
+  whitelist** (`channel:id`; empty means nobody), multi-select group attention
+  policies (mention/reply and keyword can both apply, or all/off), auto-retrieval
+  and context budgets (`kbRetrieveChars`, `memoryMaxChars`, `sessionMaxTurns`).
+- **Knowledge bases are first-class**: one directory under `knowledge/<name>/` is
+  one knowledge base. Create, rename, and delete them on the Knowledge page. A
+  domain binds **several** bases, and renaming a base repoints every domain that
+  bound it.
+- **Per-document triggers**: each Markdown document carries `title` / `triggers` /
+  `always` frontmatter; only the matching document is injected. `always: true`
+  injects on every turn. Legacy documents still work through the domain's
+  fallback words plus full-text search.
+- **Knowledge editor**: rename a document (subdirectories allowed) or move it to
+  another knowledge base. An existing target is refused, never overwritten.
 - **KB drafts + human approval**: `lane_kb_draft` writes a single-topic draft with
-  triggers into the review queue of a knowledge base the domain binds; the Settings
-  "KB approval" tab lets you correct the triggers, and approving creates a real
-  document there (never overwriting: duplicates get a suffix).
-- **Read-only GitHub repo**: one global default repo, with per-domain repo/branch
-  overrides; path guards, token redaction, ETag cache; repo/branch dropdowns list
-  every repo visible to the account from the `gh` CLI (so `gh auth login` removes
-  the need for a manual token); `lane_repo_*` tools for issues/files/code/commits.
-  Issue creation is off by default and rate-limited when enabled; if the
-  configured label does not exist in the repo, the issue is created without
-  labels instead of failing.
-- **Channel logs**: "View logs" in the launcher shows the last 300
-  connect/reconnect/error lines instead of just "not connected".
-- Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`; the
-  Settings page can select several conversations at once and the API takes a
-  `targets` array, reporting success/failure per target.
-- Domain agent presets are a dropdown fed by the host's own preset registry
-  (`/api/presets`), with a one-line explanation of what each preset provides.
-- Native DSH Settings card + right-sidebar panel: channels, conversations,
-  domains, roles, KB, approval, and push, sharing one state.
-- The top **启动通道** card has Start/Stop/Retry per channel plus View logs, with
-  actionable connection hints (for example, "SnowLuma is not running").
-- Every module header has its own Save button; every module collapses from its
-  title row.
-- The save bar is sticky at the bottom of the page, so Save is always visible.
-- Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
-  prompt parts, with a text-only fallback for non-vision models.
-- Human handoff: `lane_escalate` pauses auto-replies, notifies an operator
-  conversation, and resumes from the Settings card.
-- Local token ledger + Usage tab (per-conversation input/output/cache totals).
-- Tests for store, resolver, routes, session orchestration, GitHub, draft
-  approval, and the plugin harness.
+  **mandatory triggers** into `_待审/` of a base the domain binds. The approval
+  page edits the triggers; approving creates a real document with frontmatter in
+  that base (duplicates get a suffix, never overwrite).
+- **AI sediment**: when `sessionMaxTurns` is reached, an internal archival turn
+  asks the model to `lane_retire` what matters into domain memory or KB drafts,
+  then resets the session. Archival text never reaches the chat.
+- **Operator whitelist + identity templates**: only whitelisted members can
+  create issues, push to another conversation, or write shared memory. Role cards
+  and domain prompts can switch wording with `{{#if operator}}…{{else}}…{{/if}}`;
+  the hard gate stays in code.
+- **Read-only GitHub**: global default repo with per-domain overrides; repo/branch
+  dropdowns list everything visible to the `gh` CLI; path guards, token
+  redaction, ETag cache; `lane_repo_*` for issues/files/code/commits. Issue
+  creation is off by default, rate-limited when enabled, and degrades to no
+  labels when the configured label does not exist.
+- **Unified push**: `lane_send` agent tool + `POST /lane-bridge/api/push`; single
+  or broadcast (`lane_send` caps at 20 conversations, the push API at 50 targets),
+  with a 207 response that explains each partial failure.
+- **Inbound images**: safe download (SSRF/byte caps) + multimodal prompt parts,
+  with a text-only fallback for non-vision models.
+- **Human handoff**: `lane_escalate` pauses auto-replies, notifies the configured
+  operator conversation, and resumes from Settings.
+- **Usage ledger**: local per-conversation input/output/cache token totals.
+- **Management surface**: nine tabs (Overview & channels, Conversations, Domains,
+  Roles, Knowledge, Memory, KB approval, Usage, Push), each module with its own
+  Save button and collapsible header, plus a sticky save bar. The sidebar panel
+  shares the same state.
+- **Tests**: 156, covering store, resolver, routes, session orchestration,
+  GitHub, knowledge bases and draft approval, channel adapters, and the plugin
+  harness.
 
-See [docs/IM_BRIDGE_ARCHITECTURE.en.md](./docs/IM_BRIDGE_ARCHITECTURE.en.md) for the
-architecture and migration plan, and
-[docs/guides/PUBLISHING.en.md](./docs/guides/PUBLISHING.en.md) for publishing and
-installation details.
+## Configuration model: conversation → role → domain
+
+Three layers, in one direction:
+
+```text
+conversation (one group / one private chat)  -- binds one role card
+                                                    └─ the role belongs to a domain
+                                                         └─ domain = bound knowledge bases
+                                                            + memory + repo + operators
+                                                            + attention policy + preset/model
+```
+
+- **A binding only picks a role.** There is no domain selector; swapping the role
+  swaps the knowledge bases, memory, and policy with it.
+- **Domains never name a role**; they describe infrastructure only. One domain
+  can host several roles.
+- **Unbound conversations are recorded but never prompt a model.** Open
+  `autoReplyPrivate` for an inbound support inbox.
+- Legacy 0.3.x `domain.role` / `binding.domainId` migrate to “role → domain” on
+  load.
+
+The detailed manual (operator format, identity templates, document triggers,
+draft approval, archival budget, QQ Bot passive vs active messages) lives in
+[the plugin README](./packages/dsh-lane-bridge/README.en.md).
+
+## Docs
+
+| Document | Contents |
+| --- | --- |
+| [packages/dsh-lane-bridge/README.en.md](./packages/dsh-lane-bridge/README.en.md) | Full manual: configuration, operators, templates, knowledge bases, archival, QQ Bot rules, API |
+| [docs/IM_BRIDGE_ARCHITECTURE.en.md](./docs/IM_BRIDGE_ARCHITECTURE.en.md) | Architecture, data model, inbound flow, security baseline, migration and verification status |
+| [docs/guides/LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md) | First-run checklist on a real DSH install and real channels |
+| [docs/guides/PUBLISHING.en.md](./docs/guides/PUBLISHING.en.md) | Local link install, npm release, CI, upgrade/uninstall |
+| [CHANGELOG.en.md](./CHANGELOG.en.md) | User-visible changes per version |
 
 ## Status
 
-`0.2.8` makes group attention policies multi-select (mention and keyword together)
-and stops issue creation from failing when the configured label is missing (it
-retries without labels). `0.2.7` shows the running plugin version in Settings;
-`0.2.6` fixes the missing `AbortSignal` on prompt submission and the stale event
-stream API that made QQ reply with only an apology. `0.2.4` adds an explicit Save
-button to every module header. The legacy standalone `qq-bridge` project still has
-features the plugin does not yet port: group slang learning, sticker library,
-voice messages, cost conversion, and the simulation scheduler. The architecture
-doc tracks the migration.
+`0.6.0` makes knowledge bases first-class: drafts require triggers, land only in a
+base the domain binds, and approving creates a standalone document (the approval
+page edits the triggers). `0.5.x` added knowledge-base CRUD, cross-base moves and
+renames, and multi-base domain binding; `0.4.x` fixed official QQ Bot passive
+replies, full-mode group messages, and mention detection; `0.3.x` introduced the
+conversation → role → domain model. See [CHANGELOG.en.md](./CHANGELOG.en.md).
 
-The code, tests, and package are complete; real DSH / official QQ Bot acceptance
-is in progress, while SnowLuma / Discord end-to-end traffic is not verified yet.
-Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
+The code and tests are complete (156 passing); real DSH / official QQ Bot
+acceptance is in progress, while SnowLuma / Discord end-to-end traffic is not
+verified yet. Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
+
+The legacy project still has features the plugin does not port: group slang
+learning, the sticker library, voice messages, cost conversion, and the
+simulation scheduler. The token usage ledger is included. The architecture doc
+tracks the migration.
 
 ## Credits
 

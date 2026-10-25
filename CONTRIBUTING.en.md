@@ -31,9 +31,15 @@ adapters with fake SDK clients, and the browser bundle with a fake module loader
 - **Tests before behavior changes** for the store, resolver, route, and adapter
   seams. If a change needs a live DSH to verify, add it to
   `docs/guides/LIVE_TEST.en.md`.
+- **Docs change with the code**: for any user-visible behavior, UI, or
+  configuration change, update `README.en.md`, `CHANGELOG.en.md`, and
+  `docs/IM_BRIDGE_ARCHITECTURE.en.md` in the same change; update
+  `docs/guides/LIVE_TEST.en.md` when verification steps change. English and
+  Chinese are paired — do not update only one side.
 
 ## Pull requests
 
 - Keep the package tarball small; tests and docs stay outside `files`.
 - Run `npm test` and `npm pack --dry-run` in `packages/dsh-lane-bridge`.
 - Update `CHANGELOG.md` for user-visible changes.
+- A behavior change without the matching docs update is an incomplete PR.

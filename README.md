@@ -2,7 +2,7 @@
 
 # dsh-lane-bridge
 
-一个把社交聊天渠道接入 DSH agent 的 **DeepSeek Harness (DSH) 插件**：一个插件、多个渠道、共享知识、按会话人格，以及统一的出站推送 API。
+把 QQ（SnowLuma OneBot v11）、官方 QQ Bot 和 Discord 接入 DSH 的聊天/客服 Bot 插件：**一个插件、多个渠道、共享知识库、按会话人格、统一推送**。当前版本 `0.6.0`。
 
 本仓库从独立的 `qq-bridge` 项目演进而来。产品代码在
 [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge)；旧的 `qq-bridge` 源码**不包含**在仓库里，迁移脚本可以读取一个外部的旧项目目录。仓库只包含插件、文档和测试。
@@ -38,7 +38,7 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 ```
 
 安装后完全重启 DSH，打开 **Settings → IM 桥接**；也可以从 DSH 右侧栏的「+」里打开 **IM 桥接** 面板，直接管理会话、通道和领域。首次运行会创建
-`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
+`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡、默认知识库和记忆目录。
 
 本地开发：
 
@@ -52,7 +52,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 插件不会代启动 SnowLuma（许可证原因），所以「已启用但未连接」通常只是 SnowLuma 没开，或 WS 端口不对。
 
-1. 先自行启动 SnowLuma：双击 SnowLuma 目录里的 `launcher.bat`，或在目录里运行 `node index.mjs`；确认日志出现 `listening 127.0.0.1:3001`。插件不会代启动它（EULA 原因）。
+1. 先自行启动 SnowLuma：双击 SnowLuma 目录里的 `launcher.bat`，或在目录里运行 `node index.mjs`；确认日志出现 `listening 127.0.0.1:3001`。
 2. 打开 **Settings → IM 桥接 → 概览与通道**。
 3. 在页面顶部 **启动通道** 卡片里，找 **SnowLuma / QQ** 点 **启动**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
 4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点对应行的 **启动**；不需要的通道点 **停止**。Discord 只认 **Bot Token**（开发者门户 → 应用 → **Bot** 页 → `Reset Token`）：OAuth2 页的客户端密钥和 General Information 页的公钥都用不上。
@@ -69,33 +69,60 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 独立前端会重复实现鉴权、主题、会话列表和部署。因此管理界面放在 **DSH 内部**，仓库只保留一个一次性的旧项目迁移脚本。
 
-## v0.2 包含什么
+## 0.6 能做什么
 
-- 渠道适配器接口 + SnowLuma（OneBot v11）适配器（QQ）。
-- 官方 QQ Bot 适配器（实验性；需要 AppID/AppSecret）。群聊默认只推送 **@ 机器人**的消息（`GROUP_AT_MESSAGE_CREATE`）；机器人在开放平台开通「接收所有消息」后，平台会额外推送 `GROUP_MESSAGE_CREATE`（每条群消息），此时「关键词触发」可用。两个事件里 `mentions` 含义不同——全量模式下它包含被 @ 的**其他人**，桥接按机器人自己的 openid 判定是否真的被 @。
-- Discord 适配器（`discord.js`；私聊 + 服务器频道，可选 mention gate；凭据只有一个 Bot Token）。
-- 领域/绑定模型：**会话 → 角色 → 领域**。会话只选角色，角色绑定领域，领域是基础设施（知识库 scope、共享记忆、仓库、管理者、触发策略）。领域级 preset（下拉选择，带作用说明）、模型、宿主工具白名单、**管理者白名单**（渠道下拉 + id，加号添加/减号移除；存成 `qqbot:8FD9…`，留空＝没有人是管理员）；群聊触发策略可多选（「@ 或回复」和「命中关键词」可同时生效，命中任意一条就回复；也可选「所有消息」或「关闭」）。
-- 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。
-- **知识库草稿与人工审批**：`lane_kb_draft` 写的是一篇带触发词的单主题草稿，落在该领域绑定知识库的 `_待审/`；Settings 的「知识库审批」页可改触发词，采纳后在该库新建一篇正式文档（同名不覆盖）。
-- **GitHub 仓库只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；路径校验、token 脱敏、ETag 缓存；支持从 `gh` CLI 读取账号可见的全部仓库/分支并下拉选择，`gh auth login` 后不用填 token；`lane_repo_*` 查 issue、读文件、搜代码、看提交。建 issue 默认关闭，开启后受每小时上限保护；仓库里没有配置的标签时会自动改为不带标签创建，不会因此丢掉用户反馈。
-- **通道日志**：启动卡里的「查看日志」显示最近 300 条连接/重连/错误，不再只有一个「未连接」。
-- 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`；设置页可一次勾选多个会话群发，接口用 `targets` 数组并逐个返回成功/失败。
-- 原生 DSH 设置卡片 + 右侧栏面板：渠道、会话、领域、角色、知识库、审批、推送；两处共用同一份状态。
-- 页面顶部「启动通道」：每个渠道一个启动/停止/重试按钮 + 查看日志；未连接时显示可操作原因（例如 SnowLuma 未启动）。
-- 每个模块标题栏都有自己的保存按钮；所有模块都能点标题折叠。
-- 保存栏固定在页面底部，滚动到哪都能保存。
-- 入站图片理解：安全下载（SSRF/字节上限）+ 多模态 prompt part；非视觉模型自动降级为纯文本。
-- 人工接管：`lane_escalate` 暂停自动回复、通知接管会话，并可在设置页恢复。
-- 本地 Token 用量账本 + 「用量」页（按会话统计输入/输出/缓存 token）。
-- 覆盖 store、resolver、路由、会话编排、GitHub、草稿审批和插件 harness 的测试。
+- **三个渠道**：SnowLuma（OneBot v11）、官方 QQ Bot（AppID/AppSecret）、Discord（Bot Token + Message Content Intent）。「启动通道」卡片支持逐个启动/停止/重试，并可查看最近 300 条连接/错误日志。
+- **会话 → 角色 → 领域**：会话只选角色卡；角色卡绑定领域；领域承载基础设施（绑定的知识库、共享记忆、仓库、管理者、触发策略、preset/模型）。换角色就整套换策略。
+- **领域**：preset 下拉、模型、宿主工具白名单、**管理者白名单**（`渠道:id`，空列表＝没有管理员）、群聊触发策略多选（@/回复、关键词可同时生效，也可选所有消息或关闭）、自动检索与上下文预算（`kbRetrieveChars`、`memoryMaxChars`、`sessionMaxTurns`）。
+- **知识库是一等公民**：`knowledge/<库名>/` 一个目录就是一个知识库，可在「知识库」页新建、改名、删除；领域可以绑定**多个**知识库，重命名会自动更新所有绑定它的领域。
+- **文档自带触发词**：每篇 Markdown 的 frontmatter 写 `title` / `triggers` / `always`，命中哪篇就注入哪篇；`always: true` 每轮注入。旧文档可以靠领域里的兜底词 + 全文检索。
+- **知识库编辑器**：改文件名（可带子目录）、跨知识库转移；目标重名会拒绝而不是覆盖。
+- **知识库草稿 + 人工审批**：`lane_kb_draft` 写的是一篇带**必填触发词**的单主题草稿，落在领域绑定库的 `_待审/`；「知识库审批」页可改触发词，采纳后在该库新建一篇带 frontmatter 的文档（同名自动加序号，不覆盖）。
+- **AI 沉淀**：`sessionMaxTurns` 达到阈值后发起一次内部归档回合，让模型用 `lane_retire` 把值得留的内容写成领域记忆或知识库草稿，然后重置会话；归档文本不会发到群里。
+- **管理者白名单 + 身份模板**：只有白名单成员能建 issue、跨会话推送、写共享记忆；角色卡/领域提示词可用 `{{#if operator}}…{{else}}…{{/if}}` 按身份切换说法，硬权限仍在代码里。
+- **GitHub 只读**：全局默认仓库 + 每领域覆盖；`gh` CLI 读取可见仓库/分支下拉；路径校验、token 脱敏、ETag 缓存；`lane_repo_*` 查 issue/文件/代码/提交。建 issue 默认关闭，开启后有每小时上限；配置标签不存在时自动降级为不带标签创建。
+- **统一推送**：`lane_send` agent 工具 + `POST /lane-bridge/api/push`；支持单发和广播（`lane_send` 最多 20 个会话，push API 最多 50 个目标），部分失败返回 207 并逐个给出原因。
+- **入站图片理解**：安全下载（SSRF/字节上限）+ 多模态 prompt part；非视觉模型自动降级为纯文本。
+- **人工接管**：`lane_escalate` 暂停自动回复、通知接管会话，并可在 Settings 恢复。
+- **用量账本**：本地按会话统计输入/输出/缓存 token。
+- **管理面**：概览与通道、会话、领域、角色卡、知识库、记忆、知识库审批、用量、推送共 9 个页面；每个模块标题栏有独立保存按钮、可折叠，底部保存栏固定。侧栏面板与设置页共用同一份状态。
+- **测试**：156 项，覆盖 store、resolver、路由、会话编排、GitHub、知识库与草稿审批、渠道适配器和插件 harness。
 
-架构与迁移计划见 [docs/IM_BRIDGE_ARCHITECTURE.md](./docs/IM_BRIDGE_ARCHITECTURE.md)；发布与安装细节见 [docs/guides/PUBLISHING.md](./docs/guides/PUBLISHING.md)。
+## 配置模型：会话 → 角色 → 领域
+
+三层，方向是单向的：
+
+```text
+会话（一个群 / 一个私聊）  ── 绑定一张角色卡
+                               └─ 角色卡属于一个领域
+                                    └─ 领域 = 绑定的知识库 + 记忆 + 仓库 + 管理者 + 触发策略 + preset/模型
+```
+
+- **绑定只选角色**，没有「领域」这个选项；换角色，知识库/记忆/策略整套跟着换。
+- **领域不点名角色**，只描述基础设施；一个领域可以挂多个角色。
+- **未绑定会话只记录，不触发模型**；开放客服收件箱可打开 `autoReplyPrivate`。
+- 0.3.x 的 `domain.role` / `binding.domainId` 会在加载时自动迁移成「角色 → 领域」。
+
+更细的配置说明（管理者格式、身份模板、知识库触发词、草稿审批、归档预算、QQ Bot 被动回复与主动消息）在
+[插件完整说明](./packages/dsh-lane-bridge/README.md)。
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [packages/dsh-lane-bridge/README.md](./packages/dsh-lane-bridge/README.md) | 完整使用手册：配置、管理者、模板、知识库、归档、QQ Bot 规则、API |
+| [docs/IM_BRIDGE_ARCHITECTURE.md](./docs/IM_BRIDGE_ARCHITECTURE.md) | 架构、数据模型、入站流程、安全基线、迁移与验证状态 |
+| [docs/guides/LIVE_TEST.md](./docs/guides/LIVE_TEST.md) | 真实 DSH/渠道上的首次验收清单 |
+| [docs/guides/PUBLISHING.md](./docs/guides/PUBLISHING.md) | 本地 link、npm 发布、CI 与升级/卸载 |
+| [CHANGELOG.md](./CHANGELOG.md) | 每个版本的用户可见变更 |
 
 ## 状态
 
-`0.2.8` 把群聊触发策略改成可多选（@ 与关键词同时生效），并修复仓库里不存在配置标签时建 issue 直接失败的问题（现在会自动降级为不带标签创建）。`0.2.7` 在设置页显示运行中的插件版本，`0.2.6` 修复了 prompt 漏传 `AbortSignal`、事件流调用旧接口导致 QQ 只收到道歉没有模型回复的问题。`0.2.4` 给每个模块标题栏加了显式保存按钮。旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；架构文档会跟踪。
+`0.6.0` 把知识库变成一等公民：草稿必须带触发词、只能落在领域绑定的库里，采纳＝新建一篇独立文档；审批页可改触发词。`0.5.x` 引入知识库增删改、跨库转移/改名和领域多库绑定；`0.4.x` 修正官方 QQ Bot 的被动回复、全量群消息与 @ 判定；`0.3.x` 把模型改成「会话 → 角色 → 领域」。细节见 [CHANGELOG.md](./CHANGELOG.md)。
 
-当前代码、测试和发布物已经完成；真实 DSH/官方 QQBot 已进入验收，SnowLuma/Discord 尚未做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
+代码与测试已完成（156 项通过），真实 DSH/官方 QQ Bot 正在验收，SnowLuma/Discord 尚未做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
+
+旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；Token 用量账本已经实现。架构文档会跟踪。
 
 ## 来源与致谢
 

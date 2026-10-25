@@ -57,7 +57,9 @@ Use this to validate before publishing.
 
 Prerequisites:
 
-- DSH 0.2.1-rc.3+
+- DSH 0.2.1-rc.3+ (the plugin is written against `settings.section`, sidebar
+  tabs, and authenticated routes; newer DSH builds usually work — the test is
+  whether the Settings card renders)
 - Node 22+
 - `pnpm` (the DSH CLI uses it to install plugin dependencies)
 
@@ -103,9 +105,14 @@ cd packages/dsh-lane-bridge
 npm pack --dry-run
 ```
 
-Expected: all tests pass; the tarball is about 65 KB and contains `lib/`,
-`presets/`, `cordis.patch.yml`, `README.md`, `README.en.md`, `LICENSE`,
-`LICENSE.zh.md`, `NOTICE`, and `scripts/`.
+Expected: all tests pass; the tarball is about 130 KB (133 KB for 0.6.0) and
+contains `lib/`, `presets/`, `cordis.patch.yml`, `README.md`, `README.en.md`,
+`LICENSE`, `LICENSE.zh.md`, `NOTICE`, and `scripts/`.
+
+Before publishing, confirm the docs did not fall behind the code: both READMEs,
+`CHANGELOG.md`/`CHANGELOG.en.md`, `docs/IM_BRIDGE_ARCHITECTURE.md` (both
+languages), and `LIVE_TEST` when verification steps changed. The rule lives in
+[CONTRIBUTING.en.md](../../CONTRIBUTING.en.md).
 
 Check the name:
 
