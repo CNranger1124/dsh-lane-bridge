@@ -52,17 +52,21 @@ dsh plugin --profile web add link:/absolute/path/to/repo/packages/dsh-lane-bridg
 Publishing/install details: [PUBLISHING.en.md](PUBLISHING.en.md).
 
 Restart DSH (or let the plugin manager reload it), then open
-**Settings → IM 桥接**.
+**Settings → IM 桥接**, and open the **IM 桥接** panel from the right sidebar's
+“+” menu.
 
 Expected:
 
-- The section renders without a blank page.
+- Both entries render without a blank page.
+- **会话** shows a placeholder row when there are no conversations (it must not
+  crash or clear the whole UI).
 - `GET /lane-bridge/api/health` returns `{ok:true}`.
 - `~/.dsh/lane-bridge/state.json` exists with `version`, `config`, `domains`,
   `roles`.
 
-If the page is blank, open the browser console: a missing `settings.section`
-slot or a bundle load error is the usual cause.
+If the page is blank or shows “面板渲染失败”, open the browser console: a missing
+`settings.section` / `sidebarRightTabs` slot or a bundle load error is the usual
+cause; the error boundary keeps the rest of the UI alive when it can.
 
 ## 2. SnowLuma (QQ)
 

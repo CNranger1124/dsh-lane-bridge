@@ -53,12 +53,22 @@ window.__ModuleLoader__.load({
       .lb-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
       .lb-footer { display:flex; gap:8px; align-items:center; justify-content:flex-end; }
       .lb-check { display:flex; align-items:center; gap:6px; font-size:12px; }
+      .lb-sidebar { height:100%; min-height:0; overflow:auto; padding:0 2px; box-sizing:border-box; }
+      .lb-sidebar .lb-root--compact { padding-bottom:16px; }
+      .lb-root--compact .lb-grid { grid-template-columns:1fr; }
+      .lb-root--compact .lb-table { min-width:560px; }
+      .lb-root--compact .lb-title { font-size:15px; }
+      .lb-root--compact .lb-sub { display:none; }
+      .lb-root--compact .lb-card { padding:11px; }
     `;
-    if (typeof document !== 'undefined' && !document.getElementById('dsh-lane-bridge-css')) {
-      const style = document.createElement('style');
-      style.id = 'dsh-lane-bridge-css';
+    if (typeof document !== 'undefined') {
+      let style = document.getElementById('dsh-lane-bridge-css');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'dsh-lane-bridge-css';
+        document.head.appendChild(style);
+      }
       style.textContent = CSS;
-      document.head.appendChild(style);
     }
 
     function clone(value) {
@@ -365,7 +375,7 @@ window.__ModuleLoader__.load({
                     )
                   )
                 );
-              }) : h('tr', null, h('td', { colSpan: 6, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))))
+              }) : [h('tr', null, h('td', { colSpan: 6, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
             )
           ),
           h('div', { className: 'lb-row' },
@@ -753,10 +763,39 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function LaneSettings() {
+    // A render error in one plugin card can unmount the whole Settings tree in
+    // some DSH versions, which looks like "all UI disappeared".  Keep failures
+    // inside this boundary and show the actual message instead.
+    class LaneErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { error: null };
+        this.retry = this.retry.bind(this);
+      }
+      static getDerivedStateFromError(error) {
+        return { error };
+      }
+      componentDidCatch(error) {
+        try { console.error('[dsh-lane-bridge] UI render failed', error); } catch {}
+      }
+      retry() {
+        this.setState({ error: null });
+      }
+      render() {
+        if (this.state.error) {
+          return h('div', { className: 'lb-root' },
+            h('div', { className: 'lb-error' }, `面板渲染失败：${this.state.error?.message ?? this.state.error}`),
+            h('button', { className: 'lb-btn', onClick: this.retry }, '重试')
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    function LanePanel({ compact = false, initialTab = 'overview' }) {
       const [data, setData] = useState(null);
       const [error, setError] = useState('');
-      const [tab, setTab] = useState('overview');
+      const [tab, setTab] = useState(initialTab);
       const load = useCallback(async () => {
         try {
           const next = await api('/state');
@@ -777,7 +816,7 @@ window.__ModuleLoader__.load({
         ['usage', '用量'],
         ['push', '推送'],
       ];
-      return h('div', { className: 'lb-root' },
+      return h('div', { className: `lb-root ${compact ? 'lb-root--compact' : ''}` },
         h('div', { className: 'lb-head' },
           h('div', null,
             h('h2', { className: 'lb-title' }, 'IM 桥接'),
@@ -803,8 +842,44 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function LaneSettings() {
+      return h(LaneErrorBoundary, null, h(LanePanel, null));
+    }
+
+    function LaneSidebar() {
+      return h('div', { className: 'lb-sidebar' },
+        h(LaneErrorBoundary, null, h(LanePanel, { compact: true, initialTab: 'conversations' }))
+      );
+    }
+
+    const TAB_KIND = 'lane-bridge-panel';
+    const TAB_ID = 'lane-bridge/sidebar';
+
+    function LaneIcon() {
+      return h('svg', {
+        width: 20,
+        height: 20,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        'aria-hidden': true,
+      },
+        h('path', {
+          d: 'M4.5 5.5h15v10.2h-8.1L7 19.2v-3.5H4.5V5.5Z',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinejoin: 'round',
+        }),
+        h('path', {
+          d: 'M8.2 9.1h7.6M8.2 12.2h5.2',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+        })
+      );
+    }
+
     const name = 'dsh-lane-bridge-client';
-    const inject = ['slots'];
+    const inject = ['slots', 'sidebarRightTabs'];
 
     function apply(ctx) {
       const disposers = [];
@@ -816,14 +891,35 @@ window.__ModuleLoader__.load({
           label: 'IM 桥接',
         }, LaneSettings)));
       }
+      if (ctx.slots && ctx.sidebarRightTabs) {
+        disposers.push(ctx.sidebarRightTabs.register({
+          id: TAB_ID,
+          kind: TAB_KIND,
+          title: () => 'IM 桥接',
+          guide: [{
+            id: 'lane-bridge',
+            order: 70,
+            title: () => 'IM 桥接',
+            description: () => '会话、通道、领域与知识库管理',
+            icon: LaneIcon,
+          }],
+        }));
+        disposers.push(ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab',
+          key: TAB_ID,
+        }, LaneSidebar)));
+      }
       ctx.effect(() => () => {
         for (const dispose of disposers.reverse()) {
           try { dispose(); } catch {}
         }
-      }, 'dsh-lane-bridge-client.settings');
+      }, 'dsh-lane-bridge-client.panels');
     }
 
     const exportsObject = { name, inject, apply };
+    if (globalThis.__LANE_TEST__) {
+      exportsObject.__components = { Conversations, LanePanel, LaneSettings, LaneSidebar };
+    }
     return exportsObject;
   },
 });

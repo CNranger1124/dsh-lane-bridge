@@ -2,6 +2,20 @@
 
 # Changelog
 
+## 0.1.1
+
+Bug fixes and a sidebar entry.
+
+- Fix the Conversations tab crashing when there are no conversations, which
+  blanked the whole Settings surface. An empty list now renders its placeholder.
+- Add an error boundary to both the Settings card and the sidebar panel, so a
+  panel render failure shows the error and a Retry button instead of taking down
+  the whole UI.
+- Add a DSH right-sidebar **IM 桥接** panel for conversations, channels, domains,
+  roles/KB, usage, and push; it shares the same state as the Settings card.
+- Regression tests cover empty-conversation rendering and sidebar tab
+  registration/cleanup.
+
 ## 0.1.0
 
 First runnable plugin skeleton.

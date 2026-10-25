@@ -8,13 +8,13 @@
 
 ## 1. Decision: native DSH plugin, not a separate frontend
 
-**We build the product as a DSH plugin with a native Settings card.**
+**We build the product as a DSH plugin with a native Settings card and a right-sidebar panel.**
 
 | Option | Verdict | Why |
 | --- | --- | --- |
 | Standalone web console (like the old `launcher/` on port 3210) | No, except one-shot migration/diagnostics scripts | It duplicates login, CSRF, theme, i18n, and deployment; users have to discover and remember a second URL. Its only unique value was starting a process DSH should not own (SnowLuma), which remains a user action. The repo ships a migration script, not a second console. |
 | Host-only DSH plugin + separate static page served at `/lane-bridge/` | Interim only | Easy to ship, but it feels like an iframe product: no shared settings shell, no shared locale/theme, two visual languages. |
-| Native DSH host plugin + native client Settings section | **Yes** | One install, one auth session, one lifecycle, one look. DSH already provides `settings.section`, `configForms`, and authenticated HTTP routes. |
+| Native DSH host plugin + native client Settings section + right-sidebar tab | **Yes** | One install, one auth session, one lifecycle, one look. DSH already provides `settings.section`, `sidebarRightTabs`, `sidebar.right.pane.tab`, and authenticated HTTP routes; the Settings page is for full configuration, the sidebar for day-to-day conversation management. |
 
 The plugin still exposes an HTTP API (`/lane-bridge/api/*`) because the browser
 card and external "push" callers need a stable boundary. That API is a transport,

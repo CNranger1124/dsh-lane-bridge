@@ -37,7 +37,7 @@ dsh plugin --profile desktop add dsh-lane-bridge
 dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
 ```
 
-安装后完全重启 DSH，打开 **Settings → IM 桥接**。首次运行会创建
+安装后完全重启 DSH，打开 **Settings → IM 桥接**；也可以从 DSH 右侧栏的「+」里打开 **IM 桥接** 面板，直接管理会话、通道和领域。首次运行会创建
 `~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
 
 本地开发：
@@ -65,7 +65,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - 领域/绑定模型：每个群或私聊一个 DSH session，领域级角色卡、preset、模型、知识库 scope、宿主工具白名单。
 - 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。
 - 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`。
-- 原生 DSH 设置卡片：渠道、会话、领域、角色、知识库、推送。
+- 原生 DSH 设置卡片 + 右侧栏面板：渠道、会话、领域、角色、知识库、推送；两处共用同一份状态。
 - 入站图片理解：安全下载（SSRF/字节上限）+ 多模态 prompt part；非视觉模型自动降级为纯文本。
 - 人工接管：`lane_escalate` 暂停自动回复、通知接管会话，并可在设置页恢复。
 - 本地 Token 用量账本 + 「用量」页（按会话统计输入/输出/缓存 token）。
@@ -75,7 +75,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 状态
 
-`0.1.0` 是 MVP。旧的独立 `qq-bridge` 项目还有一些能力没有迁过来：群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器。架构文档会跟踪迁移。
+`0.1.1` 是 MVP 修复版。旧的独立 `qq-bridge` 项目还有一些能力没有迁过来：群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器。架构文档会跟踪迁移。
 
 当前代码、测试和发布物已经完成；**尚未在真实 DSH 上做安装验收**，也没有在真实 SnowLuma/QQ Bot/Discord 账号上做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
 

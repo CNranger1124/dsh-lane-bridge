@@ -50,15 +50,16 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 
 发布/安装细节见 [PUBLISHING.md](PUBLISHING.md)。
 
-重启 DSH（或让插件管理器重载），然后打开 **Settings → IM 桥接**。
+重启 DSH（或让插件管理器重载），然后打开 **Settings → IM 桥接**；再从右侧栏的「+」打开 **IM 桥接** 面板。
 
 预期：
 
-- 页面正常渲染，不是空白。
+- 两个入口都正常渲染，不是空白。
+- **会话** 页在没有会话时显示占位行（不会崩溃或清空整个界面）。
 - `GET /lane-bridge/api/health` 返回 `{ok:true}`。
 - `~/.dsh/lane-bridge/state.json` 存在，包含 `version`、`config`、`domains`、`roles`。
 
-如果页面空白，打开浏览器 console：通常是 `settings.section` slot 不存在或 client bundle 加载失败。
+如果页面空白或出现「面板渲染失败」，打开浏览器 console：通常是 `settings.section` / `sidebarRightTabs` slot 不存在或 client bundle 加载失败；错误边界会尽量保留界面并显示错误信息。
 
 ## 2. SnowLuma（QQ）
 

@@ -42,9 +42,10 @@ Or use the latest GitHub Release:
 dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
 ```
 
-Fully restart DSH and open **Settings → IM 桥接**. The first run creates
-`~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
-skeleton.
+Fully restart DSH and open **Settings → IM 桥接**. You can also open the **IM 桥接**
+panel from the DSH right sidebar's “+” menu to manage conversations, channels,
+and domains directly. The first run creates `~/.dsh/lane-bridge/` with a default
+domain, a sample role card, and a KB skeleton.
 
 Local development:
 
@@ -81,7 +82,8 @@ only a one-shot legacy migration script for moving an existing install.
 - Shared role-card library, shared knowledge base (`lane_kb_*`), and optional
   domain-scoped shared memory (`lane_memory_*`).
 - Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
-- Native DSH Settings card: channels, conversations, domains, roles, KB, push.
+- Native DSH Settings card + right-sidebar panel: channels, conversations,
+  domains, roles, KB, and push, sharing one state.
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
   prompt parts, with a text-only fallback for non-vision models.
 - Human handoff: `lane_escalate` pauses auto-replies, notifies an operator
@@ -96,7 +98,7 @@ installation details.
 
 ## Status
 
-`0.1.0` is an MVP. The legacy standalone `qq-bridge` project still has features
+`0.1.1` is the MVP bug-fix release. The legacy standalone `qq-bridge` project still has features
 the plugin does not yet port: group slang learning, sticker library, voice
 messages, cost conversion, and the simulation scheduler. The architecture doc
 tracks the migration.

@@ -7,13 +7,13 @@
 
 ## 1. 决策：DSH 原生插件，不做独立前端
 
-**我们把它做成一个带原生 Settings 卡片的 DSH 插件。**
+**我们把它做成一个带原生 Settings 卡片和右侧栏面板的 DSH 插件。**
 
 | 方案 | 结论 | 原因 |
 | --- | --- | --- |
 | 独立 Web 控制台（像旧的 `launcher/` 跑在 3210） | 不做，只保留一次性迁移/诊断脚本 | 重复实现登录、CSRF、主题、i18n 和部署；用户还要记住第二个 URL。它唯一不可替代的价值是启动 DSH 不该拥有的进程（SnowLuma），而这仍应由用户自己操作。仓库只提供迁移脚本，不提供第二个控制台。 |
 | 只有 Host 的 DSH 插件 + `/lane-bridge/` 独立静态页 | 只适合过渡 | 实现快，但像 iframe 产品：没有共享的设置外壳、语言和主题，两套视觉语言。 |
-| DSH Host 插件 + 原生 client Settings section | **采用** | 一次安装、一套鉴权、一套生命周期、一套外观。DSH 已经提供 `settings.section`、`configForms` 和带鉴权的 HTTP 路由。 |
+| DSH Host 插件 + 原生 client Settings section + 右侧栏 tab | **采用** | 一次安装、一套鉴权、一套生命周期、一套外观。DSH 已经提供 `settings.section`、`sidebarRightTabs`、`sidebar.right.pane.tab` 和带鉴权的 HTTP 路由；设置页负责完整配置，侧栏负责日常会话管理。 |
 
 插件仍然暴露 HTTP API（`/lane-bridge/api/*`），因为浏览器卡片和外部“推送”调用方需要一个稳定边界。这个 API 是传输层，不是第二个产品界面。
 
