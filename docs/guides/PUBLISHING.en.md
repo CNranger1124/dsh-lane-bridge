@@ -105,7 +105,7 @@ cd packages/dsh-lane-bridge
 npm pack --dry-run
 ```
 
-Expected: all tests pass; the tarball is about 140 KB (140.6 KB for 0.7.0) and
+Expected: all tests pass; the tarball is about 140 KB (145.7 KB for 0.8.0) and
 contains `lib/`, `presets/`, `cordis.patch.yml`, `README.md`, `README.en.md`,
 `LICENSE`, `LICENSE.zh.md`, `NOTICE`, and `scripts/`.
 

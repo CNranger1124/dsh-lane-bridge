@@ -98,7 +98,7 @@ cd packages/dsh-lane-bridge
 npm pack --dry-run
 ```
 
-预期：测试全部通过；tarball 约 140 KB（0.7.0 实测 140.6 KB），包含 `lib/`、`presets/`、`cordis.patch.yml`、`README.md`、`README.en.md`、`LICENSE`、`LICENSE.zh.md`、`NOTICE`、`scripts/`。
+预期：测试全部通过；tarball 约 140 KB（0.8.0 实测 145.7 KB），包含 `lib/`、`presets/`、`cordis.patch.yml`、`README.md`、`README.en.md`、`LICENSE`、`LICENSE.zh.md`、`NOTICE`、`scripts/`。
 
 发布前确认文档没有落后于代码：README（中英）、`CHANGELOG.md`/`CHANGELOG.en.md`、`docs/IM_BRIDGE_ARCHITECTURE.md`（中英），以及改动了验收步骤时的 `LIVE_TEST`。规则见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
