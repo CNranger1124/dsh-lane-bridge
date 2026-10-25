@@ -242,3 +242,67 @@ test('empty conversation list renders a placeholder instead of throwing', async 
   delete globalThis.__laneBundle;
   delete globalThis.__LANE_TEST__;
 });
+
+test('push renders a checkbox per discovered conversation instead of one select', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class { constructor(props) { this.props = props; this.state = {}; } setState() {} },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?push');
+  const { Push } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { defaultDomainId: 'default' },
+      domains: [{ id: 'default', name: '默认客服' }],
+      roles: [{ name: '客服', content: '' }],
+      bindings: { 'snowluma:group:1': { domainId: 'default', enabled: true } },
+      conversations: {
+        'snowluma:group:1': { name: '一群' },
+        'qqbot:private:9': { name: '私聊 9' },
+      },
+    },
+  };
+  const tree = Push({ data, refresh: async () => {} });
+  const boxes = [];
+  traverse(tree, (node) => { if (node?.type === 'input' && node?.props?.type === 'checkbox') boxes.push(node); });
+  assert.equal(boxes.length, 2);
+  const text = [];
+  traverse(tree, (node) => {
+    if (typeof node?.children === 'string') text.push(node.children);
+    if (typeof node?.children === 'number') text.push(String(node.children));
+  });
+  assert.ok(text.some((line) => line.includes('已选 0 个')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('全选（2）')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('发送到 0 个会话')), text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});

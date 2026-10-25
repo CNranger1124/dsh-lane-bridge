@@ -74,12 +74,12 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - 渠道适配器接口 + SnowLuma（OneBot v11）适配器（QQ）。
 - 官方 QQ Bot 适配器（实验性；需要 AppID/AppSecret）。
 - Discord 适配器（`discord.js`；私聊 + 服务器频道，可选 mention gate）。
-- 领域/绑定模型：每个群或私聊一个 DSH session，领域级角色卡、preset、模型、知识库 scope、宿主工具白名单；群聊触发策略可多选（「@ 或回复」和「命中关键词」可同时生效，命中任意一条就回复；也可选「所有消息」或「关闭」）。
+- 领域/绑定模型：每个群或私聊一个 DSH session，领域级角色卡、preset（下拉选择，带作用说明）、模型、知识库 scope、宿主工具白名单；群聊触发策略可多选（「@ 或回复」和「命中关键词」可同时生效，命中任意一条就回复；也可选「所有消息」或「关闭」）。
 - 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。
 - **知识库草稿与人工审批**：`lane_kb_draft` 只写 `_待审/`；Settings 新增「知识库审批」页，采纳/丢弃后才影响检索。
 - **GitHub 仓库只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；路径校验、token 脱敏、ETag 缓存；支持从 `gh` CLI 读取账号可见的全部仓库/分支并下拉选择，`gh auth login` 后不用填 token；`lane_repo_*` 查 issue、读文件、搜代码、看提交。建 issue 默认关闭，开启后受每小时上限保护；仓库里没有配置的标签时会自动改为不带标签创建，不会因此丢掉用户反馈。
 - **通道日志**：启动卡里的「查看日志」显示最近 300 条连接/重连/错误，不再只有一个「未连接」。
-- 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`。
+- 统一推送：`lane_send` agent 工具 + `POST /lane-bridge/api/push`；设置页可一次勾选多个会话群发，接口用 `targets` 数组并逐个返回成功/失败。
 - 原生 DSH 设置卡片 + 右侧栏面板：渠道、会话、领域、角色、知识库、审批、推送；两处共用同一份状态。
 - 页面顶部「启动通道」：每个渠道一个启动/停止/重试按钮 + 查看日志；未连接时显示可操作原因（例如 SnowLuma 未启动）。
 - 每个模块标题栏都有自己的保存按钮；所有模块都能点标题折叠。

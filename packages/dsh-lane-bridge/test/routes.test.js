@@ -9,7 +9,7 @@ import { defaultState } from '../lib/defaults.js';
 import { writeDraft } from '../lib/knowledge.js';
 import { tempDir, cleanup, mockRequest, mockResponse, fakeChannels } from './helpers.js';
 
-async function setup({ repo = null } = {}) {
+async function setup({ repo = null, listPresets = null } = {}) {
   const dir = tempDir();
   const store = new LaneStore({ dataDir: dir });
   await store.load();
@@ -22,7 +22,7 @@ async function setup({ repo = null } = {}) {
     pause: async () => {},
     escalate: async () => ({ paused: true, notified: true }),
   };
-  const routes = createRoutes({ store, channels, pool, memoryStore, usageStore, repo, logger: { warn() {}, info() {}, debug() {} } });
+  const routes = createRoutes({ store, channels, pool, memoryStore, usageStore, repo, logger: { warn() {}, info() {}, debug() {} }, listPresets });
   return { dir, store, channels, routes, memoryStore, usageStore };
 }
 
@@ -35,6 +35,42 @@ test('health reports the running plugin version', async () => {
     await routes.handle(mockRequest({ url: '/lane-bridge/api/health' }), res);
     assert.equal(res.status, 200);
     assert.equal(res.json().version, pkg.version);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('presets route exposes host presets with descriptions', async () => {
+  const { dir, routes } = await setup({
+    listPresets: async () => ([
+      { id: 'standard', name: '', description: '', isDefault: true },
+      { id: 'lane-support', name: 'IM 聊天客服', description: '客服人格', broken: 'loader failed' },
+      { id: '', name: 'ignored' },
+    ]),
+  });
+  try {
+    const res = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/presets' }), res);
+    assert.equal(res.status, 200);
+    const body = res.json();
+    assert.equal(body.fallback, false);
+    assert.deepEqual(body.presets.map((preset) => preset.id), ['standard', 'lane-support']);
+    assert.equal(body.presets[0].isDefault, true);
+    assert.equal(body.presets[1].name, 'IM 聊天客服');
+    assert.equal(body.presets[1].broken, 'loader failed');
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('presets route falls back when the host has no registry', async () => {
+  const { dir, routes } = await setup();
+  try {
+    const res = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/presets' }), res);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json().presets, []);
+    assert.equal(res.json().fallback, true);
   } finally {
     cleanup(dir);
   }
@@ -169,6 +205,32 @@ test('push requires a token or browser origin and sends through channels', async
     }), browser);
     assert.equal(browser.status, 200);
     assert.equal(channels.sent.length, 2);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('push accepts several targets and reports per-target results', async () => {
+  const { dir, channels, routes } = await setup();
+  try {
+    channels.sendKey = async (key, messages) => {
+      if (key === 'snowluma:group:2') throw new Error('channel offline');
+      channels.sent.push({ key, messages });
+      return messages.map(() => ({ ok: true }));
+    };
+    const res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/push',
+      body: { targets: ['snowluma:group:1', 'snowluma:group:2', 'snowluma:group:1'], messages: '公告' },
+    }), res);
+    assert.equal(res.status, 207);
+    const body = res.json();
+    assert.equal(body.results.length, 2);
+    assert.equal(body.results[0].ok, true);
+    assert.equal(body.results[1].ok, false);
+    assert.match(body.results[1].error, /offline/);
+    assert.equal(channels.sent.length, 1);
   } finally {
     cleanup(dir);
   }

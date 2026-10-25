@@ -149,7 +149,21 @@ export async function apply(ctx, config = {}) {
     inboundQueue.push(key, message);
   }
 
-  const routes = createRoutes({ store, channels: channelManager, pool, memoryStore, usageStore, repo, logger });
+  // Read the host's declared presets on demand. `agentPresets` is optional so a
+  // deployment without the registry still loads the bridge (the Settings card
+  // then keeps the free-text fallback).
+  const listPresets = async () => {
+    const registry = ctx.get?.('agentPresets');
+    if (!registry) return [];
+    if (typeof registry.remoteExportList === 'function') {
+      const exported = await registry.remoteExportList();
+      return Array.isArray(exported?.presets) ? exported.presets : [];
+    }
+    if (typeof registry.list === 'function') return await registry.list();
+    return [];
+  };
+
+  const routes = createRoutes({ store, channels: channelManager, pool, memoryStore, usageStore, repo, logger, listPresets });
   const disposers = [];
   disposers.push(ctx.webServer.register({ kind: 'prefix', path: ROUTE_PREFIX, handler: routes.handle }));
   disposers.push(ctx.webServer.register({

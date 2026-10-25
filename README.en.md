@@ -112,7 +112,11 @@ only a one-shot legacy migration script for moving an existing install.
   labels instead of failing.
 - **Channel logs**: "View logs" in the launcher shows the last 300
   connect/reconnect/error lines instead of just "not connected".
-- Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
+- Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`; the
+  Settings page can select several conversations at once and the API takes a
+  `targets` array, reporting success/failure per target.
+- Domain agent presets are a dropdown fed by the host's own preset registry
+  (`/api/presets`), with a one-line explanation of what each preset provides.
 - Native DSH Settings card + right-sidebar panel: channels, conversations,
   domains, roles, KB, approval, and push, sharing one state.
 - The top **启动通道** card has Start/Stop/Retry per channel plus View logs, with

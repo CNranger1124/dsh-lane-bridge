@@ -149,6 +149,17 @@ window.__ModuleLoader__.load({
       ['off', '关闭（只记录）'],
     ];
 
+    // What each DSH preset actually gives a session. The host registry supplies
+    // the ids (and descriptions for presets that declare one); these notes cover
+    // the built-ins, which ship without a description.
+    const PRESET_NOTES = {
+      'lane-support': 'IM 客服人格：只负责接待和查知识库，没有本地文件/命令权限。桥接会把 lane_send、lane_kb_* 等工具和角色卡另外注入到会话上。',
+      standard: '标准代理：人格 + 文件读写/搜索 + 终端（PowerShell）+ 后台任务 + 定时任务 + 技能。能力最全，适合需要真正查代码/改文件的客服。',
+      ptc: '标准工具链 + 程序化工具调用（PTC）：模型可以写脚本批量调用工具，适合多步骤数据处理；比 standard 多一层流程编排。',
+      cordis: '标准工具链 + goal/plan 模式 + Cordis 插件开发技能：用来开发/调试 DSH 插件本身，不适合客服。',
+      minimal: '最小工具集：只保留只读文件与图片读取、上下文压缩；没有终端、没有写入。适合纯问答、成本最低。',
+    };
+
     function Overview({ data, refresh }) {
       const [cfg, setCfg] = useState(() => clone(data.state.config));
       const [busy, setBusy] = useState(false);
@@ -696,9 +707,26 @@ window.__ModuleLoader__.load({
       const [branchRepo, setBranchRepo] = useState('');
       const [repoBusy, setRepoBusy] = useState('');
       const [repoError, setRepoError] = useState('');
+      const [presets, setPresets] = useState([]);
+      const [presetError, setPresetError] = useState('');
       const current = draft.find((domain) => domain.id === selected) ?? draft[0];
       const globalRepo = data.state.config.github?.repo ?? '';
       const effectiveRepo = current?.repo || globalRepo;
+      const loadPresets = async () => {
+        setPresetError('');
+        try {
+          const result = await api('/presets');
+          setPresets(Array.isArray(result?.presets) ? result.presets : []);
+        } catch (err) { setPresetError(String(err.message ?? err)); }
+      };
+      useEffect(() => { void loadPresets(); }, []);
+      const selectedPreset = presets.find((preset) => preset.id === current?.preset);
+      const presetKnown = Boolean(selectedPreset);
+      const presetNote = PRESET_NOTES[current?.preset]
+        ?? selectedPreset?.description
+        ?? (presets.length > 0
+          ? '自定义 preset：请确认它确实存在于当前 DSH 里，否则会话会退回宿主默认。'
+          : '当前 DSH 没有提供 preset 列表，先手填 id（例如 lane-support）。');
       const loadRepoOptions = async () => {
         setRepoBusy('repos'); setRepoError('');
         try {
@@ -795,8 +823,27 @@ window.__ModuleLoader__.load({
                   ...data.state.roles.map((role) => h('option', { key: role.name, value: role.name }, role.name))
                 )
               ),
-              h(Field, { label: 'Agent preset', hint: '建议 lane-support' },
-                h('input', { className: 'lb-input', value: current.preset, onChange: (e) => patch('preset', e.target.value) })
+              h(Field, { label: 'Agent preset', hint: 'preset 决定会话挂哪些 DSH 插件和工具；桥接的 lane_* 工具与角色卡会另外注入' },
+                h('div', { className: 'lb-field' },
+                  presets.length > 0
+                    ? h('select', {
+                      className: 'lb-select',
+                      value: presetKnown ? current.preset : '__custom__',
+                      onChange: (e) => { if (e.target.value !== '__custom__') patch('preset', e.target.value); },
+                    },
+                      h('option', { value: '__custom__' }, '手动输入 / 未知 preset'),
+                      ...presets.map((preset) => h('option', { key: preset.id, value: preset.id },
+                        `${preset.name || preset.id}（${preset.id}）${preset.isDefault ? ' · 默认' : ''}${preset.broken ? ' · 加载失败' : ''}`
+                      ))
+                    )
+                    : null,
+                  presets.length === 0 || !presetKnown
+                    ? h('input', { className: 'lb-input', value: current.preset, placeholder: 'preset id，例如 lane-support', onChange: (e) => patch('preset', e.target.value) })
+                    : null,
+                  h('div', { className: 'lb-muted' }, presetNote),
+                  presetError ? h('div', { className: 'lb-error' }, `preset 列表读取失败：${presetError}`) : null,
+                  selectedPreset?.broken ? h('div', { className: 'lb-error' }, `该 preset 加载失败：${selectedPreset.broken}`) : null
+                )
               ),
               h(Field, { label: '模型', hint: 'provider/model；留空=DSH 默认' },
                 h('input', { className: 'lb-input', value: current.model, onChange: (e) => patch('model', e.target.value) })
@@ -1225,29 +1272,43 @@ window.__ModuleLoader__.load({
     }
 
     function Push({ data, refresh }) {
-      const [target, setTarget] = useState('');
+      const [targets, setTargets] = useState([]);
       const [text, setText] = useState('');
       const [message, setMessage] = useState('');
       const [error, setError] = useState('');
       const [busy, setBusy] = useState(false);
       const keys = [...new Set([...Object.keys(data.state.bindings ?? {}), ...Object.keys(data.state.conversations ?? {})])];
-      useEffect(() => { if (!target && keys.length > 0) setTarget(keys[0]); }, [keys, target]);
+      const toggle = (key, on) => setTargets((list) => (
+        on ? [...new Set([...list, key])] : list.filter((item) => item !== key)
+      ));
       const send = async () => {
         setBusy(true); setError(''); setMessage('');
         try {
-          const result = await api('/push', { method: 'POST', body: JSON.stringify({ target, messages: text }) });
-          setMessage(`已发送 ${result.sent ?? 0} 条`);
+          const result = await api('/push', { method: 'POST', body: JSON.stringify({ targets, messages: text }) });
+          const results = Array.isArray(result.results) ? result.results : [];
+          const okCount = results.filter((item) => item.ok).length;
+          setMessage(`已发送 ${result.sent ?? 0} 条 · ${okCount}/${targets.length} 个会话成功`);
+          const failed = results.filter((item) => !item.ok);
+          if (failed.length > 0) setError(failed.map((item) => `${item.target}：${item.error}`).join('；'));
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
       return h('div', { className: 'lb-root' },
         h(Card, { title: '统一推送' },
-          h('div', { className: 'lb-muted' }, '向任意已发现/已绑定会话发送消息。外部系统用 `POST /lane-bridge/api/push` + `Authorization: Bearer <pushToken>`。'),
-          h(Field, { label: '目标会话' },
-            h('select', { className: 'lb-select', value: target, onChange: (e) => setTarget(e.target.value) },
-              h('option', { value: '' }, '请选择会话'),
-              ...keys.map((key) => h('option', { key, value: key }, `${data.state.conversations?.[key]?.name ?? key} — ${key}`))
-            )
+          h('div', { className: 'lb-muted' }, '向任意已发现/已绑定会话发送消息，可同时勾选多个。外部系统用 `POST /lane-bridge/api/push` + `Authorization: Bearer <pushToken>`，body 用 `targets` 数组。'),
+          h(Field, { label: `目标会话（已选 ${targets.length} 个）` },
+            h('div', { className: 'lb-row' },
+              h('button', { className: 'lb-btn', onClick: () => setTargets(keys) }, `全选（${keys.length}）`),
+              h('button', { className: 'lb-btn', onClick: () => setTargets([]) }, '清空')
+            ),
+            keys.length > 0
+              ? h('div', { style: { maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--dsw-alias-border,#e5e7eb)', borderRadius: 8, padding: '8px 10px' } },
+                ...keys.map((key) => h('label', { key, className: 'lb-check' },
+                  h('input', { type: 'checkbox', checked: targets.includes(key), onChange: (e) => toggle(key, e.target.checked) }),
+                  h('span', null, `${data.state.conversations?.[key]?.name ?? key} `, h('span', { className: 'lb-mono lb-muted' }, key))
+                ))
+              )
+              : h('div', { className: 'lb-muted' }, '还没有已发现/已绑定会话。')
           ),
           h(Field, { label: '消息', hint: '换行会被保留；过长会按全局上限拆分' },
             h('textarea', { className: 'lb-textarea', value: text, onChange: (e) => setText(e.target.value) })
@@ -1255,12 +1316,12 @@ window.__ModuleLoader__.load({
           h('div', { className: 'lb-footer' },
             message ? h('span', { className: 'lb-ok' }, message) : null,
             error ? h('span', { className: 'lb-error' }, error) : null,
-            h('button', { className: 'lb-btn lb-btn--primary', disabled: busy || !target || !text.trim(), onClick: send }, busy ? '发送中…' : '发送')
+            h('button', { className: 'lb-btn lb-btn--primary', disabled: busy || targets.length === 0 || !text.trim(), onClick: send }, busy ? '发送中…' : `发送到 ${targets.length} 个会话`)
           )
         ),
         h(Card, { title: 'curl 示例' },
           h('pre', { className: 'lb-mono', style: { whiteSpace: 'pre-wrap', margin: 0 } },
-            `curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \\\n  -H "Authorization: Bearer $LANE_PUSH_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d '{"target":"snowluma:group:123456","messages":"维护通知：今晚 23:00 停服"}'`
+            `curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \\\n  -H "Authorization: Bearer $LANE_PUSH_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d '{"targets":["snowluma:group:123456","qqbot:private:8FD..."],"messages":"维护通知：今晚 23:00 停服"}'`
           )
         )
       );
@@ -1434,7 +1495,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
+      exportsObject.__components = { Card, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, Push };
     }
     return exportsObject;
   },

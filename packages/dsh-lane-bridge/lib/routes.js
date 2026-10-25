@@ -71,7 +71,7 @@ function requireArray(value, name) {
   return value;
 }
 
-export function createRoutes({ store, channels, pool, memoryStore = null, usageStore = null, repo = null, logger = null }) {
+export function createRoutes({ store, channels, pool, memoryStore = null, usageStore = null, repo = null, logger = null, listPresets = null }) {
   const knowledgeDir = store.paths.knowledgeDir;
 
   // Same-origin is the CSRF boundary. The custom header is sent by the
@@ -209,6 +209,29 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     const okCount = results.filter((item) => item.ok).length;
     logger?.info?.(`[lane-bridge] push -> ${targets.join(', ')}：${okCount}/${targets.length} 成功`);
     return sendJson(res, okCount === targets.length ? 200 : 207, { ok: okCount > 0, results, target: targets[0], sent: chunks.length });
+  }
+
+  // Agent presets the host actually declares. The Settings card uses this to
+  // build a dropdown instead of asking the operator to type an id from memory.
+  async function handlePresets(req, res) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { ok: false, error: 'method not allowed' });
+    if (!trustedOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    let rows = null;
+    if (typeof listPresets === 'function') {
+      try {
+        rows = await listPresets();
+      } catch (error) {
+        logger?.warn?.(`[lane-bridge] 读取 agent preset 列表失败：${error?.message ?? error}`);
+      }
+    }
+    const presets = (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: String(row?.id ?? '').trim(),
+      name: String(row?.name ?? '').trim(),
+      description: String(row?.description ?? '').trim(),
+      isDefault: row?.isDefault === true,
+      broken: row?.broken === undefined ? '' : String(row.broken),
+    })).filter((row) => row.id);
+    return sendJson(res, 200, { ok: true, presets, fallback: !Array.isArray(rows) });
   }
 
   async function handleKnowledge(req, res) {
@@ -358,6 +381,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     try {
       if (route === '/api/state' && (req.method === 'GET' || req.method === 'HEAD')) return await handleState(req, res);
       if (route === '/api/health') return sendJson(res, 200, { ok: true, uptime: process.uptime(), version: VERSION });
+      if (route === '/api/presets') return await handlePresets(req, res);
       if (route === '/api/config' && req.method === 'POST') return await handleConfig(req, res);
       if (route === '/api/domains' && req.method === 'POST') return await handleDomains(req, res);
       if (route === '/api/roles' && req.method === 'POST') return await handleRoles(req, res);
