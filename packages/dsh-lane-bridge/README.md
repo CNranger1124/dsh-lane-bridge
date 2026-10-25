@@ -37,6 +37,8 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 安装后完全重启 DSH，打开 **Settings → IM 桥接**。首次运行会创建
 `~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
 
+**只看到「未连接 / 已停用」？** 先启动 SnowLuma（双击其目录里的 `launcher.bat`，或在目录运行 `node index.mjs`，等日志出现 `127.0.0.1:3001`），然后在 SnowLuma 卡片右上角点 **启用**。插件不会代启动 SnowLuma；官方 QQ Bot / Discord 填好凭据后同样点 **启用**。
+
 本地开发：
 
 ```sh

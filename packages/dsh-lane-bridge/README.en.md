@@ -39,6 +39,12 @@ Fully restart DSH and open **Settings → IM 桥接**. The first run creates
 `~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
 skeleton.
 
+**Only seeing "not connected / stopped"?** Start SnowLuma first (double-click
+`launcher.bat` in its folder, or run `node index.mjs` there and wait for
+`127.0.0.1:3001` in its log), then click **Enable** on its card. The plugin does
+not start SnowLuma for you. For official QQ Bot / Discord, fill the credentials
+and click **Enable** the same way.
+
 Local development:
 
 ```sh
