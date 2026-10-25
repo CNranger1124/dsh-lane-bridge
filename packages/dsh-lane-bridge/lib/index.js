@@ -196,6 +196,9 @@ export async function apply(ctx, config = {}) {
   ctx.effect(() => () => {
     stopped = true;
     inboundQueue.stop();
+    // Conversation bookkeeping is written on a delay; flush it before the
+    // plugin goes away so the last seen messages are not lost.
+    void store.flush();
     for (const dispose of disposers.reverse()) {
       try { dispose(); } catch {}
     }

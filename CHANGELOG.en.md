@@ -2,6 +2,22 @@
 
 # Changelog
 
+## 0.4.6
+
+- **No more one-write-per-message in full-message groups**: `touchConversation`
+  used to deep-clone the whole `state.json` and atomically rewrite it for every
+  inbound message. With the official QQ Bot in "receive all messages" mode that
+  turned ordinary group chatter into a full file write per message. That path now
+  **coalesces writes** (default: one save per second) and `flush()`es on unload;
+  operator edits (config, roles, bindings) still hit the disk immediately.
+- Documented where the permissions actually live: the active-message and
+  "receive all messages" switches are **only on the bot's profile page in the
+  mobile QQ app**, not in the open-platform web console. The console's "server IP
+  allowlist" is unrelated (it only restricts who may call the API). The doc also
+  states that `40034105` and "no `GROUP_MESSAGE_CREATE` in the logs" share the
+  same root cause.
+- Tests: 148 (coalesced writes persist once; visible after flush).
+
 ## 0.4.5
 
 - **Fix `40034005 回复消息msg_id已过期`**: since 0.4.3 ("always attach msg_id"),

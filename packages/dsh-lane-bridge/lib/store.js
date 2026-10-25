@@ -383,7 +383,7 @@ export class LaneStore {
    * @param {string} options.dataDir
    * @param {string} [options.logger]
    */
-  constructor({ dataDir, logger = null }) {
+  constructor({ dataDir, logger = null, saveDelayMs = 1000 }) {
     if (!dataDir) throw new TypeError('LaneStore requires dataDir');
     this.dataDir = dataDir;
     this.file = path.join(dataDir, 'state.json');
@@ -392,6 +392,14 @@ export class LaneStore {
     this.logger = logger;
     this.state = null;
     this.queue = Promise.resolve();
+    // Channels in full-message mode push every group message through
+    // touchConversation. Writing the whole state.json per message would turn
+    // idle chatter into constant disk I/O, so that path defers its write and
+    // coalesces bursts into one save. Everything the operator edits still
+    // writes immediately.
+    this.saveDelayMs = Math.max(0, Number(saveDelayMs) || 0);
+    this.saveTimer = null;
+    this.saveDirty = false;
   }
 
   get paths() {
@@ -470,23 +478,69 @@ export class LaneStore {
     fs.writeFileSync(path.join(this.rolesDir, `${safeRoleFileName(name)}${ROLE_EXT}`), String(content ?? ''), 'utf8');
   }
 
-  /** Serialize one mutation and persist the normalized result. */
-  async update(mutator) {
+  /**
+   * Serialize one mutation and persist the normalized result.
+   * `defer` collapses bursty, low-value writes (conversation bookkeeping) into
+   * one save per `saveDelayMs`; durable edits keep writing immediately.
+   */
+  async update(mutator, { defer = false } = {}) {
     const run = async () => {
       const draft = JSON.parse(JSON.stringify(this.get()));
       const result = await mutator(draft);
       draft.revision = (Number(draft.revision) || 0) + 1;
       const next = normalizeState(draft);
       this.state = next;
-      await this.save();
+      if (defer) this.scheduleSave();
+      else await this.save();
       return result;
     };
     this.queue = this.queue.then(run, run);
     return this.queue;
   }
 
+  /** Write the current state now, cancelling any pending deferred write. */
   async save() {
+    this.clearScheduledSave();
+    this.saveNow();
+  }
+
+  saveNow() {
     atomicWrite(this.file, `${JSON.stringify(this.state, null, 2)}\n`);
+    this.saveDirty = false;
+  }
+
+  scheduleSave() {
+    this.saveDirty = true;
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      if (!this.saveDirty) return;
+      try {
+        this.saveNow();
+      } catch (error) {
+        this.logger?.warn?.(`[lane-bridge] state.json 写入失败：${error?.message ?? error}`);
+      }
+    }, this.saveDelayMs);
+    // A pending bookkeeping write must never keep the process alive.
+    this.saveTimer.unref?.();
+  }
+
+  clearScheduledSave() {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+  }
+
+  /** Force pending deferred writes to disk (shutdown / tests). */
+  async flush() {
+    this.clearScheduledSave();
+    if (!this.saveDirty) return;
+    try {
+      this.saveNow();
+    } catch (error) {
+      this.logger?.warn?.(`[lane-bridge] state.json 写入失败：${error?.message ?? error}`);
+    }
   }
 
   async setConfig(patch) {
@@ -546,6 +600,7 @@ export class LaneStore {
   }
 
   async touchConversation(conversation) {
+    // Hot path: every inbound message in a full-message group lands here.
     return this.update((draft) => {
       const current = draft.conversations[conversation.key] ?? {};
       const senderEntry = operatorEntryFor(
@@ -559,7 +614,7 @@ export class LaneStore {
         senders: rememberSender(current.senders ?? {}, senderEntry, senderName, Number(conversation.lastAt) || Date.now()),
         seenCount: (Number(current.seenCount) || 0) + 1,
       };
-    });
+    }, { defer: true });
   }
 
   async setSession(key, session) {

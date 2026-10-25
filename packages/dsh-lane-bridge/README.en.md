@@ -289,7 +289,7 @@ Common error codes (from the official send-message docs):
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| `40034105` | active message failed, no permission | the bot cannot send proactively (most often: **not published / still sandboxed**, or the capability is off) |
+| `40034105` | active message failed, no permission | the bot cannot send proactively: **not published / still sandboxed**, or the switch is off (it lives on the bot's profile page in the **mobile QQ app**, not in the web console) |
 | `40034100` | active message rate-limited | 60/30 qpm, 20 qpm, 1000/day |
 | `40034005` / `40034128` | msg_id expired / reply count exceeded | reply within 5 minutes, ≤5 times |
 | `40034024` | msg_id invalid or not yours | that message does not belong to this bot |
@@ -317,6 +317,23 @@ What the bridge does:
 For reliable unprompted announcements, either publish the bot and confirm active
 messages work, or use the SnowLuma channel — OneBot has no such restriction.
 
+### These permissions only exist in the mobile QQ app
+
+`40034105 主动消息失败, 无权限` and "no `GROUP_MESSAGE_CREATE`" share one cause: **the
+switches are not in the open-platform web console — they live on the bot's profile
+page inside the mobile QQ app.**
+
+- Mobile QQ → open the chat with the bot, or the bot's card in the group → bot
+  profile → turn on switches such as "receive bot pushes";
+- the console's "event subscription & callback" page **does not** offer these, so not
+  finding them there is expected; the "server IP allowlist" on that page is
+  unrelated — it only restricts who may call the API (empty means everyone), and
+  filling it in wrong starts breaking sends;
+- no plugin restart is needed — the next send or the next group message uses it;
+- how to verify: have someone post a keyword **without @-ing the bot**; an
+  `event=GROUP_MESSAGE_CREATE` log line means full mode is live, and pushes no
+  longer returning `40034105` mean active messages are live.
+
 ### Keyword triggers need "receive all messages"
 
 The official QQ Bot pushes one of two group events:
@@ -330,7 +347,8 @@ So:
 
 - answering only when @-ed → the default works as-is;
 - making keyword triggers work in a QQ group → enable "receive all messages" on the
-  open platform and tick "keyword" in the domain's trigger policy;
+  bot's profile page in the **mobile QQ app** (the web console has no such switch),
+  and tick "keyword" in the domain's trigger policy;
 - with full mode on, every group message arrives; the bridge decides "was the bot
   mentioned" by its **own openid** (someone else's @ does not count) and strips
   `<@openid>` markers before keyword matching;

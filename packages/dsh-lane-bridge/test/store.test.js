@@ -208,9 +208,40 @@ test('conversations remember recent senders in whitelist format', async () => {
     assert.equal(convo.senders['qqbot:AAAA'].name, '阿明');
     assert.equal(convo.senderId, undefined, 'per-message sender is not duplicated at the top level');
 
+    // Bookkeeping is deferred: a full-message group must not rewrite state.json
+    // once per message, so the file still lags until the coalescing timer fires.
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+    assert.equal(onDisk.conversations['qqbot:group:F84F'], undefined, 'bursty writes are coalesced');
+    await store.flush();
+    const flushed = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+    assert.equal(flushed.conversations['qqbot:group:F84F'].seenCount, 2, 'flush persists the coalesced write');
+
     const reload = new LaneStore({ dataDir: dir });
     await reload.load();
     assert.deepEqual(Object.keys(reload.get().conversations['qqbot:group:F84F'].senders).sort(), ['qqbot:8FD9', 'qqbot:AAAA']);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('a burst of conversation touches collapses into a single write', async () => {
+  const dir = tempDir();
+  try {
+    const store = new LaneStore({ dataDir: dir, saveDelayMs: 15 });
+    await store.load();
+    let writes = 0;
+    const writeNow = store.saveNow.bind(store);
+    store.saveNow = () => { writes += 1; writeNow(); };
+    for (let index = 0; index < 20; index += 1) {
+      await store.touchConversation({
+        key: 'qqbot:group:F84F', channel: 'qqbot', kind: 'group', externalId: 'F84F',
+        name: '群 F84F', lastAt: index, lastText: `第 ${index} 条`, senderId: '8FD9', senderName: 'RANGER',
+      });
+    }
+    assert.equal(writes, 0, 'nothing is written while the burst is arriving');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(writes, 1, 'the whole burst is persisted once');
+    assert.equal(store.get().conversations['qqbot:group:F84F'].seenCount, 20);
   } finally {
     cleanup(dir);
   }
