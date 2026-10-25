@@ -102,7 +102,18 @@ window.__ModuleLoader__.load({
         },
       });
       const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
-      if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!res.ok || data.ok === false) {
+        // A 207 (partial push) carries per-target reasons; show them instead of
+        // a bare status code, which reads like a bridge bug.
+        const detail = Array.isArray(data.results)
+          ? data.results.filter((item) => !item.ok).map((item) => `${item.target}：${item.error}`).join('；')
+          : '';
+        const message = data.error || detail || `HTTP ${res.status}`;
+        const error = new Error(message);
+        error.status = res.status;
+        error.details = data;
+        throw error;
+      }
       return data;
     }
 
@@ -1702,7 +1713,7 @@ window.__ModuleLoader__.load({
       };
       return h('div', { className: 'lb-root' },
         h(Card, { title: '统一推送' },
-          h('div', { className: 'lb-muted' }, '向任意已发现/已绑定会话发送消息，可同时勾选多个。外部系统用 `POST /lane-bridge/api/push` + `Authorization: Bearer <pushToken>`，body 用 `targets` 数组。'),
+          h('div', { className: 'lb-muted' }, '向任意已发现/已绑定会话发送消息，可同时勾选多个；部分会话失败会逐个列出原因（接口返回 207 表示「部分成功」，不是插件出错）。外部系统用 `POST /lane-bridge/api/push` + `Authorization: Bearer <pushToken>`，body 用 `targets` 数组。'),
           h(Field, { label: `目标会话（已选 ${targets.length} 个）` },
             h('div', { className: 'lb-row' },
               h('button', { className: 'lb-btn', onClick: () => setTargets(keys) }, `全选（${keys.length}）`),

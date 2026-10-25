@@ -2,6 +2,17 @@
 
 # Changelog
 
+## 0.4.2
+
+- **Partial push failures no longer show a bare "HTTP 207"**: `POST /api/push`
+  answers 207 (Multi-Status) when some targets fail, but the body had no readable
+  reason while the client turned the status code into the error text. The response
+  now carries `error` (`n/m 个会话发送失败：target：reason`) and the client merges
+  the per-target reasons from `results`, so curl callers see it too.
+- The push card explains that 207 means "partial success", not a bridge failure,
+  and lists the reasons per conversation.
+- 144 tests.
+
 ## 0.4.1
 
 - **Fix "主动消息失败, 无权限"**: the official QQ Bot only allows passive replies

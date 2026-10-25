@@ -216,8 +216,19 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       }
     }
     const okCount = results.filter((item) => item.ok).length;
+    const failed = results.filter((item) => !item.ok);
     logger?.info?.(`[lane-bridge] push -> ${targets.join(', ')}：${okCount}/${targets.length} 成功`);
-    return sendJson(res, okCount === targets.length ? 200 : 207, { ok: okCount > 0, results, target: targets[0], sent: chunks.length });
+    // 207 = some targets failed, so the caller must read `results`. A bare status
+    // line is useless without the reason, so it is spelled out here too.
+    return sendJson(res, okCount === targets.length ? 200 : 207, {
+      ok: okCount > 0,
+      results,
+      target: targets[0],
+      sent: chunks.length,
+      error: failed.length > 0
+        ? `${failed.length}/${targets.length} 个会话发送失败：${failed.map((item) => `${item.target}：${item.error}`).join('；')}`
+        : undefined,
+    });
   }
 
   // Agent presets the host actually declares. The Settings card uses this to

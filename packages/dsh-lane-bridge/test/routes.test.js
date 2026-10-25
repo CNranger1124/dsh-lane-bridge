@@ -255,6 +255,9 @@ test('push accepts several targets and reports per-target results', async () => 
     assert.equal(body.results[0].ok, true);
     assert.equal(body.results[1].ok, false);
     assert.match(body.results[1].error, /offline/);
+    // 207 alone is useless in the UI: the response carries the reason too.
+    assert.match(body.error, /1\/2 个会话发送失败/u);
+    assert.match(body.error, /snowluma:group:2：channel offline/u);
     assert.equal(channels.sent.length, 1);
   } finally {
     cleanup(dir);
