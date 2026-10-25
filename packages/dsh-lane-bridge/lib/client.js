@@ -57,6 +57,17 @@ window.__ModuleLoader__.load({
       .lb-footer { display:flex; gap:8px; align-items:center; justify-content:flex-end; position:sticky; bottom:0; z-index:3; margin-top:4px; padding:9px 2px; background:var(--dsw-alias-bg-primary,#fff); border-top:1px solid var(--dsw-alias-border,#e5e7eb); }
       .lb-log { margin:0; max-height:320px; overflow:auto; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.55; background:var(--dsw-alias-bg-secondary,#f6f7f9); border:1px solid var(--dsw-alias-border,#e5e7eb); border-radius:8px; padding:10px; }
       .lb-check { display:flex; align-items:center; gap:6px; font-size:12px; }
+      .lb-chips { display:flex; flex-wrap:wrap; gap:6px; min-height:30px; align-items:center; }
+      .lb-chip { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--dsw-alias-border,#e5e7eb); border-radius:999px; padding:2px 3px 2px 10px; font-size:12px; background:var(--dsw-alias-bg-secondary,#f6f7f9); max-width:100%; }
+      .lb-chip-x { border:0; background:transparent; color:var(--dsw-alias-text-secondary,#6b7280); cursor:pointer; font-size:14px; line-height:1; padding:2px 6px; border-radius:999px; }
+      .lb-chip-x:hover { color:#b91c1c; background:#fee2e2; }
+      .lb-addrow { display:flex; gap:6px; align-items:center; }
+      .lb-addrow .lb-input { flex:1 1 auto; min-width:0; }
+      .lb-oprow { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+      .lb-oprow .lb-select { flex:0 0 150px; width:auto; }
+      .lb-oprow .lb-input { flex:1 1 200px; min-width:0; }
+      .lb-oplist { display:flex; flex-direction:column; gap:6px; }
+      .lb-opitem { display:flex; gap:6px; align-items:center; border:1px solid var(--dsw-alias-border,#e5e7eb); border-radius:8px; padding:6px 8px; }
       .lb-sidebar { height:100%; min-height:0; overflow:auto; padding:0 2px; box-sizing:border-box; }
       .lb-sidebar .lb-root--compact { padding-bottom:16px; }
       .lb-root--compact .lb-grid { grid-template-columns:1fr; }
@@ -136,8 +147,189 @@ window.__ModuleLoader__.load({
       return h('span', { className: cls }, text);
     }
 
-    function linesToArray(text) {
-      return String(text ?? '').split(/[\n,，]/u).map((s) => s.trim()).filter(Boolean);
+    // ---------------------------------------------------------------------
+    // List editors.
+    //
+    // A "type several things into one text box, separated by commas" field is
+    // unreadable and unstable: a comma inside a keyword silently becomes two
+    // keywords, a trailing comma silently disappears, and you cannot see what
+    // will actually be saved. Every multi-value field is therefore a chip list
+    // with explicit add/remove actions.
+    // ---------------------------------------------------------------------
+
+    /** Free-text list: Enter or the + button appends one chip; × removes it. */
+    function ChipList({ values, onChange, placeholder, addLabel = '添加', emptyText = '还没有条目' }) {
+      const list = Array.isArray(values) ? values : [];
+      const [text, setText] = useState('');
+      const commit = () => {
+        // Pasting a pasted "a, b" still works, but the value never *has* to be
+        // written that way: one chip per explicit add.
+        const parts = String(text ?? '').split(/[\n,，]/u).map((part) => part.trim()).filter(Boolean);
+        if (parts.length === 0) return;
+        const next = [...list];
+        for (const part of parts) if (!next.includes(part)) next.push(part);
+        onChange(next);
+        setText('');
+      };
+      return h('div', { className: 'lb-field' },
+        list.length > 0
+          ? h('div', { className: 'lb-chips' }, ...list.map((value, index) => h('span', {
+            key: `${value}-${index}`,
+            className: 'lb-chip',
+          },
+            h('span', { className: 'lb-mono' }, value),
+            h('button', {
+              type: 'button',
+              className: 'lb-chip-x',
+              title: `移除 ${value}`,
+              onClick: () => onChange(list.filter((_item, i) => i !== index)),
+            }, '×')
+          )))
+          : h('span', { className: 'lb-muted' }, emptyText),
+        h('div', { className: 'lb-addrow' },
+          h('input', {
+            className: 'lb-input',
+            value: text,
+            placeholder,
+            onChange: (event) => setText(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commit();
+              }
+            },
+          }),
+          h('button', { type: 'button', className: 'lb-btn', onClick: commit }, addLabel)
+        )
+      );
+    }
+
+    // Channel enumerations for the operator whitelist. `channel:id` is the
+    // stored format; the UI never asks the operator to type the prefix.
+    const OPERATOR_CHANNELS = [
+      ['qqbot', '官方 QQ Bot'],
+      ['snowluma', 'SnowLuma（OneBot）'],
+      ['discord', 'Discord'],
+    ];
+    const OPERATOR_ID_HINTS = {
+      qqbot: 'openid，例如 8FD96C63927394130884C87F9F708895',
+      snowluma: 'QQ 号，例如 123456789',
+      discord: '用户 ID，例如 123456789012345678',
+    };
+
+    function splitOperatorEntry(entry) {
+      const text = String(entry ?? '').trim();
+      if (!text || text === '*') return { channel: '', id: '' };
+      const at = text.indexOf(':');
+      if (at > 0) return { channel: text.slice(0, at), id: text.slice(at + 1) };
+      return { channel: '', id: text };
+    }
+
+    // The id half is sanitised here: spaces and stray colons are the two things
+    // that used to make hand-typed `channel:id` values silently invalid.
+    function joinOperatorEntry(channel, id) {
+      const value = String(id ?? '').replace(/[\s:]/gu, '');
+      if (!value) return '';
+      return channel ? `${channel}:${value}` : value;
+    }
+
+    // "最近发言者" copies the full `channel:id`. Pasting that must just work:
+    // a known prefix wins over the dropdown, and the prefix is stripped from the
+    // id so it cannot end up duplicated (`qqbot:qqbot8FD9…`).
+    function normalizeOperatorInput(selectedChannel, raw) {
+      const text = String(raw ?? '').trim();
+      const match = /^([a-z0-9_-]{1,20}):(.+)$/iu.exec(text);
+      const known = match && OPERATOR_CHANNELS.some(([id]) => id === match[1].toLowerCase());
+      if (known) return { channel: match[1].toLowerCase(), id: match[2] };
+      return { channel: selectedChannel, id: text };
+    }
+
+    /**
+     * Operator whitelist editor: one row per administrator, channel chosen from
+     * an enum dropdown, id typed once. `*` is its own switch instead of a magic
+     * string in a textarea.
+     */
+    function OperatorEditor({ values, onChange }) {
+      const list = Array.isArray(values) ? values : [];
+      const everyone = list.includes('*');
+      const rows = list.filter((entry) => entry !== '*');
+      const [channel, setChannel] = useState('qqbot');
+      const [text, setText] = useState('');
+      const extraChannels = [...new Set(rows
+        .map((entry) => splitOperatorEntry(entry).channel)
+        .filter((value) => value && !OPERATOR_CHANNELS.some(([id]) => id === value)))];
+      const add = () => {
+        const parsed = normalizeOperatorInput(channel, text);
+        const entry = joinOperatorEntry(parsed.channel, parsed.id);
+        if (!entry) return;
+        onChange(list.includes(entry) ? [...rows] : [...rows, entry]);
+        setText('');
+      };
+      const replace = (index, nextChannel, nextId) => {
+        const parsed = normalizeOperatorInput(nextChannel, nextId);
+        const entry = joinOperatorEntry(parsed.channel, parsed.id);
+        const next = rows.map((item, i) => (i === index ? entry : item)).filter(Boolean);
+        onChange([...new Set(next)]);
+      };
+      return h('div', { className: 'lb-field' },
+        h('label', { className: 'lb-check' },
+          h('input', {
+            type: 'checkbox',
+            checked: everyone,
+            onChange: (event) => onChange(event.target.checked ? ['*'] : []),
+          }),
+          '所有人都是管理员（*，不建议在公开群使用）'
+        ),
+        everyone ? null : h('div', { className: 'lb-oplist' },
+          rows.length === 0 ? h('span', { className: 'lb-muted' }, '还没有管理员：建 issue / 跨会话推送 / 写共享记忆对所有人关闭') : null,
+          ...rows.map((entry, index) => {
+            const parsed = splitOperatorEntry(entry);
+            const options = [...OPERATOR_CHANNELS];
+            if (parsed.channel && !options.some(([id]) => id === parsed.channel)) options.push([parsed.channel, parsed.channel]);
+            return h('div', { key: `${entry}-${index}`, className: 'lb-opitem' },
+              h('select', {
+                className: 'lb-select',
+                value: parsed.channel,
+                onChange: (event) => replace(index, event.target.value, parsed.id),
+              },
+                parsed.channel === '' ? h('option', { value: '' }, '任意渠道') : null,
+                ...options.map(([id, label]) => h('option', { key: id, value: id }, label))
+              ),
+              h('input', {
+                className: 'lb-input lb-mono',
+                value: parsed.id,
+                placeholder: OPERATOR_ID_HINTS[parsed.channel] ?? '用户 id',
+                onChange: (event) => replace(index, parsed.channel, event.target.value),
+              }),
+              h('button', {
+                type: 'button',
+                className: 'lb-btn lb-btn--danger',
+                title: '移除这个管理员',
+                onClick: () => onChange(rows.filter((_item, i) => i !== index)),
+              }, '−')
+            );
+          })
+        ),
+        everyone ? null : h('div', { className: 'lb-oprow' },
+          h('select', { className: 'lb-select', value: channel, onChange: (event) => setChannel(event.target.value) },
+            ...OPERATOR_CHANNELS.map(([id, label]) => h('option', { key: id, value: id }, label)),
+            ...extraChannels.map((value) => h('option', { key: value, value }, value))
+          ),
+          h('input', {
+            className: 'lb-input lb-mono',
+            value: text,
+            placeholder: OPERATOR_ID_HINTS[channel] ?? '用户 id',
+            onChange: (event) => setText(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                add();
+              }
+            },
+          }),
+          h('button', { type: 'button', className: 'lb-btn', onClick: add }, '+ 添加')
+        )
+      );
     }
 
     // Group-chat attention policies. `mention` + `keyword` combine.
@@ -886,22 +1078,31 @@ window.__ModuleLoader__.load({
               h(Field, { label: '模型', hint: 'provider/model；留空=DSH 默认' },
                 h('input', { className: 'lb-input', value: current.model, onChange: (e) => patch('model', e.target.value) })
               ),
-              h(Field, { label: '知识库 scope', hint: '逗号分隔' },
-                h('input', { className: 'lb-input', value: (current.knowledgeScopes ?? []).join(', '), onChange: (e) => patch('knowledgeScopes', linesToArray(e.target.value)) })
+              h(Field, { label: '知识库 scope', hint: '加号添加、× 移除；留空回退到 default' },
+                h(ChipList, {
+                  values: current.knowledgeScopes,
+                  onChange: (next) => patch('knowledgeScopes', next),
+                  placeholder: 'scope 名称，例如 default',
+                  addLabel: '+ 添加',
+                  emptyText: '还没有 scope（保存后回退到 default）',
+                })
               ),
-              h(Field, { label: '允许的宿主工具', hint: '逗号分隔；留空=无宿主工具' },
-                h('input', { className: 'lb-input', value: (current.allowedHostTools ?? []).join(', '), onChange: (e) => patch('allowedHostTools', linesToArray(e.target.value)) })
+              h(Field, { label: '允许的宿主工具', hint: '加号添加、× 移除；为空=无宿主工具' },
+                h(ChipList, {
+                  values: current.allowedHostTools,
+                  onChange: (next) => patch('allowedHostTools', next),
+                  placeholder: '宿主工具名，例如 web_search',
+                  addLabel: '+ 添加',
+                  emptyText: '没有宿主工具（推荐）',
+                })
               ),
               h(Field, {
                 label: '管理者（白名单）',
-                hint: '每行一个，或逗号分隔。格式「渠道:id」：qqbot:8FD96C63…（官方 QQ Bot openid）／snowluma:123456789（QQ 号）／discord:123456789012345678（Discord 用户 ID）。不带渠道前缀＝任意渠道的这个 id；* ＝所有人；留空＝没有人是管理员。下文「已发现的会话」里有成员 id，可直接复制。',
+                hint: '渠道从下拉里选，id 填该渠道报出的发送者 id（QQ Bot 是 openid、SnowLuma 是 QQ 号、Discord 是用户 ID）；点「+ 添加」加入，点「−」移除。留空＝没有任何管理员。会话页的「最近发言者」可以直接复制 id。',
               },
-                h('textarea', {
-                  className: 'lb-textarea',
-                  style: { minHeight: 64 },
-                  placeholder: 'qqbot:8FD96C63927394130884C87F9F708895\nsnowluma:123456789',
-                  value: (current.operators ?? []).join('\n'),
-                  onChange: (e) => patch('operators', linesToArray(e.target.value)),
+                h(OperatorEditor, {
+                  values: current.operators,
+                  onChange: (next) => patch('operators', next),
                 })
               ),
               h(Field, { label: '单条回复上限', hint: '0=使用全局' },
@@ -1003,8 +1204,14 @@ window.__ModuleLoader__.load({
                   ))
                 )
               ),
-              h(Field, { label: '关键词', hint: '勾选「命中关键词」时生效，逗号分隔' },
-                h('input', { className: 'lb-input', value: (current.keywords ?? []).join(', '), onChange: (e) => patch('keywords', linesToArray(e.target.value)) })
+              h(Field, { label: '关键词', hint: '勾选「命中关键词」时生效；加号添加、× 移除，一个关键词一条' },
+                h(ChipList, {
+                  values: current.keywords,
+                  onChange: (next) => patch('keywords', next),
+                  placeholder: '关键词，例如 存档',
+                  addLabel: '+ 添加',
+                  emptyText: '还没有关键词',
+                })
               )
             ),
             h(Field, {
@@ -1552,7 +1759,8 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, Push };
+      exportsObject.__components = { Card, ChipList, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar, OperatorEditor, Push };
+      exportsObject.__internals = { joinOperatorEntry, normalizeOperatorInput, splitOperatorEntry };
     }
     return exportsObject;
   },

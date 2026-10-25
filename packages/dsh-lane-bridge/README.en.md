@@ -97,16 +97,33 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 One group shares one DSH session, so "who is the administrator" cannot come from
 the chat itself. Nicknames are ignored; the bridge only trusts the **sender id**
 reported by the channel. The list lives on the **domain** as `operators`
-(Settings → IM Bridge → Domains → Operators), one entry per line:
+(Settings → IM Bridge → Domains → Operators).
 
-| Entry | Meaning | Where the id comes from |
+**The UI never asks you to type the format**: each administrator is a row of
+"channel dropdown + id input + add/remove".
+
+```text
+Operators
+[Official QQ Bot ▾] [openid, e.g. 8FD96C63…]  [+ Add]
+
+  [Official QQ Bot ▾]  8FD96C63927394130884C87F9F708895   [−]
+  [Discord         ▾]  123456789012345678                 [−]
+[ ] Everyone is an operator (*)
+
+stored as: operators: ["qqbot:8FD96C63…", "discord:123456789012345678"]
+```
+
+The channel enum is fixed at `qqbot`, `snowluma`, `discord`; only the id half is
+typed, so the prefix is never a typing error.
+
+| UI choice | Stored value | Where the id comes from |
 | --- | --- | --- |
-| `qqbot:8FD96C63927394130884C87F9F708895` | a user of the official QQ Bot | the event's `senderId` (openid, 32 hex chars, compared case-insensitively) |
-| `snowluma:123456789` | a QQ number on the SnowLuma channel | `event.sender.user_id` |
-| `discord:123456789012345678` | a Discord user | `message.author.id` (snowflake) |
-| `123456789` | no prefix: that id on any channel | — |
-| `*` | everyone is an operator (explicit opt-in to the old behavior) | — |
-| empty | nobody is an operator (default) | — |
+| Official QQ Bot | `qqbot:8FD96C63927394130884C87F9F708895` | the event's `senderId` (openid, 32 hex chars, compared case-insensitively) |
+| SnowLuma | `snowluma:123456789` | `event.sender.user_id` (QQ number) |
+| Discord | `discord:123456789012345678` | `message.author.id` (snowflake) |
+| legacy bare id | `123456789` | that id on any channel |
+| "everyone" checkbox | `*` | explicit opt-in, avoid in public groups |
+| empty list | — | nobody is an operator (default) |
 
 Rules that matter:
 
@@ -116,8 +133,9 @@ Rules that matter:
 - Nicknames and guild display names never participate: they are mutable and not
   unique.
 - To find an id: Settings → IM Bridge → Conversations, the "recent senders"
-  column lists `channel:id` per member; clicking copies it. Logs also print
-  `sender=…`.
+  column lists `channel:id` per member; clicking copies it. Pasting it into the
+  id field is enough — a known prefix is detected and switches the dropdown
+  instead of producing `qqbot:qqbot…`. Logs also print `sender=…`.
 - The whitelist is **per domain** and shared by every binding on that domain.
   Different admins per group means different domains.
 - Only whitelisted members may: create issues (`lane_repo_create_issue`), push

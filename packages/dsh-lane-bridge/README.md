@@ -69,22 +69,37 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 管理者（白名单）
 
-一个群只有一个 DSH 会话，所有群友共用它。桥接不看昵称，只认渠道给出的**发送者 id**。谁是管理员写在**领域**的 `operators` 里（Settings → IM 桥接 → 领域 → 管理者），一行一个：
+一个群只有一个 DSH 会话，所有群友共用它。桥接不看昵称，只认渠道给出的**发送者 id**。谁是管理员写在**领域**的 `operators` 里（Settings → IM 桥接 → 领域 → 管理者）。
 
-| 写法 | 含义 | id 从哪来 |
+**界面上不是手打字符串**，而是「渠道下拉 + id 输入框 + 添加/移除」：
+
+```text
+管理者（白名单）
+[官方 QQ Bot ▾] [openid，例如 8FD96C63…]  [+ 添加]
+
+  [官方 QQ Bot ▾]  8FD96C63927394130884C87F9F708895   [−]
+  [Discord     ▾]  123456789012345678                 [−]
+[ ] 所有人都是管理员（*）
+
+存下来是 operators: ["qqbot:8FD96C63…", "discord:123456789012345678"]
+```
+
+渠道只有三个枚举值：`qqbot`（官方 QQ Bot）、`snowluma`（OneBot）、`discord`。id 只填后半截，前缀由下拉决定，不用记格式。
+
+| 界面选择 | 存成的值 | id 从哪来 |
 | --- | --- | --- |
-| `qqbot:8FD96C63927394130884C87F9F708895` | 官方 QQ Bot 的用户 | 事件里的 `senderId`（openid，32 位十六进制，比较时忽略大小写） |
-| `snowluma:123456789` | SnowLuma 通道上的某个 QQ 号 | `event.sender.user_id` |
-| `discord:123456789012345678` | Discord 用户 | `message.author.id`（snowflake） |
-| `123456789` | 不带前缀：任意渠道上的这个 id | — |
-| `*` | 所有人都是管理员（显式放行，等价旧行为） | — |
-| 留空 | 没有人是管理员（默认） | — |
+| 官方 QQ Bot | `qqbot:8FD96C63927394130884C87F9F708895` | 事件里的 `senderId`（openid，32 位十六进制，比较时忽略大小写） |
+| SnowLuma | `snowluma:123456789` | `event.sender.user_id`（QQ 号） |
+| Discord | `discord:123456789012345678` | `message.author.id`（snowflake） |
+| 既有数据里的纯 id（无前缀） | `123456789` | 任意渠道上的这个 id |
+| 勾选「所有人」 | `*` | 显式放行，不建议在公开群用 |
+| 空列表 | — | 没有人是管理员（默认） |
 
 要点：
 
 - 前缀必须和会话 key 的渠道一致（`qqbot:group:…` ↔ `qqbot:…`）。同一个 QQ 号在 `qqbot` 和 `snowluma` 下是 openid / QQ 号两个不同的值，不能互认。
 - 昵称、群名片不参与判断：可以随便改，也不唯一。
-- 不知道 id 是多少：Settings → IM 桥接 → 会话，表格里的「最近发言者」按成员列出 `渠道:id`，点一下即复制，粘贴进管理者输入框即可。日志也会打印 `sender=…`。
+- 不知道 id 是多少：Settings → IM 桥接 → 会话，表格里的「最近发言者」按成员列出 `渠道:id`，点一下即复制。直接粘进 id 输入框即可——带前缀会被自动识别并切换渠道下拉，不会出现 `qqbot:qqbot…`。日志也会打印 `sender=…`。
 - 白名单是**领域级**的：同一领域下所有绑定共享。要给不同群不同管理员，就拆成不同领域。
 - 只有白名单成员能：建 issue（`lane_repo_create_issue`）、往别的会话推送（`lane_send` 的跨会话目标）、写领域共享记忆（`lane_memory_add`）。
 - 其他人仍然可以：在本会话分多条气泡发送、写知识库草稿（进待审区，等人工采纳）、`lane_escalate` 转人工。

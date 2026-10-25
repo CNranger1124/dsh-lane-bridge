@@ -2,6 +2,23 @@
 
 # Changelog
 
+## 0.2.16
+
+- **Multi-value fields no longer rely on comma separation**: knowledge scopes,
+  allowed host tools, keywords and the operator whitelist are now chip lists with
+  an explicit add button and ×/− removal, so what will be saved is always visible.
+- **The operator whitelist has a fixed shape**: each row is a channel enum
+  dropdown (official QQ Bot / SnowLuma / Discord) + an id input + a remove
+  button, with "+ Add" creating a row. "Everyone is an operator (*)" is its own
+  checkbox instead of a magic string typed into a textarea. Spaces and stray
+  colons are stripped from ids so nothing silently becomes invalid.
+- Copying `channel:id` from the Conversations table and pasting it into the id
+  field just works: a known prefix switches the dropdown and is stripped, never
+  producing `qqbot:qqbot8FD9…`.
+- Keywords and friends still accept a pasted comma/newline list, but they are
+  **stored as discrete entries** rather than parsed from a separator later.
+- 126 tests.
+
 ## 0.2.15
 
 - **Role cards and the domain's extra instructions can branch on identity**:
