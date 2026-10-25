@@ -394,6 +394,7 @@ window.__ModuleLoader__.load({
     // the built-ins, which ship without a description.
     const PRESET_NOTES = {
       'lane-support': 'IM 客服人格：只负责接待和查知识库，没有本地文件/命令权限。桥接会把 lane_send、lane_kb_* 等工具和角色卡另外注入到会话上。',
+      'lane-chat': 'IM 闲聊/角色扮演人格：把角色卡当身份本身，允许入戏、吐槽和主动接话；同样没有本地文件/命令权限，能力仍由宿主工具白名单决定。',
       standard: '标准代理：人格 + 文件读写/搜索 + 终端（PowerShell）+ 后台任务 + 定时任务 + 技能。能力最全，适合需要真正查代码/改文件的客服。',
       ptc: '标准工具链 + 程序化工具调用（PTC）：模型可以写脚本批量调用工具，适合多步骤数据处理；比 standard 多一层流程编排。',
       cordis: '标准工具链 + goal/plan 模式 + Cordis 插件开发技能：用来开发/调试 DSH 插件本身，不适合客服。',
@@ -1131,7 +1132,7 @@ window.__ModuleLoader__.load({
                   (data.state.roles ?? []).filter((role) => role.domainId === current.id).map((role) => role.name).join('、') || '（还没有角色指向这个领域）'
                 )
               ),
-              h(Field, { label: 'Agent preset', hint: 'preset 决定会话挂哪些 DSH 插件和工具；桥接的 lane_* 工具与角色卡会另外注入' },
+              h(Field, { label: 'Agent preset', hint: 'preset 决定会话挂哪些 DSH 插件和工具；桥接的 lane_* 工具与角色卡会另外注入。群聊闲聊/角色扮演选 lane-chat，客服选 lane-support；换 preset 后要重置会话' },
                 h('div', { className: 'lb-field' },
                   presets.length > 0
                     ? h('select', {

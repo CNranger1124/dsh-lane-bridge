@@ -2,7 +2,7 @@
 
 # IM Bridge architecture (DSH plugin)
 
-> Status: proposal + v0.6.0 implementation notes.
+> Status: proposal + v0.7.0 implementation notes.
 > Audience: maintainers, future contributors, and anyone evaluating the plugin
 > before installing it.
 
@@ -339,10 +339,12 @@ should be rebuilt as a separate domain policy later.
 dsh plugin --profile web add dsh-lane-bridge
 ```
 
-The package declares two patch files that insert:
+The package declares three patch files that insert:
 
-- the `dsh-lane-bridge` host row (with `inject` services), and
-- the `lane-support` agent preset row (persona + no built-in tools).
+- the `dsh-lane-bridge` host row (with `inject` services),
+- the `lane-support` agent preset row (support persona + no built-in tools), and
+- the `lane-chat` agent preset row (chat/role-play persona with the role card on
+  top, also no built-in tools).
 
 No second process. No port. No console token. Upgrading the plugin does not
 touch `state.json`, roles, or knowledge. The Settings header shows the version the
@@ -352,7 +354,7 @@ build?" is answerable. Publishing/install details:
 
 ## 10. Verification status
 
-What the repository verifies today (`npm test`, 156 tests):
+What the repository verifies today (`npm test`, 157 tests):
 
 | Area | Evidence |
 | --- | --- |
@@ -379,7 +381,7 @@ What the repository verifies today (`npm test`, 156 tests):
 | Discord adapter | fake discord.js client: ready, DM/guild normalization, mention gate, reply metadata, mention parsing disabled |
 | QQ Bot adapter | fake SDK client: ready, c2c/group normalization, bot filter, passive reply target, full-mode mention detection, 5-bubble cap, error-code translation |
 | Client bundle | module-loader wrapper, `settings.section` registration, nine tabs rendering, cleanup |
-| Package manifest | host/client exports, bundle patch paths, `lane-support` preset id |
+| Package manifest | host/client exports, bundle patch paths, `lane-support` / `lane-chat` preset ids |
 | Cordis activation | the real `@deepseek-ai/cordis` runtime activated the plugin with fake host services and disposed both routes cleanly (catches async-apply/effect mistakes that a mock ctx misses) |
 | Migration | legacy config/roles/KB/sessions → new state |
 
@@ -398,7 +400,7 @@ The reproducible first-run checklist is [guides/LIVE_TEST.en.md](./guides/LIVE_T
 - Real browser interaction for knowledge bases, approval, and domain binding
   (client tests stop at the rendering layer).
 
-Treat v0.6.0 as a **feature-complete, test-covered management surface with a
+Treat v0.7.0 as a **feature-complete, test-covered management surface with a
 runtime still awaiting live channel acceptance**, not as a production support bot
 until the live checklist above passes.
 

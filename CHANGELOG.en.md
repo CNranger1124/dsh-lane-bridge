@@ -2,6 +2,26 @@
 
 # Changelog
 
+## 0.7.0
+
+- **New `lane-chat` preset: group chit-chat and role-play.** Like `lane-support`
+  it mounts only the persona and registers no built-in tools, but it inverts the
+  identity priority: **the role card is the identity itself**, above the preset's
+  generic rules and the model's assistant habits. The persona forbids breaking
+  character (no unprompted "as an AI/model", no tool-call reports), forbids
+  deciding the other player's actions, and forbids reciting the card. In a group
+  it may tease, refuse, start a topic, or stay silent for a whole turn — an empty
+  turn sends nothing — but an @-mention or a direct question must be answered.
+  Role-play supports action/dialogue formatting, keeps the character's knowledge
+  limits, and retains a minimal safety floor (no explicit sexual content, no
+  sexualization of minors, no real-world harm or illegal instructions).
+- The domain **Agent preset** dropdown now lists `lane-support` and `lane-chat`
+  with notes explaining the difference; existing sessions do not switch persona
+  on their own, so change the preset and press **Reset session**.
+- Docs cover the two presets, how to switch, and the "`lane-chat` may stay silent
+  but must answer an @-mention" acceptance step; tests up to 157 (preset file,
+  registration path, persona-only assertion).
+
 ## 0.6.0
 
 - **The deposition prompts were rewritten for the current model**: the knowledge

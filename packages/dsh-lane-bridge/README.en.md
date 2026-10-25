@@ -61,6 +61,9 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **Domains**: a reusable set of infrastructure (preset, model, **bound knowledge
   bases**, host-tool allow-list, operator whitelist, group trigger policy); a
   conversation reaches a domain through its role card.
+- **Two built-in personas**: `lane-support` for a support desk, `lane-chat` for
+  group chit-chat / role-play with the role card as the top identity. Neither
+  registers built-in tools.
 - **Shared libraries**: role cards and the Markdown knowledge bases are shared; a
   domain binds *several* knowledge bases, and every document inside them is
   reachable by its own triggers. Optional domain-scoped memory
@@ -108,6 +111,31 @@ conversation (one group / one private chat)
 - Unbound conversations are recorded but never prompt a model.
 - Legacy state: 0.3.x's `domain.role` and `binding.domainId` are migrated to
   "role → domain" on load, so nothing needs reconfiguring.
+
+## Agent presets: `lane-support` and `lane-chat`
+
+A domain's preset decides which DSH plugins and which persona a new session in
+that domain gets. Two ship with the plugin:
+
+| preset | Best for | Persona focus |
+| --- | --- | --- |
+| `lane-support` (default) | support desk, Q&A inbox | solve the problem: check the KB first, short conclusions, hand off when needed |
+| `lane-chat` | group chit-chat, role-play | the role card *is* the identity: speak and stay in character, no support-desk or all-answers tone |
+
+Both mount only `@deepseek-ai/dsh-persona` and register **no built-in tools**;
+the bridge injects `lane_*` and the role card per conversation, so switching a
+preset never widens permissions. `lane-chat` additionally fixes the priority
+(role card over generic rules), forbids breaking character, forbids deciding the
+other player's actions, allows staying silent in a group, and requires answering
+when @-mentioned.
+
+- New sessions use the domain's current preset; **existing sessions do not
+  switch on their own**. After changing the preset, press **Reset session** for
+  that conversation on the Conversations page so the next message uses the new
+  persona.
+- To use your own preset, declare an `@deepseek-ai/dsh-agent-preset` row in the
+  profile (pick your own `id`), then choose **Manual input / unknown preset** on
+  the domain page and type it in.
 
 ## Operators (whitelist)
 
@@ -433,7 +461,7 @@ SnowLuma.
 
 ## Security defaults
 
-- The default `lane-support` preset registers no built-in tools.
+- Neither the `lane-support` nor the `lane-chat` preset registers built-in tools.
 - Every conversation's agent gets `lane_send` / `lane_conversation_info` /
   `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` /
   `lane_escalate` and a `tools.restrict({ allow: allowedHostTools })` mask; the
@@ -477,8 +505,9 @@ SnowLuma.
 
 ## Status
 
-`0.6.0`: the QQ / official QQ Bot / Discord adapters and the management surface
-are in place, with 156 passing tests. The legacy simulation/sticker/voice/**cost-conversion**
+`0.7.0`: adds the `lane-chat` preset (group chit-chat / role-play with the role
+card first); the QQ / official QQ Bot / Discord adapters and the management surface
+are in place, with 157 passing tests. The legacy simulation/sticker/voice/**cost-conversion**
 features are not ported yet; the token usage ledger is included. See the
 repository's `docs/IM_BRIDGE_ARCHITECTURE.en.md` for the design and
 live-verification checklist.

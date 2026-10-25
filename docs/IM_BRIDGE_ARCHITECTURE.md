@@ -2,7 +2,7 @@
 
 # IM Bridge 架构（DSH 插件）
 
-> 状态：方案 + v0.6.0 实现说明。
+> 状态：方案 + v0.7.0 实现说明。
 > 读者：维护者、未来贡献者、安装前想评估这个插件的人。
 
 ## 1. 决策：DSH 原生插件，不做独立前端
@@ -239,16 +239,17 @@ lane-bridge/
 dsh plugin --profile web add dsh-lane-bridge
 ```
 
-发布包声明了两个 patch 文件，插入：
+发布包声明了三个 patch 文件，插入：
 
 - `dsh-lane-bridge` host 行（带 `inject` services）；
-- `lane-support` agent preset 行（persona，无内置工具）。
+- `lane-support` agent preset 行（客服 persona，无内置工具）；
+- `lane-chat` agent preset 行（闲聊/角色扮演 persona，角色卡优先，同样无内置工具）。
 
 没有第二个进程、没有端口、没有控制台 token。升级插件不会碰 `state.json`、角色或知识库。设置页标题会显示当前运行中的插件版本（`/api/health`），用来判断“重启后到底加载了新版本没有”。发布/安装细节见 [guides/PUBLISHING.md](./guides/PUBLISHING.md)。
 
 ## 10. 验证状态
 
-仓库当前验证的内容（`npm test`，156 个测试）：
+仓库当前验证的内容（`npm test`，157 个测试）：
 
 | 区域 | 证据 |
 | --- | --- |
@@ -275,7 +276,7 @@ dsh plugin --profile web add dsh-lane-bridge
 | Discord 适配器 | fake discord.js client：ready、私聊/频道归一化、mention gate、回复元数据、禁用 mention 解析 |
 | QQ Bot 适配器 | fake SDK client：ready、c2c/group 归一化、bot 过滤、被动回复 target、全量模式 @ 判定、5 条气泡上限、错误码翻译 |
 | Client bundle | module-loader wrapper、`settings.section` 注册、9 个页面渲染、清理 |
-| 包清单 | host/client exports、bundle patch 路径、`lane-support` preset id |
+| 包清单 | host/client exports、bundle patch 路径、`lane-support` / `lane-chat` preset id |
 | Cordis 激活 | 用真实 `@deepseek-ai/cordis` 和 fake host services 激活插件，并干净销毁两个路由（能抓 mock ctx 抓不到的 async apply/effect 错误） |
 | 迁移 | 旧 config/roles/KB/sessions → 新 state |
 
@@ -288,7 +289,7 @@ dsh plugin --profile web add dsh-lane-bridge
 - 插件内的完整模型回合（测试使用 fake `sessionController` 和 `sessionQuery`；真实服务只在 DSH Host 里跑）。
 - 知识库/审批/领域联动的浏览器真实交互（client 测试只到渲染层）。
 
-v0.6.0 应视为**功能完整、测试覆盖的管理面 + 待真实渠道验收的运行时**；在真实清单通过前不要当成生产客服机器人。
+v0.7.0 应视为**功能完整、测试覆盖的管理面 + 待真实渠道验收的运行时**；在真实清单通过前不要当成生产客服机器人。
 
 ## 11. 待定问题
 

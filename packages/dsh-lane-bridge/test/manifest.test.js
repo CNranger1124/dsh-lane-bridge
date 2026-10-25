@@ -33,6 +33,23 @@ test('bundle patches mount the host row and the lane-support preset', () => {
   assert.match(preset, /id: lane-support/);
 });
 
+test('the bundle also mounts the lane-chat role-play preset', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.ok(pkg.dsh.bundle.patch.includes('./presets/lane-chat.patch.yml'));
+  const preset = fs.readFileSync(path.join(ROOT, 'presets/lane-chat.patch.yml'), 'utf8');
+  assert.match(preset, /id: preset-lane-chat/);
+  assert.match(preset, /name: '@deepseek-ai\/dsh-agent-preset'/);
+  assert.match(preset, /id: lane-chat/);
+  assert.match(preset, /name: '@deepseek-ai\/dsh-persona'/);
+  // The role card outranks the preset's generic habits.
+  assert.match(preset, /角色卡是身份/);
+  assert.match(preset, /优先级：角色卡 > 本段通用规则/);
+  // Like lane-support, the preset mounts the persona and nothing else, so the
+  // domain allow-list remains the only thing that can widen the tool surface.
+  const children = [...preset.matchAll(/^ {10}- id: (.+)$/gmu)].map((match) => match[1].trim());
+  assert.deepEqual(children, ['persona']);
+});
+
 test('client bundle uses the DSH lazy-module wrapper', () => {
   const client = fs.readFileSync(path.join(ROOT, 'lib/client.js'), 'utf8');
   assert.match(client, /window\.__ModuleLoader__\.load\(\{/);

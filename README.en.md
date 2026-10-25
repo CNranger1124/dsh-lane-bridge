@@ -5,7 +5,7 @@
 A **DeepSeek Harness (DSH) plugin** that connects QQ (SnowLuma OneBot v11),
 the official QQ Bot, and Discord to DSH agents: **one plugin, many channels,
 shared knowledge bases, per-conversation personas, and a single outbound push
-API**. Current version: `0.6.0`.
+API**. Current version: `0.7.0`.
 
 This repository started from `qq-bridge` (a standalone QQ ↔ DSH bridge). The
 plugin in [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge) is the new home
@@ -93,7 +93,7 @@ A standalone frontend would duplicate authentication, theme, session list, and
 deployment. We therefore build the management surface **inside DSH**, and keep
 only a one-shot legacy migration script.
 
-## What 0.6 gives you
+## What it gives you
 
 - **Three channels**: SnowLuma (OneBot v11), official QQ Bot (AppID/AppSecret),
   and Discord (Bot Token + Message Content Intent). The launcher card starts,
@@ -106,6 +106,10 @@ only a one-shot legacy migration script.
   whitelist** (`channel:id`; empty means nobody), multi-select group attention
   policies (mention/reply and keyword can both apply, or all/off), auto-retrieval
   and context budgets (`kbRetrieveChars`, `memoryMaxChars`, `sessionMaxTurns`).
+- **Two built-in personas**: `lane-support` for a support desk and `lane-chat` for
+  group chit-chat / role-play. The latter treats the role card as the highest
+  identity setting (card over generic rules, in-character play allowed, silence
+  allowed in groups); neither registers built-in tools.
 - **Knowledge bases are first-class**: one directory under `knowledge/<name>/` is
   one knowledge base. Create, rename, and delete them on the Knowledge page. A
   domain binds **several** bases, and renaming a base repoints every domain that
@@ -144,7 +148,7 @@ only a one-shot legacy migration script.
   Roles, Knowledge, Memory, KB approval, Usage, Push), each module with its own
   Save button and collapsible header, plus a sticky save bar. The sidebar panel
   shares the same state.
-- **Tests**: 156, covering store, resolver, routes, session orchestration,
+- **Tests**: 157, covering store, resolver, routes, session orchestration,
   GitHub, knowledge bases and draft approval, channel adapters, and the plugin
   harness.
 
@@ -185,6 +189,7 @@ draft approval, archival budget, QQ Bot passive vs active messages) lives in
 
 ## Status
 
+`0.7.0` adds the `lane-chat` preset (group chit-chat / role-play, role card first).
 `0.6.0` makes knowledge bases first-class: drafts require triggers, land only in a
 base the domain binds, and approving creates a standalone document (the approval
 page edits the triggers). `0.5.x` added knowledge-base CRUD, cross-base moves and
@@ -192,7 +197,7 @@ renames, and multi-base domain binding; `0.4.x` fixed official QQ Bot passive
 replies, full-mode group messages, and mention detection; `0.3.x` introduced the
 conversation → role → domain model. See [CHANGELOG.en.md](./CHANGELOG.en.md).
 
-The code and tests are complete (156 passing); real DSH / official QQ Bot
+The code and tests are complete (157 passing); real DSH / official QQ Bot
 acceptance is in progress, while SnowLuma / Discord end-to-end traffic is not
 verified yet. Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
 

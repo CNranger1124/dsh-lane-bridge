@@ -50,6 +50,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **一个插件**：渠道、领域路由、角色卡、知识库和推送都在一起。不需要第二个服务或控制台 token。
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
 - **领域**：一套可复用的基础设施（preset、模型、**绑定的知识库**、宿主工具白名单、管理者白名单、群聊触发策略）；会话通过角色卡选择领域。
+- **两种内置人格**：`lane-support` 做客服，`lane-chat` 做群聊闲聊/角色扮演；后者把角色卡当最高身份设定。两者都不注册内置工具。
 - **共享库**：角色卡和 Markdown 知识库共享；领域可以绑定**多个知识库**，绑定后就能按文档自己的触发词命中。领域记忆（`lane_memory_*`）跨会话积累经验。
 - **知识库草稿 + 人工审批**：`lane_kb_draft` 写的是**一篇文章草稿**（标题 + 触发词 + 正文 + 来源），落在该领域绑定知识库的 `_待审/` 里；「知识库审批」页可以改触发词，采纳后才变成那个知识库里一篇带触发词的正式文档（同名不覆盖，自动加序号）。
 - **GitHub 只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；issue/文件/代码/提交查询；支持 `gh` CLI 读取账号可见的全部仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
@@ -77,6 +78,20 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - 一个领域可以挂多个角色（同一套知识库，不同说话人设）；一个角色只属于一个领域。
 - 未绑定会话只记录，不触发模型。想做开放客服收件箱可打开 `autoReplyPrivate`。
 - 兼容旧状态：0.3.x 的 `domain.role` 和 `binding.domainId` 会在加载时自动迁移成「角色 → 领域」，不用重配。
+
+## Agent preset：`lane-support` 与 `lane-chat`
+
+领域里的 preset 决定这个领域的新会话挂哪些 DSH 插件、用哪套人格。插件自带两个：
+
+| preset | 适合 | 人格重点 |
+| --- | --- | --- |
+| `lane-support`（默认） | 客服、答疑、收件箱 | 解决问题优先：先查知识库、短句给结论、必要时转人工 |
+| `lane-chat` | 群聊闲聊、角色扮演 | 角色卡是身份本身：按卡片说话和入戏，不讲客服腔、不强答 |
+
+两个 preset 都只挂 `@deepseek-ai/dsh-persona`，**不注册任何内置工具**；`lane_*` 工具和角色卡由桥接按会话注入，所以换 preset 不会扩大权限。`lane-chat` 额外约定了：角色卡优先于通用规则、不出戏、不替对方决定行动、群聊里可以不说、被 @ 必须回。
+
+- 新会话按领域当前 preset 创建；**已有会话不会自动换**。改完 preset，要到「会话」页对该会话点「重置会话」，下一条消息才会用新人格。
+- 要换成自己的 preset：在 profile 里用 `@deepseek-ai/dsh-agent-preset` 声明一行（`id` 自己定），再到领域页选「手动输入 / 未知 preset」填进去。
 
 ## 管理者（白名单）
 
@@ -310,7 +325,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 
 ## 安全默认
 
-- 默认 `lane-support` preset 不注册任何内置工具。
+- `lane-support` 与 `lane-chat` preset 都不注册任何内置工具。
 - 每个会话的 agent 会拿到 `lane_send` / `lane_conversation_info` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。`lane_retire` 只在归档回合内可用。
 - KB 工具只读正式区；草稿只能写 `_待审/`，且不参与检索。GitHub 默认关闭，按领域开启。
 - 建 issue、跨会话推送、写共享记忆只允许领域管理者白名单里的成员；白名单默认留空＝谁都不能。
@@ -346,7 +361,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 
 ## 状态
 
-`0.6.0`：QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 156 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和 live 验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
+`0.7.0`：新增 `lane-chat` preset（群聊闲聊/角色扮演，角色卡优先）；QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 157 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和 live 验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
 
 真实 DSH 安装和真实渠道验收仍在进行：官方 QQ Bot 已进入验收，SnowLuma / Discord 尚未做端到端收发。
 

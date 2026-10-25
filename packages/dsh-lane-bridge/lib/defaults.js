@@ -295,4 +295,4 @@ export function defaultState() {
   };
 }
 
-export const MODEL_PRESET_CHOICES = ['lane-support'];
+export const MODEL_PRESET_CHOICES = ['lane-support', 'lane-chat'];
