@@ -157,16 +157,31 @@ export class SessionPool {
       const sessionId = record.sessionId;
       let agent = this.ctx.agents.get(sessionId);
       if (!agent) {
-        try {
-          const handle = await this.ctx.agents.resume({
-            resumeSessionId: sessionId,
-            setup: (agentCtx, resumed) => this.configureAgent(agentCtx, resumed, key, resolved),
-          });
-          agent = handle.agent;
-          this.handles.set(key, handle);
-          this.logger?.debug?.(`[lane-bridge] 已恢复会话 ${key} -> ${sessionId.slice(0, 8)}`);
-        } catch (error) {
-          this.logger?.warn?.(`[lane-bridge] 会话恢复失败，将为 ${key} 新建会话：${error?.message ?? error}`);
+        // Resume through the Session Controller when possible. Its setup also
+        // installs the session-local model selection; resuming straight through
+        // `agents.resume` leaves it unset, and the next prompt assembly then
+        // fails on the persona's {{model}} variable. The controller also
+        // re-mounts the preset stored in the session header.
+        if (typeof this.ctx.sessionController?.resolveAgent === 'function') {
+          try {
+            agent = await this.ctx.sessionController.resolveAgent(sessionId);
+            this.logger?.debug?.(`[lane-bridge] 已恢复会话 ${key} -> ${sessionId.slice(0, 8)}`);
+          } catch (error) {
+            this.logger?.warn?.(`[lane-bridge] 会话恢复失败，将为 ${key} 新建会话：${error?.message ?? error}`);
+          }
+        }
+        if (!agent) {
+          try {
+            const handle = await this.ctx.agents.resume({
+              resumeSessionId: sessionId,
+              setup: (agentCtx, resumed) => this.configureAgent(agentCtx, resumed, key, resolved),
+            });
+            agent = handle.agent;
+            this.handles.set(key, handle);
+            this.logger?.debug?.(`[lane-bridge] 已恢复会话 ${key} -> ${sessionId.slice(0, 8)}`);
+          } catch (error) {
+            this.logger?.warn?.(`[lane-bridge] 会话恢复失败，将为 ${key} 新建会话：${error?.message ?? error}`);
+          }
         }
       }
       if (agent) {

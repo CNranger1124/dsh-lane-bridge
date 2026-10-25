@@ -70,6 +70,7 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
   const queues = new Map();
   const prompts = [];
   const resumeCalls = [];
+  const resolveCalls = [];
   let nextId = 1;
   // Mirrors the current DSH contract: the durable follower lives on
   // sessionController.history and every prompt must carry an AbortSignal.
@@ -104,6 +105,13 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
         return { sessionId };
       },
       history,
+      resolveAgent: async (sessionId) => {
+        resolveCalls.push(sessionId);
+        const agent = makeAgent(sessionId);
+        agents.set(sessionId, agent);
+        queues.set(sessionId, eventQueue());
+        return agent;
+      },
       prompt: async (request, signal) => {
         if (!signal || typeof signal.throwIfAborted !== 'function') {
           throw new TypeError("Cannot read properties of undefined (reading 'throwIfAborted')");
@@ -157,7 +165,7 @@ async function setup({ existingSession = '', repo = null, promptImpl = null } = 
       resolveTurn?.(payload);
     },
   });
-  return { dir, store, ctx, agents, queues, prompts, resumeCalls, sent, turns, pool, memoryStore, usageStore, turnPromise };
+  return { dir, store, ctx, agents, queues, prompts, resumeCalls, resolveCalls, sent, turns, pool, memoryStore, usageStore, turnPromise };
 }
 
 test('first prompt creates a session, registers lane tools, restricts host tools, and injects the role card', async () => {
@@ -291,14 +299,28 @@ test('DSH event envelopes are unwrapped before the turn collector sees them', as
   }
 });
 
-test('cold sessions are resumed through agents.resume and configured before the prompt', async () => {
+test('cold sessions are resolved through the session controller so model selection is installed', async () => {
   const env = await setup({ existingSession: 'cold-1' });
   try {
     await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '恢复' });
-    assert.deepEqual(env.resumeCalls, ['cold-1']);
+    assert.deepEqual(env.resolveCalls, ['cold-1']);
+    assert.deepEqual(env.resumeCalls, [], 'raw agents.resume would skip installSelection');
     const agent = env.agents.get('cold-1');
     assert.ok(agent.tools.has('lane_send'));
     assert.equal(env.prompts[0].sessionId, 'cold-1');
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('cold sessions fall back to agents.resume when the controller has no resolveAgent', async () => {
+  const env = await setup({ existingSession: 'cold-2' });
+  try {
+    delete env.ctx.sessionController.resolveAgent;
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '恢复' });
+    assert.deepEqual(env.resumeCalls, ['cold-2']);
+    assert.equal(env.prompts[0].sessionId, 'cold-2');
   } finally {
     await env.pool.stop();
     cleanup(env.dir);

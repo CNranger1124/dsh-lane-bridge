@@ -2,6 +2,11 @@
 
 # 变更记录
 
+## 0.2.12
+
+- 修复 DSH 重启后第一次收到消息（冷会话恢复）必定失败的问题：`prompt variable "{{model}}" has no value for this assembly`。原因是插件直接调用 `agents.resume` 恢复会话，绕过了 Session Controller 的 setup，会话没有安装 model selection，人格模板里的 `{{model}}` 取不到值。现在优先用 `sessionController.resolveAgent()` 恢复（控制器会安装 model selection 并重新挂载会话头里的 preset），`agents.resume` 仅作兜底。
+- 测试增至 107 项。
+
 ## 0.2.11
 
 - 修 preset 下拉里的「手动输入」选项：之前选中已存在的 preset 后再点它没有反应，现在会切到输入框，并保留原值（空 preset 会退回默认，所以不清空）。
