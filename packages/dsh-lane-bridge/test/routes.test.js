@@ -6,6 +6,7 @@ import { createRoutes } from '../lib/routes.js';
 import { MemoryStore } from '../lib/memory.js';
 import { UsageStore } from '../lib/usage.js';
 import { defaultState } from '../lib/defaults.js';
+import { writeDraft } from '../lib/knowledge.js';
 import { tempDir, cleanup, mockRequest, mockResponse, fakeChannels } from './helpers.js';
 
 async function setup() {
@@ -180,6 +181,45 @@ test('knowledge routes list and write documents', async () => {
     await routes.handle(mockRequest({ url: '/lane-bridge/api/knowledge/read?scope=default&path=' + encodeURIComponent('新文档.md') }), read);
     assert.equal(read.status, 200);
     assert.match(read.json().content, /# hi/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('knowledge draft routes list, approve, and discard', async () => {
+  const { dir, store, routes } = await setup();
+  try {
+    const draft = writeDraft(store.paths.knowledgeDir, 'default', {
+      title: '测试草稿',
+      content: '这是一条测试草稿内容。',
+      source: 'issue #1',
+    });
+    const list = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/kb/drafts' }), list);
+    assert.equal(list.status, 200);
+    assert.ok(list.json().drafts.some((item) => item.file === draft.file));
+
+    const approve = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/kb/drafts',
+      body: { action: 'approve', scope: 'default', file: draft.file, target: '常见问题.md' },
+    }), approve);
+    assert.equal(approve.status, 200);
+    assert.equal(approve.json().ok, true);
+
+    const second = writeDraft(store.paths.knowledgeDir, 'default', {
+      title: '要丢弃',
+      content: '这条草稿只是用来测试丢弃流程的内容。',
+      source: '群反馈',
+    });
+    const discard = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/kb/drafts',
+      body: { action: 'discard', scope: 'default', file: second.file },
+    }), discard);
+    assert.equal(discard.status, 200);
   } finally {
     cleanup(dir);
   }

@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { listKnowledge, readKnowledge, searchKnowledge, writeKnowledge } from '../lib/knowledge.js';
+import {
+  approveDraft, discardDraft, listDrafts, listKnowledge, readKnowledge, searchKnowledge, writeDraft, writeKnowledge,
+} from '../lib/knowledge.js';
 import { tempDir, cleanup } from './helpers.js';
 
 function seed(dir) {
@@ -69,6 +71,56 @@ test('searchKnowledge requires every term and returns snippets', () => {
     const all = searchKnowledge(dir, ['客服'], '闪退');
     assert.equal(all.count, 1);
     assert.equal(all.hits[0].path, '排障.md');
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('draft lifecycle: write, hide, list, approve, discard', () => {
+  const dir = tempDir();
+  try {
+    seed(dir);
+    const draft = writeDraft(dir, '客服', {
+      title: '存档位置在哪',
+      content: 'Windows 存档在游戏目录的 saves 文件夹。',
+      source: 'commit abc123',
+    });
+    assert.equal(draft.duplicate, false);
+    assert.equal(draft.scope, '客服');
+    assert.match(draft.file, /\.md$/);
+    assert.equal(listKnowledge(dir, ['客服']).count, 2);
+    assert.equal(readKnowledge(dir, ['客服'], '客服/_待审/' + draft.file).ok, false);
+    assert.equal(searchKnowledge(dir, ['客服'], '存档').hits.some((hit) => hit.path.includes('_待审')), false);
+
+    const listed = listDrafts(dir);
+    assert.ok(listed.drafts.some((item) => item.file === draft.file && item.source === 'commit abc123'));
+    assert.ok(listed.targets['客服'].includes('常见问题.md'));
+
+    const approved = approveDraft(dir, { scope: '客服', file: draft.file, target: '常见问题.md' });
+    assert.equal(approved.target, '常见问题.md');
+    assert.match(fs.readFileSync(path.join(dir, '客服', '常见问题.md'), 'utf8'), /Windows 存档/);
+    assert.equal(listDrafts(dir).drafts.some((item) => item.file === draft.file), false);
+
+    const second = writeDraft(dir, '客服', {
+      title: '临时结论',
+      content: '这是一条准备丢弃的临时结论。',
+      source: '群反馈',
+    });
+    discardDraft(dir, { scope: '客服', file: second.file });
+    assert.equal(listDrafts(dir).drafts.some((item) => item.file === second.file), false);
+
+    const duplicate = writeDraft(dir, '客服', {
+      title: '重复标题',
+      content: '重复内容至少十个字符。',
+      source: 'commit x',
+    });
+    const again = writeDraft(dir, '客服', {
+      title: '重复标题',
+      content: '重复内容至少十个字符。',
+      source: 'commit x',
+    });
+    assert.equal(again.duplicate, true);
+    assert.equal(again.file, duplicate.file);
   } finally {
     cleanup(dir);
   }

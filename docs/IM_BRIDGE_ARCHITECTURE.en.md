@@ -2,7 +2,7 @@
 
 # IM Bridge architecture (DSH plugin)
 
-> Status: proposal + v0.1 implementation notes.
+> Status: proposal + v0.2 implementation notes.
 > Audience: maintainers, future contributors, and anyone evaluating the plugin
 > before installing it.
 
@@ -200,6 +200,7 @@ migration script can read an external legacy checkout. Port order:
 | M3 | Official QQ Bot adapter | v0.1 (experimental) |
 | M4 | Knowledge tools + role library + per-agent restriction | v0.1 |
 | M5 | Discord adapter (`discord.js`; DM/guild + mention gate) | v0.1 basic |
+| M6 | GitHub read-only + KB draft/approval + sidebar | v0.2 |
 | M6 | Cost conversion, stickers, voice, slang, simulation scheduler | later |
 | M7 | One-click UI migration of `config.json`, `roles/`, `knowledge/`, `state/sessions.json` | script exists; UI later |
 
@@ -226,13 +227,15 @@ touch `state.json`, roles, or knowledge. Publishing/install details:
 
 ## 10. Verification status
 
-What the repository verifies today (`npm test`, 82 tests):
+What the repository verifies today (`npm test`, 88 tests):
 
 | Area | Evidence |
 | --- | --- |
 | State store | atomic writes, schema repair, secret preservation, role-file reconciliation |
 | Domain/binding resolver | unbound default, per-binding overrides, disabled binding, per-domain trigger (all/mention/keyword/off) |
 | Knowledge tools | scope isolation, draft hiding, traversal rejection, search |
+| KB drafts | write-only `_待审`, excluded from list/search/read, dedupe/rate limit, approval append + backup, discard |
+| GitHub read-only | fixed repo/path guards, token redaction, issues/files/commits, 401 retry, code search requires auth |
 | HTTP boundary | same-origin writes, secret redaction, bearer push, validation errors |
 | Session orchestration | new session creation, cold `agents.resume` setup, role-card first/again injection, turn collection, `lane_send` suppression |
 | Broadcast | `lane_send` targets multiple bound conversations and refuses unbound ones |
@@ -264,7 +267,7 @@ The reproducible first-run checklist is [guides/LIVE_TEST.en.md](./guides/LIVE_T
 - A full model turn inside the plugin (the tests use a fake `sessionController`
   and `sessionQuery`; the real services are only exercised by the DSH host).
 
-Treat v0.1 as a **runnable skeleton with a complete management surface**, not as
+Treat v0.2 as a **runnable skeleton with a complete management surface**, not as
 a production support bot until the live checklist above passes.
 
 ## 11. Open questions

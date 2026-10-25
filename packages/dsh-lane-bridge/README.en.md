@@ -56,6 +56,12 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **Shared libraries**: role cards and the Markdown knowledge base are shared;
   domains choose which KB scopes they can read. Optional domain-scoped memory
   (`lane_memory_*`) accumulates cross-conversation experience.
+- **KB drafts + approval**: `lane_kb_draft` writes only to `_待审/`; the Settings
+  "KB approval" tab approves/discards before drafts affect retrieval.
+- **Read-only GitHub**: fixed repo, issue/file/code/commit queries; token
+  redaction, path guards, ETag cache. Issue creation is off by default.
+- **Channel enablement**: direct Enable/Disable on each card, with an actionable
+  reason when disconnected (for example SnowLuma is not running).
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as
   multimodal prompt parts; non-vision models fall back to text.
@@ -90,10 +96,11 @@ SnowLuma.
 ## Security defaults
 
 - The default `lane-support` preset registers no built-in tools.
-- Every conversation's agent gets `lane_send` / `lane_kb_*` and a
-  `tools.restrict({ allow: allowedHostTools })` mask; the default allow-list is
-  empty.
-- KB tools are read-only and confined to `knowledge/`.
+- Every conversation's agent gets `lane_send` / `lane_kb_*` / `lane_kb_draft` /
+  `lane_repo_*` and a `tools.restrict({ allow: allowedHostTools })` mask; the
+  default allow-list is empty.
+- KB tools read the official tree only; drafts write only to `_待审/` and are
+  excluded from retrieval. GitHub is off per domain unless enabled.
 - Secrets are never returned to the browser; the UI only displays presence.
 - Browser writes require a same-origin request; external push requires the
   configured bearer token.
@@ -111,6 +118,7 @@ SnowLuma.
 | `POST` | `/lane-bridge/api/session/reset` | Forget a conversation's DSH session (next message starts fresh) |
 | `POST` | `/lane-bridge/api/channels/restart` | Reconnect adapters |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | List / write KB documents |
+| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | List / approve / discard pending drafts |
 | `GET`/`POST` | `/lane-bridge/api/memory` | Read / replace / clear domain memory |
 | `POST` | `/lane-bridge/api/handoff` | pause / escalate / resume a conversation |
 | `GET`/`POST` | `/lane-bridge/api/usage` | read / clear the local token ledger |

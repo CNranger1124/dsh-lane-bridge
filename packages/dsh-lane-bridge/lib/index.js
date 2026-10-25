@@ -16,6 +16,7 @@ import { createReplyDispatcher } from './reply-dispatcher.js';
 import { InboundQueue } from './inbound-queue.js';
 import { MemoryStore } from './memory.js';
 import { UsageStore } from './usage.js';
+import { GitHubRepo } from './repo.js';
 import { conversationKey } from './defaults.js';
 import { publicError } from './text.js';
 
@@ -54,6 +55,7 @@ export async function apply(ctx, config = {}) {
   await store.load();
   const memoryStore = new MemoryStore({ dir: path.join(dataDir, 'memories'), logger });
   const usageStore = new UsageStore({ file: path.join(dataDir, 'usage.jsonl'), logger });
+  const repo = new GitHubRepo({ getConfig: () => store.get().config, dataDir, logger });
   logger.info(`[lane-bridge] 数据目录：${store.paths.dataDir}`);
 
   let stopped = false;
@@ -84,6 +86,7 @@ export async function apply(ctx, config = {}) {
     knowledgeDir: store.paths.knowledgeDir,
     memoryStore,
     usageStore,
+    repo,
     logger,
     onTurnEnd: dispatchReply,
   });
@@ -144,7 +147,7 @@ export async function apply(ctx, config = {}) {
     inboundQueue.push(key, message);
   }
 
-  const routes = createRoutes({ store, channels: channelManager, pool, memoryStore, usageStore, logger });
+  const routes = createRoutes({ store, channels: channelManager, pool, memoryStore, usageStore, repo, logger });
   const disposers = [];
   disposers.push(ctx.webServer.register({ kind: 'prefix', path: ROUTE_PREFIX, handler: routes.handle }));
   disposers.push(ctx.webServer.register({

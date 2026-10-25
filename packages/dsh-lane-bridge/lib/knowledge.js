@@ -3,11 +3,15 @@
 // The model-facing tools are deliberately narrow: list / search / read inside
 // `knowledge/<scope>/`, Markdown or plain text only, with the same path-traversal
 // defenses as the legacy qq-bridge MCP server.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const ALLOWED_EXT = new Set(['.md', '.txt']);
 const MAX_READ_CHARS = 20000;
+export const DRAFT_DIR = '_待审';
+const MAX_DRAFT_CHARS = 2000;
+const MAX_DRAFTS_PER_HOUR = 5;
 
 function safeScope(value) {
   const scope = String(value ?? '').trim();
@@ -21,7 +25,7 @@ export function listScopes(knowledgeDir) {
     return fs.readdirSync(knowledgeDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
-      .filter((name) => safeScope(name) === name)
+      .filter((name) => safeScope(name) === name && !name.startsWith('_'))
       .sort();
   } catch {
     return [];
@@ -78,6 +82,7 @@ function resolveReadPath(knowledgeDir, scopes, requested) {
   if (raw.startsWith('/') || /^[a-zA-Z]:/u.test(raw)) return { ok: false, message: 'path 必须是知识库内的相对路径' };
   const parts = raw.split('/').filter(Boolean);
   if (parts.some((part) => part === '..')) return { ok: false, message: 'path 不允许包含 ..' };
+  if (parts.includes(DRAFT_DIR)) return { ok: false, message: '待审草稿不参与检索，只有管理员采纳后的内容才会进入知识库' };
   const scope = safeScope(parts[0]);
   const picked = selectedScopes(knowledgeDir, scopes);
   // Accept both `scope/file.md` and `file.md` (the latter searches selected scopes).
@@ -173,6 +178,7 @@ export function writeKnowledge(knowledgeDir, scope, relPath, content) {
   if (!rel || parts.some((part) => part === '..') || rel.startsWith('/') || /^[a-zA-Z]:/u.test(rel)) {
     throw new TypeError('invalid knowledge path');
   }
+  if (parts.includes(DRAFT_DIR)) throw new TypeError('草稿区只能通过审批流程写入');
   if (!ALLOWED_EXT.has(path.extname(rel).toLowerCase())) throw new TypeError('only .md/.txt files are allowed');
   const base = path.resolve(path.join(knowledgeDir, safe));
   const abs = path.resolve(base, rel);
@@ -180,4 +186,192 @@ export function writeKnowledge(knowledgeDir, scope, relPath, content) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, String(content ?? ''), 'utf8');
   return { scope: safe, path: rel.replace(/\\/gu, '/'), bytes: Buffer.byteLength(String(content ?? '')) };
+}
+
+// ── 待审草稿（AI 起草 → 人工采纳/丢弃）──────────────────────────────────────
+//
+// Drafts live under `knowledge/<scope>/_待审/`. `walkScope` skips every `_`
+// entry, so unapproved drafts cannot be listed, searched or read by the model.
+
+function draftDir(knowledgeDir, scope) {
+  return path.join(knowledgeDir, scope, DRAFT_DIR);
+}
+
+function draftHash(title, body) {
+  return crypto.createHash('sha1').update(`${title}\u0000${body}`).digest('hex');
+}
+
+function slugify(value) {
+  const out = String(value ?? '')
+    .replace(/[\\/:*?"<>|\r\n\t]/gu, ' ')
+    .replace(/\s+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+    .slice(0, 48);
+  return out || 'draft';
+}
+
+export function parseDraft(text) {
+  const source = String(text ?? '');
+  const title = (source.match(/^#\s+(.+)$/mu)?.[1] ?? '').trim().slice(0, 80);
+  const origin = (source.match(/^>\s*来源[：:]\s*(.+)$/mu)?.[1] ?? '').trim();
+  const body = source
+    .split(/\r?\n/u)
+    .filter((line) => !/^#\s+/u.test(line) && !/^>\s*(来源|起草)[：:]/u.test(line))
+    .join('\n')
+    .trim();
+  return { title, source: origin, body };
+}
+
+function readDraftMeta(knowledgeDir, scope, file) {
+  const abs = path.join(draftDir(knowledgeDir, scope), file);
+  let text = '';
+  let mtime = 0;
+  try {
+    text = fs.readFileSync(abs, 'utf8');
+    mtime = fs.statSync(abs).mtimeMs;
+  } catch {
+    return null;
+  }
+  const parsed = parseDraft(text);
+  return {
+    scope,
+    file,
+    title: parsed.title || file,
+    source: parsed.source,
+    preview: parsed.body.replace(/\s+/gu, ' ').slice(0, 140),
+    chars: parsed.body.length,
+    mtime,
+    hash: draftHash(parsed.title, parsed.body),
+  };
+}
+
+function targetFiles(knowledgeDir, scope) {
+  const base = path.join(knowledgeDir, scope);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(base, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isFile() && ALLOWED_EXT.has(path.extname(entry.name).toLowerCase()))
+    .map((entry) => entry.name)
+    .sort();
+}
+
+export function listDrafts(knowledgeDir, scopes = null) {
+  const allScopes = listScopes(knowledgeDir);
+  const wanted = Array.isArray(scopes) ? scopes.map(safeScope).filter(Boolean) : [];
+  const picked = wanted.length ? allScopes.filter((scope) => wanted.includes(scope)) : allScopes;
+  const drafts = [];
+  const targets = {};
+  for (const scope of picked) {
+    targets[scope] = targetFiles(knowledgeDir, scope);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(draftDir(knowledgeDir, scope), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || !ALLOWED_EXT.has(path.extname(entry.name).toLowerCase())) continue;
+      const meta = readDraftMeta(knowledgeDir, scope, entry.name);
+      if (meta) drafts.push(meta);
+    }
+  }
+  drafts.sort((a, b) => b.mtime - a.mtime);
+  return { scopes: allScopes, drafts, targets };
+}
+
+export function writeDraft(knowledgeDir, scope, { title, content, source }) {
+  const safe = safeScope(scope);
+  if (!safe) throw new TypeError('invalid knowledge scope');
+  const cleanTitle = String(title ?? '').replace(/[\r\n]+/gu, ' ').trim().slice(0, 80);
+  const cleanContent = String(content ?? '').trim().slice(0, MAX_DRAFT_CHARS);
+  const cleanSource = String(source ?? '').replace(/[\r\n]+/gu, ' ').trim().slice(0, 240);
+  if (!cleanTitle) throw new TypeError('title 不能为空');
+  if (cleanContent.length < 10) throw new TypeError('content 太短（至少 10 字）');
+  if (!cleanSource) throw new TypeError('source 不能为空：要能指出这条结论是从哪查到的');
+
+  const dir = draftDir(knowledgeDir, safe);
+  const existing = [];
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !ALLOWED_EXT.has(path.extname(entry.name).toLowerCase())) continue;
+      const meta = readDraftMeta(knowledgeDir, safe, entry.name);
+      if (meta) existing.push(meta);
+    }
+  } catch {}
+
+  const hash = draftHash(cleanTitle, cleanContent);
+  const duplicate = existing.find((draft) => draft.hash === hash);
+  if (duplicate) return { ...duplicate, duplicate: true };
+
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  if (existing.filter((draft) => draft.mtime >= cutoff).length >= MAX_DRAFTS_PER_HOUR) {
+    throw new Error(`本小时已经起草 ${MAX_DRAFTS_PER_HOUR} 条，先别继续写；把这次的结论直接回给用户即可`);
+  }
+
+  const stamp = new Date().toISOString().replace(/[:T]/gu, '-').slice(0, 19);
+  const file = `${stamp}-${slugify(cleanTitle)}.md`;
+  const body = [
+    `# ${cleanTitle}`,
+    '',
+    `> 来源：${cleanSource}`,
+    `> 起草：${new Date().toISOString()}（客服 AI 生成，**待人工审核**；未采纳前不参与检索）`,
+    '',
+    cleanContent,
+    '',
+  ].join('\n');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, file), body, 'utf8');
+  return { ...readDraftMeta(knowledgeDir, safe, file), duplicate: false };
+}
+
+function safeDraftFile(file) {
+  const name = path.basename(String(file ?? '').trim());
+  if (!name || !ALLOWED_EXT.has(path.extname(name).toLowerCase())) throw new TypeError('草稿文件名不合法');
+  return name;
+}
+
+export function approveDraft(knowledgeDir, { scope, file, target } = {}) {
+  const safe = safeScope(scope);
+  if (!safe) throw new TypeError('invalid knowledge scope');
+  const safeFile = safeDraftFile(file);
+  const draftPath = path.join(draftDir(knowledgeDir, safe), safeFile);
+  if (!fs.existsSync(draftPath)) throw new Error('草稿不存在（可能已被处理）');
+  const parsed = parseDraft(fs.readFileSync(draftPath, 'utf8'));
+  if (!parsed.body) throw new Error('草稿正文为空，先补内容再采纳');
+
+  const targets = targetFiles(knowledgeDir, safe);
+  const wanted = path.basename(String(target ?? '').trim());
+  const targetName = wanted && ALLOWED_EXT.has(path.extname(wanted).toLowerCase())
+    ? wanted
+    : (targets.includes('常见问题.md') ? '常见问题.md' : (targets[0] ?? '常见问题.md'));
+  if (!ALLOWED_EXT.has(path.extname(targetName).toLowerCase())) throw new TypeError('目标文件必须是 .md/.txt');
+
+  const base = path.resolve(path.join(knowledgeDir, safe));
+  const abs = path.resolve(base, targetName);
+  if (!abs.startsWith(`${base}${path.sep}`)) throw new TypeError('目标文件越出知识库目录');
+  const previous = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8').replace(/\s*$/u, '') : `# ${safe} 知识库`;
+  const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
+  try {
+    const backupDir = path.join(path.dirname(knowledgeDir), 'kb-backups');
+    fs.mkdirSync(backupDir, { recursive: true });
+    fs.writeFileSync(path.join(backupDir, `${safe}-${targetName}-${stamp}.md`), previous, 'utf8');
+  } catch {}
+  const block = `\n\n## ${parsed.title || targetName}\n\n${parsed.body}\n\n> 来源：${parsed.source || '（未注明）'}（采纳于 ${new Date().toISOString().slice(0, 10)}）\n`;
+  fs.writeFileSync(abs, `${previous}${block}`, 'utf8');
+  fs.rmSync(draftPath, { force: true });
+  return { ok: true, scope: safe, target: targetName, title: parsed.title, file: safeFile };
+}
+
+export function discardDraft(knowledgeDir, { scope, file } = {}) {
+  const safe = safeScope(scope);
+  if (!safe) throw new TypeError('invalid knowledge scope');
+  const safeFile = safeDraftFile(file);
+  const abs = path.join(draftDir(knowledgeDir, safe), safeFile);
+  if (!fs.existsSync(abs)) throw new Error('草稿不存在（可能已被处理）');
+  fs.rmSync(abs, { force: true });
+  return { ok: true, scope: safe, file: safeFile };
 }

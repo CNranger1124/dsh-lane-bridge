@@ -10,6 +10,7 @@ import './knowledge.test.js';
 import './memory.test.js';
 import './usage.test.js';
 import './media.test.js';
+import './repo.test.js';
 import './onebot.test.js';
 import './discord.test.js';
 import './qqbot.test.js';

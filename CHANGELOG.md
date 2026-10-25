@@ -2,6 +2,18 @@
 
 # 变更记录
 
+## 0.2.0
+
+把旧 `qq-bridge` 的 GitHub 只读和知识库草稿审批迁进插件，并修通道启用引导。
+
+- 新增 GitHub 仓库只读：`lane_repo_status/list_issues/get_issue/search_code/read_file/recent_commits`；仓库由配置固定，token 脱敏，ETag 缓存；`repo_create_issue` 默认关闭。
+- 新增知识库草稿：`lane_kb_draft` 只写 `knowledge/<scope>/_待审/`，不参与 list/search/read；每小时限流、同内容去重。
+- 新增「知识库审批」页：逐条采纳/丢弃；采纳时先备份正式文档，再追加小节并保留来源。
+- 领域新增 `repoEnabled` / `kbDraftEnabled` 开关；GitHub 默认关闭，知识库草稿默认开启。
+- 通道卡片新增直接「启用/停用」按钮和可操作提示：SnowLuma 未启动、端口不对、未填 AppID/Token 时直接说明。
+- 修复「会话」空列表导致整个设置页空白的问题（0.1.1 继续保留）。
+- 测试增至 88 项，覆盖 GitHub 请求/脱敏/路径校验、草稿生命周期、审批路由和空会话渲染。
+
 ## 0.1.1
 
 修复与侧栏入口。

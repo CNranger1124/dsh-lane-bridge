@@ -47,7 +47,7 @@ export class SessionPool {
    * @param {object} [options.logger]
    * @param {(event: object) => Promise<void>} options.onTurnEnd
    */
-  constructor({ ctx, store, channelManager, workspaceDir, knowledgeDir, memoryStore = null, usageStore = null, logger = null, onTurnEnd, fetchImageImpl = fetchImage }) {
+  constructor({ ctx, store, channelManager, workspaceDir, knowledgeDir, memoryStore = null, usageStore = null, repo = null, logger = null, onTurnEnd, fetchImageImpl = fetchImage }) {
     this.ctx = ctx;
     this.store = store;
     this.channelManager = channelManager;
@@ -55,6 +55,7 @@ export class SessionPool {
     this.knowledgeDir = knowledgeDir;
     this.memoryStore = memoryStore;
     this.usageStore = usageStore;
+    this.repo = repo;
     this.fetchImageImpl = fetchImageImpl;
     this.logger = logger;
     this.onTurnEnd = onTurnEnd;
@@ -108,7 +109,7 @@ export class SessionPool {
     }
     const disposers = [];
     try {
-      const tools = createLaneTools({ key, pool: this, store: this.store, knowledgeDir: this.knowledgeDir, memoryStore: this.memoryStore, logger: this.logger });
+      const tools = createLaneTools({ key, pool: this, store: this.store, knowledgeDir: this.knowledgeDir, memoryStore: this.memoryStore, repo: this.repo, logger: this.logger });
       for (const tool of tools) {
         disposers.push(agentCtx.tools.register(tool));
       }

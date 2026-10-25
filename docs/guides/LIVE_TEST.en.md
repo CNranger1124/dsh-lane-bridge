@@ -68,14 +68,25 @@ If the page is blank or shows “面板渲染失败”, open the browser console
 `settings.section` / `sidebarRightTabs` slot or a bundle load error is the usual
 cause; the error boundary keeps the rest of the UI alive when it can.
 
+### Enable/disable a channel
+
+1. Each channel card has **Enable/Disable** in the top-right corner; **Enable**
+   saves and reconnects immediately.
+2. When disconnected, the card shows the reason: SnowLuma not running, wrong
+   port, missing AppID/Token, etc.
+3. Disabling should show **已停用**; enabling again should return to
+   **未连接/已连接**.
+
 ## 2. SnowLuma (QQ)
 
-1. Start SnowLuma yourself and log in the bot account.
+1. Start SnowLuma yourself and log in the bot account; confirm its OneBot WS is
+   listening on `127.0.0.1:3001`.
 2. In **IM 桥接 → 概览与通道**, either:
    - fill **SnowLuma 安装目录** (e.g. `F:/SnowLuma`) and leave the token blank
      for per-account discovery, or
    - fill the WebSocket URL and access token explicitly.
-3. Save. The channel should show **已连接**.
+3. Click **Enable** in the card's top-right corner. The channel should show
+   **已连接**.
 4. Send a private message to the bot from an allowed account. It appears under
    **会话** with a `snowluma:private:<id>` key.
 5. Bind it to the default domain, then send another message. A DSH session
@@ -150,6 +161,26 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
   **人工中**, send the ack to the user, and notify the operator conversation.
   Send another user message (no auto-reply expected), then click **恢复自动回复**
   and verify the next message gets a model reply again.
+
+### 6.1 Read-only GitHub
+
+1. In **概览与通道 → GitHub 仓库**, fill `owner/repo` and optionally a token,
+   save, and enable it.
+2. In the domain, enable **allow repository reads** and save.
+3. Ask a bound conversation a question that needs the repo; the model should call
+   `lane_repo_status` first, then issues/files/commits.
+4. Verify `lane_repo_read_file` rejects `../`, errors never contain the token, and
+   `lane_repo_create_issue` reports "not enabled" by default.
+
+### 6.2 KB draft approval
+
+1. Have the model learn a new fact not covered by the KB and call `lane_kb_draft`
+   (title/content/source required).
+2. The **知识库审批** tab should list the draft; `lane_kb_list/search/read` must
+   not see it.
+3. Choose a target file and click **Approve**: the document gets a new section
+   with the source, and the draft disappears. **Discard** just removes the draft.
+4. Confirm a backup exists under `~/.dsh/lane-bridge/kb-backups/`.
 
 ## 7. What to record if it fails
 

@@ -57,6 +57,22 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 > user-installed component (see its EULA). First-run checklist:
 > [docs/guides/LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
 
+## Enabling a channel (why it says "not connected / stopped")
+
+The plugin does not start SnowLuma for you (licence reasons). "Enabled but not
+connected" usually means SnowLuma is not running, or the WS port is wrong.
+
+1. Start SnowLuma yourself and confirm its OneBot v11 WebSocket is on
+   `127.0.0.1:3001` (its log prints `listening 127.0.0.1:3001`).
+2. Open **Settings → IM 桥接 → 概览与通道**.
+3. On the **SnowLuma / QQ** card, click **Enable** in the top-right corner. The
+   pill should turn **已连接**. If not, the card shows the concrete reason.
+4. For official QQ Bot / Discord: fill AppID+AppSecret / Bot Token, then click
+   **Enable**. Click **Disable** for channels you do not use.
+
+> The top-right **Enable/Disable** button saves and reconnects immediately. The
+> checkbox below is for editing several fields and saving them together.
+
 ## Why a plugin instead of a separate app?
 
 - **One install**: `dsh plugin add dsh-lane-bridge` mounts channels, tools, and the
@@ -72,7 +88,7 @@ A standalone frontend would duplicate authentication, theme, session list, and
 deployment. We therefore build the management surface **inside DSH**, and keep
 only a one-shot legacy migration script for moving an existing install.
 
-## What is in the box (v0.1 scope)
+## What is in the box (v0.2 scope)
 
 - Channel adapter interface + SnowLuma (OneBot v11) adapter (QQ).
 - Official QQ Bot adapter (experimental; requires an app id/secret).
@@ -81,15 +97,23 @@ only a one-shot legacy migration script for moving an existing install.
   domain-level role card, preset, model, KB scopes, and host-tool allow-list.
 - Shared role-card library, shared knowledge base (`lane_kb_*`), and optional
   domain-scoped shared memory (`lane_memory_*`).
+- **KB drafts + human approval**: `lane_kb_draft` writes only to `_待审/`; a new
+  Settings "KB approval" tab approves/discards before drafts affect retrieval.
+- **Read-only GitHub repo**: fixed repository, path guards, token redaction, ETag
+  cache; `lane_repo_*` tools for issues/files/code/commits. Issue creation is off
+  by default.
 - Unified push: `lane_send` agent tool + `POST /lane-bridge/api/push`.
 - Native DSH Settings card + right-sidebar panel: channels, conversations,
-  domains, roles, KB, and push, sharing one state.
+  domains, roles, KB, approval, and push, sharing one state.
+- Channel cards have direct Enable/Disable buttons and actionable connection
+  hints (for example, "SnowLuma is not running").
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
   prompt parts, with a text-only fallback for non-vision models.
 - Human handoff: `lane_escalate` pauses auto-replies, notifies an operator
   conversation, and resumes from the Settings card.
 - Local token ledger + Usage tab (per-conversation input/output/cache totals).
-- Tests for the store, resolver, route handlers, and the plugin harness.
+- Tests for store, resolver, routes, session orchestration, GitHub, draft
+  approval, and the plugin harness.
 
 See [docs/IM_BRIDGE_ARCHITECTURE.en.md](./docs/IM_BRIDGE_ARCHITECTURE.en.md) for the
 architecture and migration plan, and
@@ -98,10 +122,10 @@ installation details.
 
 ## Status
 
-`0.1.1` is the MVP bug-fix release. The legacy standalone `qq-bridge` project still has features
-the plugin does not yet port: group slang learning, sticker library, voice
-messages, cost conversion, and the simulation scheduler. The architecture doc
-tracks the migration.
+`0.2.0` ports the legacy GitHub read-only tools and KB draft approval. The legacy
+standalone `qq-bridge` project still has features the plugin does not yet port:
+group slang learning, sticker library, voice messages, cost conversion, and the
+simulation scheduler. The architecture doc tracks the migration.
 
 The code, tests, and package are complete; **live DSH installation and real
 SnowLuma / QQ Bot / Discord traffic are not verified yet**. Use

@@ -49,6 +49,8 @@ export function resolveConversation(state, key) {
     keywords: Array.isArray(domain?.keywords) ? domain.keywords : [],
     memoryEnabled: domain?.memoryEnabled === true,
     memoryMaxChars: Math.max(200, Math.min(8000, Number(domain?.memoryMaxChars) || 2000)),
+    kbDraftEnabled: domain?.kbDraftEnabled !== false,
+    repoEnabled: domain?.repoEnabled === true,
     allowedHostTools: Array.isArray(domain?.allowedHostTools) ? domain.allowedHostTools : [],
     autoReply: autoReply && domain?.autoReply !== false,
     paused: binding?.paused === true,

@@ -46,10 +46,11 @@ test('state survives a reload and keeps secrets when the editor submits blanks',
 });
 
 test('mergeConfig keeps placeholders and accepts real replacements', () => {
-  const base = { pushToken: 'old', channels: { qqbot: { appSecret: 'old-secret' } } };
-  const merged = mergeConfig(base, { pushToken: '__keep__', channels: { qqbot: { appSecret: 'new-secret' } } });
+  const base = { pushToken: 'old', channels: { qqbot: { appSecret: 'old-secret' } }, github: { token: 'old-gh' } };
+  const merged = mergeConfig(base, { pushToken: '__keep__', channels: { qqbot: { appSecret: 'new-secret' } }, github: { token: '' } });
   assert.equal(merged.pushToken, 'old');
   assert.equal(merged.channels.qqbot.appSecret, 'new-secret');
+  assert.equal(merged.github.token, 'old-gh');
 });
 
 test('normalizeState repairs broken bindings/domains and keeps the default domain valid', () => {
@@ -101,14 +102,17 @@ test('redactState never leaks secrets but reports presence', () => {
   state.config.channels.snowluma.accessToken = 'ws';
   state.config.channels.qqbot.appSecret = 'qq';
   state.config.channels.discord.token = 'dc';
+  state.config.github.token = 'gh';
   const { state: safe, secretStatus } = redactState(state);
   assert.equal(safe.config.pushToken, '');
   assert.equal(safe.config.channels.snowluma.accessToken, '');
   assert.equal(safe.config.channels.qqbot.appSecret, '');
+  assert.equal(safe.config.github.token, '');
   assert.deepEqual(secretStatus, {
     pushToken: true,
     snowlumaAccessToken: true,
     qqbotAppSecret: true,
     discordToken: true,
+    githubToken: true,
   });
 });

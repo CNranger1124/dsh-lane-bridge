@@ -2,7 +2,7 @@
 
 # IM Bridge 架构（DSH 插件）
 
-> 状态：方案 + v0.1 实现说明。
+> 状态：方案 + v0.2 实现说明。
 > 读者：维护者、未来贡献者、安装前想评估这个插件的人。
 
 ## 1. 决策：DSH 原生插件，不做独立前端
@@ -164,6 +164,7 @@ lane-bridge/
 | M3 | 官方 QQ Bot 适配器 | v0.1（实验性） |
 | M4 | 知识库工具 + 角色库 + 按 agent 限制 | v0.1 |
 | M5 | Discord 适配器（`discord.js`；私聊/频道 + mention gate） | v0.1 基础 |
+| M6 | GitHub 只读 + 知识库草稿/审批 + 侧栏 | v0.2 |
 | M6 | 费用折算、表情包、语音、黑话、仿真调度器 | 后续 |
 | M7 | `config.json`/`roles/`/`knowledge/`/`state/sessions.json` 一键迁移 | 脚本已有，UI 后续 |
 
@@ -185,13 +186,15 @@ dsh plugin --profile web add dsh-lane-bridge
 
 ## 10. 验证状态
 
-仓库当前验证的内容（`npm test`，82 个测试）：
+仓库当前验证的内容（`npm test`，88 个测试）：
 
 | 区域 | 证据 |
 | --- | --- |
 | State store | 原子写、schema 修复、密钥保留、角色文件对账 |
 | 领域/绑定 resolver | 未绑定默认、按绑定覆盖、禁用绑定、按领域触发策略 |
 | 知识库工具 | scope 隔离、草稿隐藏、路径穿越拒绝、搜索 |
+| 知识库草稿 | 只写 `_待审`、不参与 list/search/read、去重/限流、采纳追加+备份、丢弃 |
+| GitHub 只读 | 固定仓库/路径、token 脱敏、issue/文件/提交、401 重试、代码搜索需鉴权 |
 | HTTP 边界 | 同源写、密钥脱敏、bearer push、参数校验错误 |
 | 会话编排 | 新建 session、冷 `agents.resume` setup、角色卡首次/再次注入、回合收集、`lane_send` 抑制 |
 | 广播 | `lane_send` 发往多个已绑定会话，拒绝未绑定 |
@@ -219,9 +222,9 @@ dsh plugin --profile web add dsh-lane-bridge
 - 真实 Discord bot token 和 gateway（适配器只用 fake client 测过）。
 - 插件内的完整模型回合（测试使用 fake `sessionController` 和 `sessionQuery`；真实服务只在 DSH Host 里跑）。
 
-v0.1 应视为**可运行骨架 + 完整管理面**，在真实清单通过前不要当成生产客服机器人。
+v0.2 应视为**可运行骨架 + 完整管理面**，在真实清单通过前不要当成生产客服机器人。
 
 ## 11. 待定问题
 
 - 一个领域是否应该拥有多个渠道（例如同一个产品同时接 QQ + Discord）？当前模型：可以，binding 只指向领域，与渠道无关。
-- 知识库草稿（AI 写、人工审核）是否作为 v0.2？旧桥接有，需要审核 UI，是自然的下一个 Settings tab。
+- 知识库草稿已进入 v0.2；下一步考虑草稿 diff 视图、批量审批和审批人记录。

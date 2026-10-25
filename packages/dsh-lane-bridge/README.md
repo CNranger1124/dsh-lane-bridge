@@ -49,6 +49,9 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
 - **领域**：把群/私聊绑定到可复用策略（角色卡、preset、模型、知识库 scope、宿主工具白名单、群聊触发策略）。
 - **共享库**：角色卡和 Markdown 知识库共享；领域选择能读哪些 KB scope。可选的领域记忆（`lane_memory_*`）跨会话积累经验。
+- **知识库草稿 + 人工审批**：`lane_kb_draft` 只写 `_待审/`，Settings 的「知识库审批」页采纳/丢弃后才进入检索。
+- **GitHub 只读**：固定仓库的 issue/文件/代码/提交查询；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
+- **通道启用**：卡片右上角直接「启用/停用」，未连接时显示原因（例如 SnowLuma 未启动）。
 - **统一推送**：`lane_send` 工具 + `POST /lane-bridge/api/push`（单发或广播）。
 - **图片**：入站附件经 SSRF/字节上限检查后作为多模态 prompt part 发送；非视觉模型降级为文本。
 - **人工接管**：`lane_escalate` 暂停会话、通知配置的接管会话，并可在 Settings 恢复。
@@ -73,8 +76,8 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 ## 安全默认
 
 - 默认 `lane-support` preset 不注册任何内置工具。
-- 每个会话的 agent 会拿到 `lane_send` / `lane_kb_*` / `lane_memory_*` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。
-- KB 工具只读，限制在 `knowledge/`。
+- 每个会话的 agent 会拿到 `lane_send` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。
+- KB 工具只读正式区；草稿只能写 `_待审/`，且不参与检索。GitHub 默认关闭，按领域开启。
 - 密钥永不返回浏览器；UI 只显示“已配置”。
 - 浏览器写操作要求同源；外部推送要求配置的 bearer token。
 - 图片只允许公网 http(s)，逐跳校验重定向，限制类型和字节数。
@@ -92,6 +95,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 | `POST` | `/lane-bridge/api/session/reset` | 忘记会话的 DSH session（下一条消息新建） |
 | `POST` | `/lane-bridge/api/channels/restart` | 重连适配器 |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | 列出/写入 KB 文档 |
+| `GET`/`POST` | `/lane-bridge/api/kb/drafts` | 列出/采纳/丢弃待审草稿 |
 | `GET`/`POST` | `/lane-bridge/api/memory` | 读取/替换/清空领域记忆 |
 | `POST` | `/lane-bridge/api/handoff` | 暂停 / 转人工 / 恢复会话 |
 | `GET`/`POST` | `/lane-bridge/api/usage` | 读取/清空本地 token 账本 |

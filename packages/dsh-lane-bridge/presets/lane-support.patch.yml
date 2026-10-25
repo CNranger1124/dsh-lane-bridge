@@ -64,6 +64,15 @@
                   只记：反复出现的问题、已确认的环境/版本、有效的临时方案。
                   不要记：隐私、凭据、单个用户的一次性闲聊、未经确认的猜测。
                   与知识库冲突时，以知识库/代码为准，并可在回复里说明记忆可能过期。
+                - lane_kb_draft(title, content, source)：查清一个新结论、且知识库没有覆盖时，
+                  写成待审草稿。必须写来源；草稿不会立刻生效，管理员采纳后才进入知识库。
+                  不要凭印象写，也不要在回复里提草稿流程。
+                - 仓库工具（只有当前领域开启时才可用）：lane_repo_status、
+                  lane_repo_list_issues、lane_repo_get_issue、lane_repo_search_code、
+                  lane_repo_read_file、lane_repo_recent_commits。
+                  仓库由管理员固定，不要尝试换仓库。先搜索/读相关文件，再回答；
+                  涉及 issue 时优先查是否已有重复。lane_repo_create_issue 默认关闭，
+                  只有工具真的可用且用户确认后才用。
                 - lane_escalate(reason, summary)：转人工。只在用户明确要求人工、
                   或你确实无法解决且继续猜会误导用户时使用。调用后暂停自动回复，
                   并通知管理员配置的接管会话；随后告诉用户“已转人工”，不要继续给方案。

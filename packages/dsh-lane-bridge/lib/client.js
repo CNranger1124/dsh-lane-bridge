@@ -108,7 +108,7 @@ window.__ModuleLoader__.load({
 
     function StatusPill({ status }) {
       const cls = status?.connected ? 'lb-pill lb-pill--ok' : status?.enabled ? 'lb-pill lb-pill--bad' : 'lb-pill lb-pill--idle';
-      const text = status?.connected ? '已连接' : status?.enabled ? '未连接' : '已停用';
+      const text = status?.connected ? '已连接' : status?.enabled ? (status?.configured === false ? '未配置' : '未连接') : '已停用';
       return h('span', { className: cls }, text);
     }
 
@@ -136,6 +136,24 @@ window.__ModuleLoader__.load({
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
+      const toggleChannel = async (id, enabled) => {
+        setBusy(true); setError(''); setMessage('');
+        try {
+          const next = clone(cfg);
+          next.channels = { ...(next.channels ?? {}) };
+          next.channels[id] = { ...(next.channels[id] ?? {}), enabled };
+          await api('/config', { method: 'POST', body: JSON.stringify({ config: next }) });
+          setCfg(next);
+          setMessage(enabled ? '已启用，正在连接通道…' : '已停用该通道');
+          await refresh();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
+      };
+      const gh = cfg.github ?? {};
+      const setGithub = (key, value) => setCfg((current) => {
+        const next = clone(current);
+        next.github = { ...(next.github ?? {}), [key]: value };
+        return next;
+      });
       const channels = [
         ['snowluma', 'SnowLuma / QQ', 'OneBot v11 WebSocket；可填 SnowLuma 安装目录自动读 token', [
           ['wsUrl', 'WebSocket 地址', 'text'],
@@ -150,7 +168,9 @@ window.__ModuleLoader__.load({
           ['token', 'Bot Token', 'password'],
         ]],
       ];
+      const anyEnabled = channels.some(([id]) => cfg.channels?.[id]?.enabled === true);
       return h('div', { className: 'lb-root' },
+        !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启用任何聊天通道。展开下面的 SnowLuma / QQ Bot / Discord 卡片，点右上角「启用」；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
         h(Card, { title: '通用' },
           h('div', { className: 'lb-grid' },
             h(Field, { label: '插件启用' },
@@ -225,11 +245,23 @@ window.__ModuleLoader__.load({
         ...channels.map(([id, label, hint, fields]) => {
           const entry = cfg.channels?.[id] ?? {};
           const status = data.channels.find((item) => item.id === id);
-          return h(Card, { key: id, title: label, extra: h(StatusPill, { status }) },
+          return h(Card, {
+            key: id,
+            title: label,
+            extra: h('div', { className: 'lb-actions' },
+              h(StatusPill, { status }),
+              h('button', {
+                className: `lb-btn ${entry.enabled ? 'lb-btn--danger' : 'lb-btn--primary'}`,
+                disabled: busy,
+                onClick: () => void toggleChannel(id, !entry.enabled),
+              }, entry.enabled ? '停用' : '启用')
+            ),
+          },
             h('div', { className: 'lb-muted' }, hint),
+            status?.hint ? h('div', { className: 'lb-muted' }, status.hint) : null,
             h('label', { className: 'lb-check' },
               h('input', { type: 'checkbox', checked: entry.enabled === true, onChange: (e) => setChannel(id, 'enabled', e.target.checked) }),
-              '启用该通道'
+              '启用该通道（改完记得保存）'
             ),
             h('div', { className: 'lb-grid' },
               ...fields.map(([key, labelText, type]) => h(Field, { key, label: labelText },
@@ -253,6 +285,39 @@ window.__ModuleLoader__.load({
             status?.lastError ? h('div', { className: 'lb-muted' }, `状态：${status.lastError}`) : null
           );
         }),
+        h(Card, { title: 'GitHub 仓库（可选）', extra: data.github?.repo ? h('span', { className: 'lb-mono lb-muted' }, data.github.repo) : null },
+          h('div', { className: 'lb-muted' }, '给客服一个只读的远程仓库入口：查 issue、读文件、搜代码、看最近提交。仓库由这里固定，模型不能换仓库；token 不会回显。'),
+          h('div', { className: 'lb-grid' },
+            h(Field, { label: '启用' },
+              h('label', { className: 'lb-check' },
+                h('input', { type: 'checkbox', checked: gh.enabled === true, onChange: (e) => setGithub('enabled', e.target.checked) }),
+                '允许仓库工具'
+              )
+            ),
+            h(Field, { label: '仓库', hint: 'owner/repo' },
+              h('input', { className: 'lb-input', value: gh.repo ?? '', placeholder: 'CNranger1124/dsh-lane-bridge', onChange: (e) => setGithub('repo', e.target.value) })
+            ),
+            h(Field, { label: '分支', hint: '留空=默认分支' },
+              h('input', { className: 'lb-input', value: gh.branch ?? '', placeholder: 'main', onChange: (e) => setGithub('branch', e.target.value) })
+            ),
+            h(Field, { label: 'Token', hint: data.secretStatus?.githubToken ? '已配置；留空表示不修改' : '私有仓库需要；公开只读可留空' },
+              h('input', { className: 'lb-input', type: 'password', value: gh.token ?? '', placeholder: data.secretStatus?.githubToken ? '••••••••（留空不修改）' : 'ghp_... / github_pat_...', onChange: (e) => setGithub('token', e.target.value) })
+            ),
+            h(Field, { label: '允许建 issue', hint: '默认关闭' },
+              h('label', { className: 'lb-check' },
+                h('input', { type: 'checkbox', checked: gh.allowCreateIssue === true, onChange: (e) => setGithub('allowCreateIssue', e.target.checked) }),
+                '允许 lane_repo_create_issue'
+              )
+            ),
+            h(Field, { label: '标记标签' },
+              h('input', { className: 'lb-input', value: gh.issueLabel ?? 'agent', onChange: (e) => setGithub('issueLabel', e.target.value) })
+            ),
+          ),
+          data.github?.hint ? h('div', { className: 'lb-muted' }, data.github.hint) : null,
+          h('div', { className: 'lb-actions' },
+            h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存 GitHub 设置')
+          )
+        ),
         h('div', { className: 'lb-footer' },
           h('button', { className: 'lb-btn', onClick: async () => { await api('/channels/restart', { method: 'POST', body: '{}' }); await refresh(); } }, '重启通道'),
           h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存通道设置')
@@ -405,7 +470,7 @@ window.__ModuleLoader__.load({
         const id = `domain-${Date.now().toString(36)}`;
         setDraft((list) => [...list, {
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
-          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, systemPrompt: '', maxReplyChars: 0,
+          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, kbDraftEnabled: true, repoEnabled: false, systemPrompt: '', maxReplyChars: 0,
         }]);
         setSelected(id);
       };
@@ -470,6 +535,18 @@ window.__ModuleLoader__.load({
               ),
               h(Field, { label: '记忆注入上限', hint: '字符数' },
                 h('input', { className: 'lb-input', type: 'number', min: 200, max: 8000, value: current.memoryMaxChars ?? 2000, onChange: (e) => patch('memoryMaxChars', Number(e.target.value)) })
+              ),
+              h(Field, { label: '知识库草稿' },
+                h('label', { className: 'lb-check' },
+                  h('input', { type: 'checkbox', checked: current.kbDraftEnabled !== false, onChange: (e) => patch('kbDraftEnabled', e.target.checked) }),
+                  '允许 lane_kb_draft（只写待审区）'
+                )
+              ),
+              h(Field, { label: 'GitHub 仓库' },
+                h('label', { className: 'lb-check' },
+                  h('input', { type: 'checkbox', checked: current.repoEnabled === true, onChange: (e) => patch('repoEnabled', e.target.checked) }),
+                  '允许读取仓库（需全局配置）'
+                )
               )
             ),
             h('label', { className: 'lb-check' },
@@ -667,6 +744,81 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function KbDrafts({ data, refresh }) {
+      const [state, setState] = useState(null);
+      const [error, setError] = useState('');
+      const [message, setMessage] = useState('');
+      const [busy, setBusy] = useState('');
+      const load = useCallback(async () => {
+        setError('');
+        try { setState(await api('/kb/drafts')); } catch (err) { setError(String(err.message ?? err)); }
+      }, []);
+      useEffect(() => { void load(); }, [load]);
+      const approve = async (draft, target) => {
+        setBusy(`${draft.scope}/${draft.file}`); setError(''); setMessage('');
+        try {
+          await api('/kb/drafts', { method: 'POST', body: JSON.stringify({ action: 'approve', scope: draft.scope, file: draft.file, target }) });
+          setMessage('已采纳，已并入正式知识库');
+          await load();
+          await refresh();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(''); }
+      };
+      const discard = async (draft) => {
+        if (typeof window.confirm === 'function' && !window.confirm('丢弃这条草稿？')) return;
+        setBusy(`${draft.scope}/${draft.file}`); setError(''); setMessage('');
+        try {
+          await api('/kb/drafts', { method: 'POST', body: JSON.stringify({ action: 'discard', scope: draft.scope, file: draft.file }) });
+          setMessage('已丢弃草稿');
+          await load();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(''); }
+      };
+      const drafts = state?.drafts ?? [];
+      return h('div', { className: 'lb-root' },
+        h(Card, { title: '知识库审批', extra: h('button', { className: 'lb-btn', onClick: load }, '刷新') },
+          h('div', { className: 'lb-muted' }, 'AI 只能把新结论写进「待审」区；未采纳前不参与检索。采纳时会把内容追加到目标文档，并保留来源。'),
+          error ? h('div', { className: 'lb-error' }, error) : null,
+          message ? h('span', { className: 'lb-ok' }, message) : null,
+          !state ? h('div', { className: 'lb-muted' }, '加载中…') : drafts.length === 0
+            ? h('div', { className: 'lb-muted' }, '没有待审草稿。')
+            : h('div', { className: 'lb-list' }, ...drafts.map((draft) => {
+              const targets = state.targets?.[draft.scope] ?? [];
+              const options = targets.length ? targets : ['常见问题.md'];
+              const target = options.includes('常见问题.md') ? '常见问题.md' : options[0];
+              const selectId = `lb-draft-target-${draft.scope}-${draft.file}`;
+              return h('div', { className: 'lb-card', key: `${draft.scope}/${draft.file}` },
+                h('div', { className: 'lb-card-head' },
+                  h('div', null,
+                    h('div', { className: 'lb-card-title' }, draft.title),
+                    h('div', { className: 'lb-mono lb-muted' }, `${draft.scope} / ${draft.file}`)
+                  ),
+                  h('span', { className: 'lb-pill' }, `${draft.chars} 字`)
+                ),
+                h('div', { className: 'lb-muted' }, `来源：${draft.source || '（未注明）'}`),
+                h('div', { className: 'lb-muted' }, draft.preview || '（正文为空）'),
+                h('div', { className: 'lb-row' },
+                  h('select', { className: 'lb-select', defaultValue: target, id: selectId },
+                    ...options.map((option) => h('option', { key: option, value: option }, option))
+                  ),
+                  h('button', {
+                    className: 'lb-btn lb-btn--primary',
+                    disabled: busy === `${draft.scope}/${draft.file}`,
+                    onClick: () => {
+                      const el = document.getElementById(selectId);
+                      void approve(draft, el?.value ?? target);
+                    },
+                  }, '采纳'),
+                  h('button', {
+                    className: 'lb-btn lb-btn--danger',
+                    disabled: busy === `${draft.scope}/${draft.file}`,
+                    onClick: () => void discard(draft),
+                  }, '丢弃')
+                )
+              );
+            }))
+        )
+      );
+    }
+
     function Usage({ data, refresh }) {
       const [usage, setUsage] = useState(null);
       const [error, setError] = useState('');
@@ -813,6 +965,7 @@ window.__ModuleLoader__.load({
         ['conversations', '会话'],
         ['domains', '领域'],
         ['roles', '角色与知识'],
+        ['drafts', '知识库审批'],
         ['usage', '用量'],
         ['push', '推送'],
       ];
@@ -837,6 +990,7 @@ window.__ModuleLoader__.load({
         data && tab === 'conversations' ? h(Conversations, { data, refresh: load }) : null,
         data && tab === 'domains' ? h(Domains, { data, refresh: load }) : null,
         data && tab === 'roles' ? h(RolesAndKnowledge, { data, refresh: load }) : null,
+        data && tab === 'drafts' ? h(KbDrafts, { data, refresh: load }) : null,
         data && tab === 'usage' ? h(Usage, { data, refresh: load }) : null,
         data && tab === 'push' ? h(Push, { data, refresh: load }) : null
       );
@@ -918,7 +1072,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Conversations, LanePanel, LaneSettings, LaneSidebar };
+      exportsObject.__components = { Conversations, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
     }
     return exportsObject;
   },

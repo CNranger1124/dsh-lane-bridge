@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { LaneStore } from '../lib/store.js';
 import { SessionPool } from '../lib/session-pool.js';
 import { MemoryStore } from '../lib/memory.js';
@@ -160,10 +162,25 @@ test('first prompt creates a session, registers lane tools, restricts host tools
     assert.equal(env.store.get().sessions['snowluma:group:1'].sessionId, 'session-1');
     const agent = env.agents.get('session-1');
     assert.deepEqual([...agent.tools.keys()].sort(), [
-      'lane_conversation_info', 'lane_escalate', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search',
-      'lane_memory_add', 'lane_memory_read', 'lane_send',
+      'lane_conversation_info', 'lane_escalate', 'lane_kb_draft', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search',
+      'lane_memory_add', 'lane_memory_read', 'lane_repo_create_issue', 'lane_repo_get_issue',
+      'lane_repo_list_issues', 'lane_repo_read_file', 'lane_repo_recent_commits', 'lane_repo_search_code',
+      'lane_repo_status', 'lane_send',
     ]);
     assert.deepEqual(agent.restrictions, [{ allow: [] }]);
+
+    const draft = await agent.tools.get('lane_kb_draft').execute({
+      title: '测试草稿',
+      content: '这是一条由会话工具写入的测试草稿。',
+      source: 'test',
+    }, {});
+    assert.equal(draft.ok, true);
+    assert.ok(fs.existsSync(path.join(env.dir, 'knowledge', 'default', '_待审', draft.file)));
+
+    await assert.rejects(
+      () => agent.tools.get('lane_repo_status').execute({}, {}),
+      /当前领域未开启 GitHub/
+    );
   } finally {
     cleanup(env.dir);
   }

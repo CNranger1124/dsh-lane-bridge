@@ -2,6 +2,25 @@
 
 # Changelog
 
+## 0.2.0
+
+Ports the legacy GitHub read-only tools and KB draft approval, and fixes channel
+enablement guidance.
+
+- Read-only GitHub: `lane_repo_status/list_issues/get_issue/search_code/read_file/recent_commits`;
+  fixed repo, token redaction, ETag cache; `repo_create_issue` is off by default.
+- KB drafts: `lane_kb_draft` writes only to `knowledge/<scope>/_待审/`; drafts are
+  excluded from list/search/read, with hourly rate limiting and deduplication.
+- New "KB approval" tab: approve/discard each draft; approval backs up the target
+  document, appends a section, and keeps the source.
+- Domain switches `repoEnabled` / `kbDraftEnabled`; GitHub is opt-in, KB drafting
+  is on by default.
+- Channel cards now have direct Enable/Disable buttons and actionable hints for
+  SnowLuma not running, wrong port, or missing AppID/Token.
+- The empty-conversation blank Settings page fix from 0.1.1 is retained.
+- Test suite grows to 88 tests covering GitHub requests/redaction/path guards,
+  draft lifecycle, approval routes, and empty-conversation rendering.
+
 ## 0.1.1
 
 Bug fixes and a sidebar entry.

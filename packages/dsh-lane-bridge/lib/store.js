@@ -52,6 +52,9 @@ export function mergeConfig(previous, patch) {
   }
   if (isSecretPlaceholder(next.pushToken)) next.pushToken = previous?.pushToken ?? '';
   next.channels = nextChannels;
+  if (isSecretPlaceholder(next.github?.token)) {
+    next.github = { ...(next.github ?? {}), token: previous?.github?.token ?? '' };
+  }
   return next;
 }
 
@@ -96,6 +99,8 @@ function normalizeDomainList(raw, defaultDomainId) {
         : [],
       memoryEnabled: item?.memoryEnabled === true,
       memoryMaxChars: Math.max(200, Math.min(8000, Number(item?.memoryMaxChars) || 2000)),
+      kbDraftEnabled: item?.kbDraftEnabled !== false,
+      repoEnabled: item?.repoEnabled === true,
       systemPrompt: String(item?.systemPrompt ?? ''),
       maxReplyChars: Number(item?.maxReplyChars) > 0 ? Number(item.maxReplyChars) : 0,
     });
@@ -130,6 +135,15 @@ export function normalizeState(raw) {
   config.media.maxBytes = Math.max(64 * 1024, Math.min(20 * 1024 * 1024, Number(config.media.maxBytes) || 8 * 1024 * 1024));
   config.media.maxCount = Math.max(0, Math.min(8, Number(config.media.maxCount) || 0));
   config.media.timeoutMs = Math.max(1000, Math.min(60000, Number(config.media.timeoutMs) || 15000));
+  config.github = mergeDeep(base.config.github, isObject(config.github) ? config.github : {});
+  config.github.enabled = config.github.enabled === true;
+  config.github.repo = String(config.github.repo ?? '').trim().slice(0, 200);
+  config.github.token = String(config.github.token ?? '');
+  config.github.branch = String(config.github.branch ?? '').trim().slice(0, 120);
+  config.github.allowCreateIssue = config.github.allowCreateIssue === true;
+  config.github.issueLabel = String(config.github.issueLabel ?? 'agent').trim().slice(0, 40) || 'agent';
+  config.github.maxCreatesPerHour = Math.max(0, Math.min(20, Number(config.github.maxCreatesPerHour) || 3));
+  config.github.maxFileChars = Math.max(2000, Math.min(60000, Number(config.github.maxFileChars) || 20000));
   config.channels = mergeDeep(base.config.channels, isObject(config.channels) ? config.channels : {});
 
   const { domains, defaultDomainId } = normalizeDomainList(src.domains, config.defaultDomainId);
@@ -224,12 +238,14 @@ export function redactState(state) {
     snowlumaAccessToken: Boolean(state?.config?.channels?.snowluma?.accessToken),
     qqbotAppSecret: Boolean(state?.config?.channels?.qqbot?.appSecret),
     discordToken: Boolean(state?.config?.channels?.discord?.token),
+    githubToken: Boolean(state?.config?.github?.token),
   };
   if (clone.config) {
     clone.config.pushToken = '';
     if (clone.config.channels?.snowluma) clone.config.channels.snowluma.accessToken = '';
     if (clone.config.channels?.qqbot) clone.config.channels.qqbot.appSecret = '';
     if (clone.config.channels?.discord) clone.config.channels.discord.token = '';
+    if (clone.config.github) clone.config.github.token = '';
   }
   return { state: clone, secretStatus };
 }

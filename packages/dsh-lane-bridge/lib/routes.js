@@ -4,7 +4,7 @@
 // bearer token. The routes are mounted on DSH's own web server under
 // `/lane-bridge`, so no second port or cookie jar exists.
 import crypto from 'node:crypto';
-import { listKnowledge, readKnowledge, writeKnowledge } from './knowledge.js';
+import { approveDraft, discardDraft, listDrafts, listKnowledge, readKnowledge, writeKnowledge } from './knowledge.js';
 import { redactState } from './store.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
 import { parseConversationKey } from './defaults.js';
@@ -61,7 +61,7 @@ function requireArray(value, name) {
   return value;
 }
 
-export function createRoutes({ store, channels, pool, memoryStore = null, usageStore = null, logger = null }) {
+export function createRoutes({ store, channels, pool, memoryStore = null, usageStore = null, repo = null, logger = null }) {
   const knowledgeDir = store.paths.knowledgeDir;
 
   // Same-origin is the CSRF boundary. The custom header is sent by the
@@ -87,6 +87,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       state,
       secretStatus,
       channels: channels.status(),
+      github: repo?.status?.() ?? null,
       paths: { dataDir: store.paths.dataDir },
     });
   }
@@ -220,6 +221,20 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     return sendJson(res, 200, { ok: true, ...result });
   }
 
+  async function handleKbDrafts(req, res) {
+    if (!trustedOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      return sendJson(res, 200, { ok: true, ...listDrafts(knowledgeDir) });
+    }
+    if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    const body = await readBody(req);
+    const scope = String(body.scope ?? '').trim();
+    const file = String(body.file ?? '').trim();
+    if (body.action === 'discard') return sendJson(res, 200, { ok: true, ...discardDraft(knowledgeDir, { scope, file }) });
+    if (body.action === 'approve') return sendJson(res, 200, { ok: true, ...approveDraft(knowledgeDir, { scope, file, target: body.target }) });
+    return sendJson(res, 400, { ok: false, error: 'action 必须是 approve/discard' });
+  }
+
   function requireDomain(value) {
     const domainId = String(value ?? '').trim();
     const domain = store.get().domains.find((item) => item.id === domainId);
@@ -322,6 +337,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (route === '/api/channels/restart' && req.method === 'POST') return await handleRestart(req, res);
       if (route === '/api/knowledge') return await handleKnowledge(req, res);
       if (route === '/api/knowledge/read') return await handleKnowledgeRead(req, res);
+      if (route === '/api/kb/drafts') return await handleKbDrafts(req, res);
       return sendJson(res, 404, { ok: false, error: `unknown route: ${route}` });
     } catch (error) {
       logger?.warn?.(`[lane-bridge] HTTP ${route} 失败：${error?.message ?? error}`);

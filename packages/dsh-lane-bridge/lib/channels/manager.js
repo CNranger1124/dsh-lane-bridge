@@ -105,20 +105,40 @@ export class ChannelManager {
   }
 
   status() {
+    const config = this.getConfig?.() ?? {};
     const out = [];
     for (const id of ['snowluma', 'qqbot', 'discord']) {
-      const status = this.statuses.get(id);
-      if (status) out.push(status);
-      else out.push({
+      const entry = config?.channels?.[id] ?? {};
+      const status = this.statuses.get(id) ?? {
         id,
         kind: id,
         label: CHANNEL_LABELS[id],
-        enabled: false,
+        enabled: entry.enabled === true,
         started: false,
         connected: false,
         lastError: '',
         lastEventAt: 0,
-      });
+      };
+      const enabled = config?.enabled !== false && entry.enabled === true;
+      const configured = id === 'snowluma'
+        ? Boolean(String(entry.wsUrl ?? '').trim() || String(entry.homeDir ?? '').trim())
+        : id === 'qqbot'
+          ? Boolean(String(entry.appId ?? '').trim() && String(entry.appSecret ?? '').trim())
+          : Boolean(String(entry.token ?? '').trim());
+      let hint = '';
+      if (config?.enabled === false) hint = '插件总开关已关闭：先打开「插件启用」并保存';
+      else if (!enabled) hint = '未启用：点卡片右上角「启用」，或勾选下方复选框后保存';
+      else if (!configured) hint = id === 'snowluma'
+        ? '填 SnowLuma 安装目录或 WS 地址后保存；默认 127.0.0.1:3001'
+        : id === 'qqbot'
+          ? '填 AppID 和 AppSecret 后保存'
+          : '填 Bot Token 后保存';
+      else if (!status.connected) hint = id === 'snowluma'
+        ? 'SnowLuma 未运行或端口不对：先启动 SnowLuma；默认 WS 127.0.0.1:3001（本插件不会代启动）'
+        : id === 'qqbot'
+          ? '正在连接官方 QQ Bot；若一直失败，检查 AppID/AppSecret 与网络'
+          : '正在连接 Discord；若一直失败，检查 Token 和 Message Content Intent';
+      out.push({ ...status, enabled, configured, hint });
     }
     return out;
   }

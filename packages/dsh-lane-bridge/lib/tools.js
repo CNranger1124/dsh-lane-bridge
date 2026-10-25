@@ -4,7 +4,7 @@
 // scope), never globally, so an ordinary DSH coding session does not see
 // `lane_send` / `lane_kb_*` in its tool list.
 import { conversationLabel, resolveConversation } from './router.js';
-import { listKnowledge, readKnowledge, searchKnowledge } from './knowledge.js';
+import { listKnowledge, readKnowledge, searchKnowledge, writeDraft } from './knowledge.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
 
 const TEXT_SCHEMA = { type: 'string' };
@@ -43,7 +43,7 @@ function searchTargets(state, needle) {
   return hits;
 }
 
-export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = null, logger = null }) {
+export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = null, repo = null, logger = null }) {
   const getState = () => store.get();
   const currentResolved = () => resolveConversation(getState(), key);
 
@@ -285,6 +285,162 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     }
   );
 
+  const kbDraft = define(
+    'lane_kb_draft',
+    '把这次查清、且现有知识库没有覆盖的结论写成知识库草稿。草稿不会立刻生效，管理员在 Settings → IM 桥接 → 知识库审批 中采纳后才会进入正式知识库；未采纳前不参与检索。必须写来源。',
+    {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '一句话标题，用用户会说的词，例如「存档位置在哪」' },
+        content: { type: 'string', description: '可直接作为答复口径的正文，2~5 条要点，<=2000 字' },
+        source: { type: 'string', description: '来源：commit / 文件 / issue / 群反馈，例如 commit f179be46 或 issue #4' },
+        scope: { type: 'string', description: '可选：目标知识库 scope；省略=当前领域第一个 scope' },
+      },
+      required: ['title', 'content', 'source'],
+      additionalProperties: false,
+    },
+    async (args) => {
+      const resolved = currentResolved();
+      if (resolved.kbDraftEnabled === false) throw new Error('当前领域未开启知识库草稿');
+      const scope = String(args.scope ?? resolved.knowledgeScopes?.[0] ?? 'default').trim();
+      if (!resolved.knowledgeScopes.includes(scope)) throw new Error(`scope 不在当前领域知识库范围内：${scope}`);
+      const draft = writeDraft(knowledgeDir, scope, args);
+      return {
+        ok: true,
+        duplicate: draft.duplicate === true,
+        scope: draft.scope,
+        file: draft.file,
+        title: draft.title,
+        note: draft.duplicate
+          ? '同样的草稿已经存在，等管理员审核即可，不要重复起草'
+          : '草稿已写入待审区；管理员采纳后才会生效。回复用户时不要提草稿流程。',
+      };
+    },
+    {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        duplicate: { type: 'boolean' },
+        scope: { type: 'string' },
+        file: { type: 'string' },
+        title: { type: 'string' },
+        note: { type: 'string' },
+      },
+      required: ['ok', 'scope', 'file'],
+    }
+  );
+
+  function requireRepo() {
+    const resolved = currentResolved();
+    if (resolved.repoEnabled !== true) throw new Error('当前领域未开启 GitHub 仓库读取：在 Settings → IM 桥接 → 领域里勾选「允许读取 GitHub 仓库」');
+    if (!repo) throw new Error('GitHub 仓库模块不可用');
+    return repo;
+  }
+
+  const repoStatus = define(
+    'lane_repo_status',
+    '查看当前 GitHub 仓库连接状态：绑定了哪个仓库、凭据来源、是否允许建 issue。不返回 token。',
+    { type: 'object', properties: {}, additionalProperties: false },
+    async () => {
+      const client = requireRepo();
+      return client.status(true);
+    }
+  );
+
+  const repoIssues = define(
+    'lane_repo_list_issues',
+    '列仓库 issue（默认 open）。用于判断有没有人报过同样的问题；可用关键词走 issue 搜索。',
+    {
+      type: 'object',
+      properties: {
+        state: { type: 'string', enum: ['open', 'closed', 'all'], description: '默认 open' },
+        query: { type: 'string', description: '可选关键词' },
+        labels: { type: 'string', description: '可选标签，逗号分隔' },
+        limit: { type: 'number', description: '默认 15，最大 30' },
+      },
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().listIssues(args)
+  );
+
+  const repoIssue = define(
+    'lane_repo_get_issue',
+    '读某条 issue 的正文与最近评论。知道编号时用它，比列表更省上下文。',
+    {
+      type: 'object',
+      properties: {
+        number: { type: 'number', description: 'issue 编号' },
+        comments: { type: 'number', description: '评论条数，默认 10' },
+        commentChars: { type: 'number', description: '每条评论最多字符，默认 800' },
+      },
+      required: ['number'],
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().getIssue(args)
+  );
+
+  const repoSearch = define(
+    'lane_repo_search_code',
+    '在仓库代码里搜索（需要 GitHub token）。用于「这个报错文案/函数名在代码哪里」；返回文件路径和片段，不返回整文件。',
+    {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜索词' },
+        path: { type: 'string', description: '可选：限定目录前缀，例如 src/' },
+        limit: { type: 'number', description: '默认 10，最大 20' },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().searchCode(args)
+  );
+
+  const repoRead = define(
+    'lane_repo_read_file',
+    '读仓库里的单个文件（仓库内相对路径，默认分支）。超过上限会截断；不能读仓库外文件。',
+    {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '仓库内相对路径，例如 src/index.js' },
+        ref: { type: 'string', description: '可选：分支/标签/提交 sha' },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().readFile(args)
+  );
+
+  const repoCommits = define(
+    'lane_repo_recent_commits',
+    '看仓库最近提交（谁、什么时候、改了什么）。用于判断最近是不是有改动导致 bug。',
+    {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: '提交条数，默认 15' },
+        path: { type: 'string', description: '可选：只看某个路径/目录' },
+        since: { type: 'string', description: '可选：ISO 时间' },
+      },
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().recentCommits(args)
+  );
+
+  const repoCreateIssue = define(
+    'lane_repo_create_issue',
+    '在仓库新建 issue（默认关闭，需管理员开启）。只在问题已经定位清楚、用户也确认后使用；会自动带标记标签。',
+    {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '一句话说清现象' },
+        body: { type: 'string', description: '复现步骤、预期/实际、版本、日志片段' },
+        labels: { type: 'string', description: '可选附加标签，逗号分隔' },
+      },
+      required: ['title', 'body'],
+      additionalProperties: false,
+    },
+    async (args) => requireRepo().createIssue(args)
+  );
+
   const memoryRead = define(
     'lane_memory_read',
     '读取当前领域的共享记忆（跨会话积累的经验/背景）。不确定之前是否记录过时先查。',
@@ -377,7 +533,16 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     }
   );
 
-  return [laneSend, laneInfo, kbList, kbRead, kbSearch, memoryRead, memoryAdd, laneEscalate];
+  return [
+    laneSend, laneInfo, kbList, kbRead, kbSearch, kbDraft,
+    repoStatus, repoIssues, repoIssue, repoSearch, repoRead, repoCommits, repoCreateIssue,
+    memoryRead, memoryAdd, laneEscalate,
+  ];
 }
 
-export const LANE_TOOL_NAMES = ['lane_send', 'lane_conversation_info', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search', 'lane_memory_read', 'lane_memory_add', 'lane_escalate'];
+export const LANE_TOOL_NAMES = [
+  'lane_send', 'lane_conversation_info', 'lane_kb_list', 'lane_kb_read', 'lane_kb_search', 'lane_kb_draft',
+  'lane_repo_status', 'lane_repo_list_issues', 'lane_repo_get_issue', 'lane_repo_search_code',
+  'lane_repo_read_file', 'lane_repo_recent_commits', 'lane_repo_create_issue',
+  'lane_memory_read', 'lane_memory_add', 'lane_escalate',
+];

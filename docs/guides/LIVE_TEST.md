@@ -61,13 +61,19 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 
 如果页面空白或出现「面板渲染失败」，打开浏览器 console：通常是 `settings.section` / `sidebarRightTabs` slot 不存在或 client bundle 加载失败；错误边界会尽量保留界面并显示错误信息。
 
+### 通道启用/停用
+
+1. 通道卡片右上角应有 **启用/停用**；点 **启用** 会立即保存并重连。
+2. 未连接时卡片显示原因：SnowLuma 未启动、端口不对、缺少 AppID/Token 等。
+3. 停用通道后应显示 **已停用**；重新启用后应回到 **未连接/已连接**。
+
 ## 2. SnowLuma（QQ）
 
-1. 你自己启动 SnowLuma 并登录 bot 账号。
+1. 你自己启动 SnowLuma 并登录 bot 账号；确认 OneBot WS 监听 `127.0.0.1:3001`。
 2. 在 **IM 桥接 → 概览与通道**：
    - 填 **SnowLuma 安装目录**（例如 `F:/SnowLuma`），token 留空，让插件按账号发现；或
    - 显式填 WebSocket 地址和 access token。
-3. 保存，渠道应显示 **已连接**。
+3. 点卡片右上角 **启用**；渠道应显示 **已连接**。
 4. 用允许的账号给 bot 发私聊。它应出现在 **会话**，key 形如 `snowluma:private:<id>`。
 5. 绑定到默认领域，再发一条。DSH 侧应出现一个 session，assistant 的回合会发回 QQ。
 
@@ -122,6 +128,20 @@ curl -X POST http://127.0.0.1:<dsh-port>/lane-bridge/api/push \
 - 在已绑定会话发一张图片。开启 **图片理解** 且模型支持视觉时，session 请求应包含 image part；非视觉模型会降级为文本，而不是让回合失败。
 - 几轮模型回合后打开 **用量**：会话应出现 input/output/cache token 统计。清空一次，表格应归零。
 - 配置 **接管会话**，在会话上点 **转人工**：应显示 **人工中**，给用户发提示，并通知接管会话。再发用户消息（预期不自动回复），然后点 **恢复自动回复**，验证下一条消息重新有模型回复。
+
+### 6.1 GitHub 仓库只读
+
+1. 在 **概览与通道 → GitHub 仓库** 填 `owner/repo`、可选 token、保存并勾选启用。
+2. 在领域里勾选 **允许读取仓库**，保存。
+3. 在已绑定会话问一个需要查仓库的问题；模型应先调 `lane_repo_status`，再查 issue/文件/提交。
+4. 验证 `lane_repo_read_file` 不能读 `../`，错误里不出现 token；`lane_repo_create_issue` 默认报“未开启”。
+
+### 6.2 知识库草稿审批
+
+1. 让模型查到一个知识库没有覆盖的新结论，调用 `lane_kb_draft`（title/content/source 必填）。
+2. **知识库审批** 页应出现草稿；`lane_kb_list/search/read` 不应看到它。
+3. 选目标文件点 **采纳**：正式文档应追加小节并保留来源，草稿消失；点 **丢弃** 则只删除草稿。
+4. 确认 `~/.dsh/lane-bridge/kb-backups/` 有采纳前备份。
 
 ## 7. 失败时记录什么
 

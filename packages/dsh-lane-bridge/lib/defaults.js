@@ -47,6 +47,16 @@ export function defaultConfig() {
       maxCount: 4,
       timeoutMs: 15000,
     },
+    github: {
+      enabled: false,
+      repo: '',
+      token: '',
+      branch: '',
+      allowCreateIssue: false,
+      issueLabel: 'agent',
+      maxCreatesPerHour: 3,
+      maxFileChars: 20000,
+    },
     channels: {
       snowluma: {
         enabled: true,
@@ -82,6 +92,8 @@ export function defaultDomain() {
     keywords: [],
     memoryEnabled: false,
     memoryMaxChars: 2000,
+    kbDraftEnabled: true,
+    repoEnabled: false,
     systemPrompt: '',
     maxReplyChars: 0,
   };
