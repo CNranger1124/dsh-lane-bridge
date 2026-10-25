@@ -313,6 +313,25 @@ What the bridge does:
 For reliable unprompted announcements, either publish the bot and confirm active
 messages work, or use the SnowLuma channel — OneBot has no such restriction.
 
+### Keyword triggers need "receive all messages"
+
+The official QQ Bot pushes one of two group events:
+
+| Event | When it fires | What `mentions` means |
+| --- | --- | --- |
+| `GROUP_AT_MESSAGE_CREATE` | only when the bot is @-ed | excludes the bot (the event itself *is* the mention) |
+| `GROUP_MESSAGE_CREATE` | every group message, once the bot enables **"receive all messages"** | **everyone** who was @-ed, not only the bot |
+
+So:
+
+- answering only when @-ed → the default works as-is;
+- making keyword triggers work in a QQ group → enable "receive all messages" on the
+  open platform and tick "keyword" in the domain's trigger policy;
+- with full mode on, every group message arrives; the bridge decides "was the bot
+  mentioned" by its **own openid** (someone else's @ does not count) and strips
+  `<@openid>` markers before keyword matching;
+- `event=GROUP_MESSAGE_CREATE` in the log is the proof that full mode is active.
+
 ## Migrating from `qq-bridge`
 
 ```sh

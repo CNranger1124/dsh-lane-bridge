@@ -2,6 +2,24 @@
 
 # Changelog
 
+## 0.4.4
+
+- **Keyword triggers now work on the official QQ Bot** — provided the bot enables
+  "receive all messages" on the open platform, which makes the platform push
+  `GROUP_MESSAGE_CREATE` for every group message. The previous "QQ groups only
+  deliver @-messages" claim was only half true: that is the default, but full mode
+  delivers everything, `msg_id` included, so replies stay passive.
+- Fixed the **@ false positive** in full mode: `mentions` there contains whoever
+  was @-ed, not just the bot, and the old `mentions.length > 0` check treated
+  "someone @-ed a member" as "the bot was mentioned". Detection now uses
+  `is_you`, the bot's own openid, or a `<@openid>` marker in the content.
+- @-ing another member no longer wakes the bot, and `<@openid>` markers are
+  stripped from the text so keyword matching and the model see a clean sentence.
+- Inbound logs gained `event=GROUP_MESSAGE_CREATE|GROUP_AT_MESSAGE_CREATE` so you
+  can tell whether full mode is active.
+- The trigger-policy hint and the docs were corrected accordingly.
+- 146 tests.
+
 ## 0.4.3
 
 - **Corrects the 0.4.1 behaviour**: the bridge used to strip `msg_id` after a

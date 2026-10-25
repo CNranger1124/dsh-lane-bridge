@@ -152,6 +152,56 @@ test('QQ Bot adapter reports missing credentials without starting', async () => 
   await adapter.stop();
 });
 
+test('full-mode group messages are not treated as mentions of the bot', async () => {
+  const adapter = await readyAdapter();
+  try {
+    const messages = [];
+    adapter.on('message', (message) => messages.push(message));
+    // Someone @-ed another member: mentions is non-empty but not us.
+    adapter.bot.emit('message', {}, {
+      kind: 'group',
+      rawEventType: 'GROUP_MESSAGE_CREATE',
+      senderId: 'u-5',
+      senderName: 'Eve',
+      content: '<@someone-else> 看这个',
+      messageId: 'm-5',
+      groupOpenid: 'g-1',
+      mentions: [{ id: 'someone-else', username: 'Bob' }],
+    });
+    // Structurally marked as us.
+    adapter.bot.emit('message', {}, {
+      kind: 'group',
+      rawEventType: 'GROUP_MESSAGE_CREATE',
+      senderId: 'u-6',
+      senderName: 'Frank',
+      content: '存档在哪',
+      messageId: 'm-6',
+      groupOpenid: 'g-1',
+      mentions: [{ id: 'bot-openid', is_you: true }],
+    });
+    // Only the text marker reveals it.
+    adapter.bot.emit('message', {}, {
+      kind: 'group',
+      rawEventType: 'GROUP_MESSAGE_CREATE',
+      senderId: 'u-7',
+      senderName: 'Grace',
+      content: '<@bot-openid> 闪退了',
+      messageId: 'm-7',
+      groupOpenid: 'g-1',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(messages.length, 3);
+    assert.equal(messages[0].mentionsBot, false, '@-ing someone else is not @-ing us');
+    assert.equal(messages[1].mentionsBot, true);
+    assert.equal(messages[2].mentionsBot, true);
+    // @ markers are stripped so keyword matching sees the plain sentence.
+    assert.equal(messages[2].text, '闪退了');
+    assert.equal(messages[0].text, '看这个');
+  } finally {
+    await adapter.stop();
+  }
+});
+
 test('QQ Bot group @ events count as mentions even without a mentions array', async () => {
   const adapter = await readyAdapter();
   try {

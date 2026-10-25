@@ -64,15 +64,25 @@ export class QqbotAdapter extends ChannelAdapter {
       bot.on('message', async (_ctx, msg) => {
         try {
           if (!msg || msg.senderIsBot) return;
-          // GROUP_AT_MESSAGE_CREATE is only delivered when the bot is @-ed, and
-          // the payload has no `mentions` array. Without this, a mention-only
-          // trigger policy would treat every group @ as "not mentioning me".
           const rawEventType = String(msg.rawEventType ?? '');
           const kind = msg.kind === 'c2c' || msg.kind === 'dm' ? 'private' : 'group';
           const externalId = String(msg.replyTarget?.targetId ?? msg.groupOpenid ?? msg.channelId ?? msg.senderId ?? '');
           if (!externalId) return;
-          const text = String(msg.content ?? '').trim() ||
-            (Array.isArray(msg.attachments) && msg.attachments.length > 0 ? '[图片]' : '');
+          // GROUP_MESSAGE_CREATE ("接收所有消息") mentions list contains whoever
+          // was @-ed, not just the bot, so `mentions.length > 0` is not a
+          // mention. Match our own openid instead; the @-specific event stays
+          // authoritative.
+          const selfIds = new Set([this.state?.selfId, msg?.selfId, msg?.botId]
+            .map((value) => String(value ?? '').trim())
+            .filter(Boolean));
+          const mentionList = Array.isArray(msg.mentions) ? msg.mentions : [];
+          const mentionedById = mentionList.some((item) => item?.is_you === true
+            || (/<@!?([^>]+)>/u.test(String(item?.name ?? '')) && selfIds.has(String(item?.id ?? '')))
+            || selfIds.has(String(item?.id ?? item?.member_openid ?? item?.user_openid ?? '')));
+          const mentionedByText = [...selfIds].some((id) => String(msg.content ?? '').includes(`<@${id}>`));
+          // Strip @ markers so the model sees "存档在哪" instead of "<@A1B2…> 存档在哪".
+          const rawText = String(msg.content ?? '').replace(/<@!?[^>]*>/gu, ' ').replace(/\s+/gu, ' ').trim();
+          const text = rawText || (Array.isArray(msg.attachments) && msg.attachments.length > 0 ? '[图片]' : '');
           const images = Array.isArray(msg.attachments)
             ? msg.attachments.slice(0, 8).map((attachment) => ({
                 url: String(attachment.url ?? attachment.file_url ?? ''),
@@ -87,11 +97,17 @@ export class QqbotAdapter extends ChannelAdapter {
             senderName: String(msg.senderName ?? ''),
             text,
             images,
-            mentionsBot: (Array.isArray(msg.mentions) && msg.mentions.length > 0)
-              || rawEventType === 'GROUP_AT_MESSAGE_CREATE',
+            mentionsBot: rawEventType === 'GROUP_AT_MESSAGE_CREATE' || mentionedById || mentionedByText,
             replyToBot: Boolean(msg.refMsgIdx),
             replyToId: String(msg.messageId ?? ''),
-            raw: { kind: msg.kind, rawEventType, messageId: msg.messageId, timestamp: msg.timestamp },
+            raw: {
+              kind: msg.kind,
+              rawEventType,
+              messageId: msg.messageId,
+              timestamp: msg.timestamp,
+              mentionCount: mentionList.length,
+              selfIds: [...selfIds],
+            },
           });
         } catch (error) {
           this.logger?.warn?.(`[lane-bridge] QQ Bot 入站消息处理失败：${error?.message ?? error}`);

@@ -153,7 +153,8 @@ export async function apply(ctx, config = {}) {
     if (!text && (!message.images || message.images.length === 0)) return;
     logger.debug?.(
       `[lane-bridge] 入站 ${key}（${message.kind}，mentionsBot=${message.mentionsBot === true}`
-      + `，replyToBot=${message.replyToBot === true}，sender=${message.senderId || '?'}）：${text.slice(0, 40)}`
+      + `，replyToBot=${message.replyToBot === true}，sender=${message.senderId || '?'}`
+      + `，event=${message.raw?.rawEventType || '-'}）：${text.slice(0, 40)}`
     );
     if (!shouldTrigger(state, key, message)) {
       logger.debug?.(
