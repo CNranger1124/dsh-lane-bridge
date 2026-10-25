@@ -2,12 +2,42 @@
 
 # 真实安装 / 冒烟验收清单
 
+## 快速安装（默认最新版）
+
+> npm 尚未发布；请用每个小节里的 GitHub Release 命令。npm 发布后，无版本号的 `dsh plugin --profile ... add dsh-lane-bridge` 会自动安装最新版。
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+npm 尚未发布时：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+先完全退出 DSH Desktop：
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+npm 尚未发布时：
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
 这是在真实 DSH 安装上第一次运行的清单。仓库测试使用 fake host services；下面这些步骤验证真实服务。
 
 ## 1. 安装
 
 ```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 本地 checkout：

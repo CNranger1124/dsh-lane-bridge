@@ -2,13 +2,43 @@
 
 # Live install / smoke checklist
 
+## Quick install (latest by default)
+
+> npm is not published yet; use the GitHub Release command in each subsection. After the npm release, the versionless `dsh plugin --profile ... add dsh-lane-bridge` installs the latest version.
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+Before npm is published:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+Fully quit DSH Desktop first:
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+Before npm is published:
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
 This is the checklist for the first run on a real DSH installation. The
 repository tests use fake host services; these steps exercise the real ones.
 
 ## 1. Install
 
 ```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 Desktop: replace `web` with `desktop` and fully quit DSH Desktop first.

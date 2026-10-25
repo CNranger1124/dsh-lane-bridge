@@ -12,6 +12,50 @@ for the product. The legacy source tree is **not included** in this repository;
 the migration script can read an external legacy checkout. The repository keeps
 only the plugin, docs, and tests.
 
+## Quick install (latest by default)
+
+> npm is not published yet; use the GitHub Release command in each subsection. After the npm release, the versionless `dsh plugin --profile ... add dsh-lane-bridge` installs the latest version.
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+If npm is not published yet, use the latest GitHub Release:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+Fully quit DSH Desktop first, then:
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+Or use the latest GitHub Release:
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+Fully restart DSH and open **Settings → IM 桥接**. The first run creates
+`~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
+skeleton.
+
+Local development:
+
+```sh
+dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
+```
+
+> Installation is managed by `dsh plugin`; SnowLuma remains a separate,
+> user-installed component (see its EULA). First-run checklist:
+> [docs/guides/LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
+
 ## Why a plugin instead of a separate app?
 
 - **One install**: `dsh plugin add dsh-lane-bridge` mounts channels, tools, and the
@@ -49,35 +93,6 @@ See [docs/IM_BRIDGE_ARCHITECTURE.en.md](./docs/IM_BRIDGE_ARCHITECTURE.en.md) for
 architecture and migration plan, and
 [docs/guides/PUBLISHING.en.md](./docs/guides/PUBLISHING.en.md) for publishing and
 installation details.
-
-## Install (after publishing)
-
-```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
-```
-
-Desktop: replace `web` with `desktop` and fully quit DSH Desktop first.
-
-Before the npm release, you can install the GitHub Release tarball:
-
-```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
-```
-
-Then open **Settings → IM 桥接** in DSH. The first run creates
-`~/.dsh/lane-bridge/` with a default domain, a sample role card, and a knowledge
-base skeleton.
-
-For local development:
-
-```sh
-dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
-```
-
-> DSH plugin installation is managed by `dsh plugin`; this repository does not
-> ship a second launcher for everyday use. SnowLuma itself is a separate,
-> user-installed component (see its EULA). The first-run checklist is
-> [docs/guides/LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
 
 ## Status
 

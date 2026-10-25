@@ -4,6 +4,40 @@
 
 本文覆盖：本地 link 安装、npm 发布、DSH 安装/更新/卸载，以及 CI 自动发布。
 
+## 快速安装（默认最新版）
+
+> npm 尚未发布；请用每个小节里的 GitHub Release 命令。npm 发布后，无版本号的 `dsh plugin --profile ... add dsh-lane-bridge` 会自动安装最新版。
+
+### DSH Web
+
+npm 发布后：
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+npm 尚未发布时，用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+先完全退出 DSH Desktop，然后：
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+或者用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+安装后完全重启 DSH，打开 **Settings → IM 桥接**。
+
 ## 0. 发布对象
 
 只发布插件包目录：
@@ -123,14 +157,14 @@ git push origin v0.1.0
 ## 3. DSH 安装已发布版本
 
 ```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 Desktop：
 
 ```sh
 # 先完全退出 DSH Desktop
-dsh plugin --profile desktop add dsh-lane-bridge@0.1.0
+dsh plugin --profile desktop add dsh-lane-bridge
 ```
 
 建议固定版本号，不要用 `@latest`，避免宿主与插件版本错配。
@@ -138,13 +172,13 @@ dsh plugin --profile desktop add dsh-lane-bridge@0.1.0
 也可以直接从 GitHub Release 安装 tarball（npm 发布前可用）：
 
 ```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
 ```
 
 本地 tarball：
 
 ```sh
-dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge-0.1.0.tgz
+dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge.tgz
 ```
 
 然后完全重启 DSH，打开 **Settings → IM 桥接**。
@@ -157,7 +191,7 @@ dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge-0.1.0.tgz
 cd packages/dsh-lane-bridge
 npm version patch
 npm publish --registry=https://registry.npmjs.org
-dsh plugin --profile web add dsh-lane-bridge@<新版本>
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 卸载：

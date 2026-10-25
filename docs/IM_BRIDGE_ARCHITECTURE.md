@@ -173,7 +173,7 @@ lane-bridge/
 
 ```sh
 dsh plugin --profile web add dsh-lane-bridge
-dsh plugin --profile web add dsh-lane-bridge@<新版本>
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 发布包声明了两个 patch 文件，插入：

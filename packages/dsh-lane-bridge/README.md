@@ -4,6 +4,47 @@
 
 把 QQ（SnowLuma OneBot v11）、官方 QQ Bot 和 Discord 接入 DSH 的聊天/客服 Bot 插件。
 
+## 快速安装（默认最新版）
+
+> npm 尚未发布；请用每个小节里的 GitHub Release 命令。npm 发布后，无版本号的 `dsh plugin --profile ... add dsh-lane-bridge` 会自动安装最新版。
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+npm 尚未发布时，用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+先完全退出 DSH Desktop，然后：
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+或者用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+安装后完全重启 DSH，打开 **Settings → IM 桥接**。首次运行会创建
+`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
+
+本地开发：
+
+```sh
+dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
+```
+
+## 功能
+
 - **一个插件**：渠道、领域路由、角色卡、知识库和推送都在一起。不需要第二个服务或控制台 token。
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
 - **领域**：把群/私聊绑定到可复用策略（角色卡、preset、模型、知识库 scope、宿主工具白名单、群聊触发策略）。
@@ -13,29 +54,6 @@
 - **人工接管**：`lane_escalate` 暂停会话、通知配置的接管会话，并可在 Settings 恢复。
 - **Token 用量**：本地按会话的 token 账本和「用量」页。
 - **聊天式合并**：按会话短 debounce，把连续消息合成一次 prompt（可配置，`0` 关闭）。
-
-## 安装
-
-```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
-```
-
-Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
-
-npm 发布前也可以直接从 GitHub Release 安装 tarball：
-
-```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
-```
-
-然后打开 **Settings → IM 桥接**。首次运行会创建
-`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
-
-本地开发：
-
-```sh
-dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
-```
 
 ## 配置模型
 

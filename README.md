@@ -7,6 +7,47 @@
 本仓库从独立的 `qq-bridge` 项目演进而来。产品代码在
 [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge)；旧的 `qq-bridge` 源码**不包含**在仓库里，迁移脚本可以读取一个外部的旧项目目录。仓库只包含插件、文档和测试。
 
+## 快速安装（默认最新版）
+
+> npm 尚未发布；请用每个小节里的 GitHub Release 命令。npm 发布后，无版本号的 `dsh plugin --profile ... add dsh-lane-bridge` 会自动安装最新版。
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+npm 尚未发布时，用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+先完全退出 DSH Desktop，然后：
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+或者用 GitHub 最新 Release：
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+安装后完全重启 DSH，打开 **Settings → IM 桥接**。首次运行会创建
+`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
+
+本地开发：
+
+```sh
+dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
+```
+
+> 插件安装由 `dsh plugin` 管理；SnowLuma 仍是用户自行安装/启动的独立组件（见其 EULA）。首次验收见 [docs/guides/LIVE_TEST.md](./docs/guides/LIVE_TEST.md)。
+
 ## 为什么做成插件，而不是独立前端？
 
 - **安装一次**：`dsh plugin add dsh-lane-bridge` 同时挂载渠道、工具和设置卡片；不需要第二个服务、端口或控制台 token。
@@ -31,33 +72,6 @@
 - 覆盖 store、resolver、路由、会话编排和插件 harness 的测试。
 
 架构与迁移计划见 [docs/IM_BRIDGE_ARCHITECTURE.md](./docs/IM_BRIDGE_ARCHITECTURE.md)；发布与安装细节见 [docs/guides/PUBLISHING.md](./docs/guides/PUBLISHING.md)。
-
-## 安装
-
-发布到 npm 后：
-
-```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
-```
-
-Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
-
-npm 发布前也可以直接从 GitHub Release 安装 tarball：
-
-```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
-```
-
-然后在 DSH 中打开 **Settings → IM 桥接**。首次运行会创建
-`~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
-
-本地开发：
-
-```sh
-dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
-```
-
-> 插件安装由 `dsh plugin` 管理；本仓库不提供第二个日常启动器。SnowLuma 仍然是用户自行安装、自行启动的独立组件（见其 EULA）。首次验收清单见 [docs/guides/LIVE_TEST.md](./docs/guides/LIVE_TEST.md)。
 
 ## 状态
 

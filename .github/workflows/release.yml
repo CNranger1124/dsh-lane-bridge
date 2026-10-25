@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -26,6 +26,18 @@ jobs:
       - name: Package contents
         working-directory: packages/dsh-lane-bridge
         run: npm pack --dry-run
+      - name: Pack release tarball
+        working-directory: packages/dsh-lane-bridge
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          versioned=$(ls "$RUNNER_TEMP"/dsh-lane-bridge-*.tgz | head -1)
+          gh release upload "$GITHUB_REF_NAME" "$versioned" --clobber
+          cp "$versioned" "$RUNNER_TEMP/dsh-lane-bridge.tgz"
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/dsh-lane-bridge.tgz" --clobber
       - name: Publish
         if: env.NPM_TOKEN != ''
         working-directory: packages/dsh-lane-bridge

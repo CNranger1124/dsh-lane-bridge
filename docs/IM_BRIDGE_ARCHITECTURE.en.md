@@ -211,8 +211,8 @@ should be rebuilt as a separate domain policy later.
 ## 9. Install and upgrade
 
 ```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
-dsh plugin --profile web add dsh-lane-bridge@<new-version>
+dsh plugin --profile web add dsh-lane-bridge
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 The package declares one bundle patch that inserts:

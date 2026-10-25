@@ -5,6 +5,48 @@
 DeepSeek Harness plugin for chat / customer-support bots across QQ (SnowLuma
 OneBot v11), the official QQ Bot, and Discord.
 
+## Quick install (latest by default)
+
+> npm is not published yet; use the GitHub Release command in each subsection. After the npm release, the versionless `dsh plugin --profile ... add dsh-lane-bridge` installs the latest version.
+
+### DSH Web
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+If npm is not published yet, use the latest GitHub Release:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+Fully quit DSH Desktop first, then:
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+Or use the latest GitHub Release:
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+Fully restart DSH and open **Settings → IM 桥接**. The first run creates
+`~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
+skeleton.
+
+Local development:
+
+```sh
+dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
+```
+
+## Features
+
 - **One plugin**: channels, domain routing, role cards, knowledge, and push live
   together. No second server or console token.
 - **One DSH session per conversation**: transcripts, tools, and token usage are
@@ -22,30 +64,6 @@ OneBot v11), the official QQ Bot, and Discord.
 - **Token usage**: a local per-conversation token ledger and a Usage tab.
 - **Chat-friendly batching**: a short per-conversation debounce merges message bursts
   into one prompt (configurable, `0` disables).
-
-## Install
-
-```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
-```
-
-Desktop: replace `web` with `desktop` and fully quit DSH Desktop first.
-
-Before the npm release, you can install the GitHub Release tarball:
-
-```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
-```
-
-Then open **Settings → IM 桥接**. The first run creates
-`~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
-skeleton.
-
-Local development:
-
-```sh
-dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
-```
 
 ## Configuration model
 

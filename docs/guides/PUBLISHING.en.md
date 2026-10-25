@@ -5,6 +5,40 @@
 This covers local `link:` install, npm publishing, DSH install/update/uninstall,
 and CI release.
 
+## Quick install (latest by default)
+
+> npm is not published yet; use the GitHub Release command in each subsection. After the npm release, the versionless `dsh plugin --profile ... add dsh-lane-bridge` installs the latest version.
+
+### DSH Web
+
+After the npm release:
+
+```sh
+dsh plugin --profile web add dsh-lane-bridge
+```
+
+Before npm is published, use the latest GitHub Release:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+### DSH Desktop
+
+Fully quit DSH Desktop first, then:
+
+```sh
+dsh plugin --profile desktop add dsh-lane-bridge
+```
+
+Or use the latest GitHub Release:
+
+```sh
+dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
+```
+
+Fully restart DSH and open **Settings → IM 桥接**.
+
 ## 0. What gets published
 
 Only the package directory:
@@ -131,14 +165,14 @@ git push origin v0.1.0
 ## 3. Install a published version into DSH
 
 ```sh
-dsh plugin --profile web add dsh-lane-bridge@0.1.0
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 Desktop:
 
 ```sh
 # fully quit DSH Desktop first
-dsh plugin --profile desktop add dsh-lane-bridge@0.1.0
+dsh plugin --profile desktop add dsh-lane-bridge
 ```
 
 Pin the version; avoid `@latest` so host and plugin versions cannot drift.
@@ -146,13 +180,13 @@ Pin the version; avoid `@latest` so host and plugin versions cannot drift.
 You can also install the GitHub Release tarball before the npm release:
 
 ```sh
-dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/latest/download/dsh-lane-bridge.tgz
 ```
 
 Or a local tarball:
 
 ```sh
-dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge-0.1.0.tgz
+dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge.tgz
 ```
 
 Then fully restart DSH and open **Settings → IM 桥接**.
@@ -165,7 +199,7 @@ Update: bump, publish, install the new version.
 cd packages/dsh-lane-bridge
 npm version patch
 npm publish --registry=https://registry.npmjs.org
-dsh plugin --profile web add dsh-lane-bridge@<new-version>
+dsh plugin --profile web add dsh-lane-bridge
 ```
 
 Uninstall:
