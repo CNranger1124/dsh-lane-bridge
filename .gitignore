@@ -1,0 +1,17 @@
+# Local runtime data (tokens, sessions, channel credentials)
+data/
+*.local.json
+.env
+.env.*
+
+# Temporary / recovery artifacts
+.acl-recovery/
+*.tgz
+
+# Build / test artifacts
+node_modules/
+.scratch/
+coverage/
+*.log
+.DS_Store
+Thumbs.db

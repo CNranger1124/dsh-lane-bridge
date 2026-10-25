@@ -1,0 +1,20 @@
+# dsh-lane-bridge bundle patch.
+#
+# Installing the package through the official CLI:
+#
+#   dsh plugin --profile web add dsh-lane-bridge
+#
+# makes the profile load this patch. It inserts exactly one host row. The
+# browser half is declared by `dsh.client` in package.json, so the module
+# system scans it into the browser roster automatically and no client row is
+# needed here.
+#
+# Runtime configuration (channels, domains, bindings) is NOT stored on this
+# row. It lives in `<dataDir>/state.json` and is edited from the Settings card,
+# because bindings change often and must not remount the plugin fiber.
+- insert:
+    - id: dsh-lane-bridge
+      name: 'dsh-lane-bridge'
+      config:
+        enabled: true
+        dataDir: ''

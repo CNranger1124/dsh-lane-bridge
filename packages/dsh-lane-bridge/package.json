@@ -1,0 +1,72 @@
+{
+  "name": "dsh-lane-bridge",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: one chat/customer-support bot across QQ (SnowLuma), official QQ Bot, and Discord, with per-conversation domains, shared knowledge, and unified push.",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "lib",
+    "presets",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "LICENSE.zh.md",
+    "scripts",
+    "NOTICE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "qq",
+    "qqbot",
+    "discord",
+    "customer-support",
+    "chatbot"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/lane-support.patch.yml"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "immediately": true
+    }
+  },
+  "dependencies": {
+    "@tencent-connect/qqbot-nodejs": "^1.0.5",
+    "discord.js": "^14.16.3"
+  },
+  "scripts": {
+    "test": "node test/run-all.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CNranger1124/dsh-lane-bridge.git"
+  },
+  "homepage": "https://github.com/CNranger1124/dsh-lane-bridge",
+  "bugs": {
+    "url": "https://github.com/CNranger1124/dsh-lane-bridge/issues"
+  },
+  "author": "CNranger1124",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "dsh-lane-bridge-repo",
+  "private": true,
+  "type": "module",
+  "description": "Monorepo for the dsh-lane-bridge DSH plugin; qq-bridge/ is the legacy standalone bridge.",
+  "scripts": {
+    "test": "node packages/dsh-lane-bridge/test/run-all.js"
+  }
+}
