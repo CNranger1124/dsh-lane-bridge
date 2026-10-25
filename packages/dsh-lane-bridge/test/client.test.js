@@ -176,6 +176,10 @@ test('domain cards expose a save button in the header and footer', async () => {
   const triggerLabels = ['所有消息', '@ 或回复机器人', '命中关键词', '关闭（只记录）'];
   assert.deepEqual(triggerLabels.filter((label) => text.includes(label)), triggerLabels);
   assert.ok(text.some((line) => line.includes('可多选')), text.join(' '));
+  // The operator whitelist lives on the same card and documents the id format.
+  assert.ok(text.includes('管理者（白名单）'), text.join(' '));
+  assert.ok(text.some((line) => line.includes('qqbot:') && line.includes('snowluma:')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('* ＝所有人')), text.join(' '));
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;
@@ -237,6 +241,71 @@ test('empty conversation list renders a placeholder instead of throwing', async 
     if (typeof node?.children === 'number') text.push(String(node.children));
   });
   assert.ok(text.some((line) => line.includes('还没有收到过消息')), text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('conversations surface sender ids that can be pasted into the whitelist', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class {
+      constructor(props) { this.props = props; this.state = {}; }
+      setState() {}
+    },
+  };
+  globalThis.document = {
+    getElementById: () => ({ remove() {} }),
+    createElement: () => ({}),
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+  };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?senders');
+  const { Conversations } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { defaultDomainId: 'default' },
+      domains: [{ id: 'default', name: '默认客服' }],
+      roles: [{ name: '客服', content: '' }],
+      conversations: {
+        'qqbot:group:F84F': {
+          key: 'qqbot:group:F84F', channel: 'qqbot', kind: 'group', externalId: 'F84F',
+          name: '群 F84F（RANGER）', lastAt: 1, lastText: '宝具机制', seenCount: 2,
+          senders: { 'qqbot:8FD96C63': { name: 'RANGER', at: 2 } },
+        },
+      },
+      bindings: { 'qqbot:group:F84F': { domainId: 'default', enabled: true } },
+      sessions: {},
+    },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = Conversations({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  assert.ok(text.some((line) => line.includes('最近发言者')), text.join(' '));
+  assert.ok(text.some((line) => line.includes('RANGER') && line.includes('qqbot:8FD96C63')), text.join(' '));
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

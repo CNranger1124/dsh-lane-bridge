@@ -49,7 +49,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 - **一个插件**：渠道、领域路由、角色卡、知识库和推送都在一起。不需要第二个服务或控制台 token。
 - **一个会话一个 DSH session**：转录、工具和 token 用量都能在正常 DSH UI 里看到。
-- **领域**：把群/私聊绑定到可复用策略（角色卡、preset、模型、知识库 scope、宿主工具白名单、群聊触发策略）。
+- **领域**：把群/私聊绑定到可复用策略（角色卡、preset、模型、知识库 scope、宿主工具白名单、管理者白名单、群聊触发策略）。
 - **共享库**：角色卡和 Markdown 知识库共享；领域选择能读哪些 KB scope。可选的领域记忆（`lane_memory_*`）跨会话积累经验。
 - **知识库草稿 + 人工审批**：`lane_kb_draft` 只写 `_待审/`，Settings 的「知识库审批」页采纳/丢弃后才进入检索。
 - **GitHub 只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；issue/文件/代码/提交查询；支持 `gh` CLI 读取账号可见的全部仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
@@ -63,9 +63,32 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 ## 配置模型
 
 - **渠道** 在 `state.json` 的 `config.channels.*`。
-- **领域** 描述行为：角色卡名、agent preset、可选 `provider/model`、知识库 scope、允许的宿主工具、回复上限，以及可选的 `repo` / `branch`（留空继承全局 GitHub 仓库）。
+- **领域** 描述行为：角色卡名、agent preset、可选 `provider/model`、知识库 scope、允许的宿主工具、管理者白名单、回复上限，以及可选的 `repo` / `branch`（留空继承全局 GitHub 仓库）。
 - **绑定** 把会话 key（`snowluma:group:123456`、`qqbot:private:openid`）挂到领域。
 - 未绑定会话只记录，不触发模型。想做开放客服收件箱可打开 `autoReplyPrivate`。
+
+## 管理者（白名单）
+
+一个群只有一个 DSH 会话，所有群友共用它。桥接不看昵称，只认渠道给出的**发送者 id**。谁是管理员写在**领域**的 `operators` 里（Settings → IM 桥接 → 领域 → 管理者），一行一个：
+
+| 写法 | 含义 | id 从哪来 |
+| --- | --- | --- |
+| `qqbot:8FD96C63927394130884C87F9F708895` | 官方 QQ Bot 的用户 | 事件里的 `senderId`（openid，32 位十六进制，比较时忽略大小写） |
+| `snowluma:123456789` | SnowLuma 通道上的某个 QQ 号 | `event.sender.user_id` |
+| `discord:123456789012345678` | Discord 用户 | `message.author.id`（snowflake） |
+| `123456789` | 不带前缀：任意渠道上的这个 id | — |
+| `*` | 所有人都是管理员（显式放行，等价旧行为） | — |
+| 留空 | 没有人是管理员（默认） | — |
+
+要点：
+
+- 前缀必须和会话 key 的渠道一致（`qqbot:group:…` ↔ `qqbot:…`）。同一个 QQ 号在 `qqbot` 和 `snowluma` 下是 openid / QQ 号两个不同的值，不能互认。
+- 昵称、群名片不参与判断：可以随便改，也不唯一。
+- 不知道 id 是多少：Settings → IM 桥接 → 会话，表格里的「最近发言者」按成员列出 `渠道:id`，点一下即复制，粘贴进管理者输入框即可。日志也会打印 `sender=…`。
+- 白名单是**领域级**的：同一领域下所有绑定共享。要给不同群不同管理员，就拆成不同领域。
+- 只有白名单成员能：建 issue（`lane_repo_create_issue`）、往别的会话推送（`lane_send` 的跨会话目标）、写领域共享记忆（`lane_memory_add`）。
+- 其他人仍然可以：在本会话分多条气泡发送、写知识库草稿（进待审区，等人工采纳）、`lane_escalate` 转人工。
+- 管理员发言的那一轮，提示词会带「本次发言者：X（本领域管理员，可执行管理操作）」，模型据此判断该怎么答。
 
 ## 从 `qq-bridge` 迁移
 
@@ -80,6 +103,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 - 默认 `lane-support` preset 不注册任何内置工具。
 - 每个会话的 agent 会拿到 `lane_send` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。
 - KB 工具只读正式区；草稿只能写 `_待审/`，且不参与检索。GitHub 默认关闭，按领域开启。
+- 建 issue、跨会话推送、写共享记忆只允许领域管理者白名单里的成员；白名单默认留空＝谁都不能。
 - 密钥永不返回浏览器；UI 只显示“已配置”。
 - 浏览器写操作要求同源；外部推送要求配置的 bearer token。
 - 图片只允许公网 http(s)，逐跳校验重定向，限制类型和字节数。

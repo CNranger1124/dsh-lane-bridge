@@ -92,6 +92,43 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - Unbound conversations are recorded but never prompt a model. Use
   `autoReplyPrivate` for an open support inbox.
 
+## Operators (whitelist)
+
+One group shares one DSH session, so "who is the administrator" cannot come from
+the chat itself. Nicknames are ignored; the bridge only trusts the **sender id**
+reported by the channel. The list lives on the **domain** as `operators`
+(Settings → IM Bridge → Domains → Operators), one entry per line:
+
+| Entry | Meaning | Where the id comes from |
+| --- | --- | --- |
+| `qqbot:8FD96C63927394130884C87F9F708895` | a user of the official QQ Bot | the event's `senderId` (openid, 32 hex chars, compared case-insensitively) |
+| `snowluma:123456789` | a QQ number on the SnowLuma channel | `event.sender.user_id` |
+| `discord:123456789012345678` | a Discord user | `message.author.id` (snowflake) |
+| `123456789` | no prefix: that id on any channel | — |
+| `*` | everyone is an operator (explicit opt-in to the old behavior) | — |
+| empty | nobody is an operator (default) | — |
+
+Rules that matter:
+
+- The prefix must match the conversation key's channel (`qqbot:group:…` ↔
+  `qqbot:…`). The same QQ account has different ids per channel (openid vs QQ
+  number) and they do not cross-match.
+- Nicknames and guild display names never participate: they are mutable and not
+  unique.
+- To find an id: Settings → IM Bridge → Conversations, the "recent senders"
+  column lists `channel:id` per member; clicking copies it. Logs also print
+  `sender=…`.
+- The whitelist is **per domain** and shared by every binding on that domain.
+  Different admins per group means different domains.
+- Only whitelisted members may: create issues (`lane_repo_create_issue`), push
+  into another conversation (`lane_send` with a foreign target), write shared
+  domain memory (`lane_memory_add`).
+- Everyone else can still: split a reply into several bubbles in the current
+  chat, draft knowledge-base entries (review queue only), and escalate to a
+  human (`lane_escalate`).
+- On an operator's turn the prompt carries
+  "本次发言者：X（本领域管理员，可执行管理操作）" so the model knows.
+
 ## Migrating from `qq-bridge`
 
 ```sh
@@ -112,6 +149,8 @@ SnowLuma.
   default allow-list is empty.
 - KB tools read the official tree only; drafts write only to `_待审/` and are
   excluded from retrieval. GitHub is off per domain unless enabled.
+- Issue creation, cross-conversation push, and shared-memory writes are limited
+  to the domain's operator whitelist; the whitelist defaults to empty (nobody).
 - Secrets are never returned to the browser; the UI only displays presence.
 - Browser writes require a same-origin request; external push requires the
   configured bearer token.

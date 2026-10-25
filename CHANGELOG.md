@@ -2,6 +2,17 @@
 
 # 变更记录
 
+## 0.2.14
+
+- **新增管理者白名单**：领域里的 `operators` 决定“谁是 bot 管理员”。写法是 `渠道:id`——`qqbot:8FD96C63927394130884C87F9F708895`（官方 QQ Bot 的 openid）、`snowluma:123456789`（QQ 号）、`discord:123456789012345678`（Discord 用户 ID）；也可以写不带前缀的纯 id（任意渠道）或 `*`（所有人）。**留空＝没有人是管理员**（这是新的默认，以前没有任何身份判断）。
+- 受限动作改成只允许管理员：`lane_repo_create_issue`、`lane_send` 发到当前会话以外的目标、`lane_memory_add`（领域共享记忆）。其他能力不受影响：本会话分多条气泡、`lane_kb_draft`（进待审区）、`lane_escalate` 转人工。
+- 身份按**每一轮入站**归属，不挂在 session 上：`SessionPool.prompt()` 记录当轮 `senderId` 与 `isOperator`，`lane_*` 工具读取它，上一位发言者的权限不会漏给下一位。昵称只用于提示词文案，永不参与鉴权。
+- 管理员发言时，提示词前缀写成「本次发言者：X（本领域管理员，可执行管理操作）」；`lane_conversation_info` 也返回 `senderId` / `isOperator`。
+- **会话表新增「最近发言者」列**：按成员显示 `渠道:id`，点一下复制，直接粘贴到管理者输入框。`conversations[key].senders` 记录每个会话最近 10 位成员。
+- 入站日志打印 `sender=…`，方便对照。
+- 领域保存会校验管理者 id 格式，写错会直接报「管理者 id 格式不对：…」。
+- 测试增至 116 项（白名单归一化/匹配、跨渠道不串号、非管理员的工具拒绝、管理员提示词标记、设置页渲染）。
+
 ## 0.2.13
 
 - 修复官方 QQ Bot 群聊「@ 了也不回」：`GROUP_AT_MESSAGE_CREATE` 本身就代表被 @，这个事件里没有 `mentions` 数组，适配器却按 `mentions.length > 0` 判断，导致 `mentionsBot=false`。触发策略改成「@ + 关键词」后，@ 消息会被当成没 @ 丢掉。现在按事件类型判定。

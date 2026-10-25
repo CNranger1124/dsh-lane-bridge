@@ -105,6 +105,46 @@ test('normalizeState keeps per-domain repository overrides', () => {  const stat
   assert.equal(state.domains[0].repoEnabled, true);
 });
 
+test('normalizeState keeps a clean operator whitelist and drops junk', () => {
+  const state = normalizeState({
+    domains: [{
+      id: 'game',
+      operators: ['snowluma:123', ' snowluma:123 ', '@qqbot:8FD9', '', 'has space', 'a:b:c', 42, '*'],
+    }],
+    roles: [{ name: '客服', content: 'x' }],
+  });
+  assert.deepEqual(state.domains[0].operators, ['snowluma:123', 'qqbot:8FD9', '42', '*']);
+
+  const empty = normalizeState({ domains: [{ id: 'x' }], roles: [{ name: '客服', content: 'x' }] });
+  assert.deepEqual(empty.domains[0].operators, [], 'missing whitelist means nobody');
+});
+
+test('conversations remember recent senders in whitelist format', async () => {
+  const dir = tempDir();
+  try {
+    const store = new LaneStore({ dataDir: dir });
+    await store.load();
+    await store.touchConversation({
+      key: 'qqbot:group:F84F', channel: 'qqbot', kind: 'group', externalId: 'F84F',
+      name: '群 F84F', lastAt: 1, lastText: 'hi', senderId: '8FD9', senderName: 'RANGER',
+    });
+    await store.touchConversation({
+      key: 'qqbot:group:F84F', channel: 'qqbot', kind: 'group', externalId: 'F84F',
+      name: '群 F84F', lastAt: 2, lastText: 'hi again', senderId: 'AAAA', senderName: '阿明',
+    });
+    const convo = store.get().conversations['qqbot:group:F84F'];
+    assert.deepEqual(Object.keys(convo.senders).sort(), ['qqbot:8FD9', 'qqbot:AAAA']);
+    assert.equal(convo.senders['qqbot:AAAA'].name, '阿明');
+    assert.equal(convo.senderId, undefined, 'per-message sender is not duplicated at the top level');
+
+    const reload = new LaneStore({ dataDir: dir });
+    await reload.load();
+    assert.deepEqual(Object.keys(reload.get().conversations['qqbot:group:F84F'].senders).sort(), ['qqbot:8FD9', 'qqbot:AAAA']);
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test('role files are the editable source of truth and deleted roles remove files', async () => {
   const dir = tempDir();
   try {

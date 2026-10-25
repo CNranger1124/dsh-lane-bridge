@@ -28,6 +28,76 @@ export function normalizeTriggers(input) {
   return TRIGGER_MODES.filter((mode) => picked.has(mode));
 }
 
+// ---------------------------------------------------------------------------
+// Operator (bot administrator) whitelist.
+//
+// One entry = one person. The accepted shapes are deliberately few, because the
+// value has to be copy-pasteable from the Conversations table:
+//
+//   `*`                            everyone (explicit opt-in to "trust the room")
+//   `snowluma:123456789`           channel + platform user id
+//   `qqbot:8FD96C63927394130884...` channel + openid
+//   `discord:123456789012345678`   channel + snowflake
+//   `123456789`                    channel-less: matches that id on any channel
+//
+// The channel part is the same token that starts a conversation key
+// (`snowluma:group:...` → `snowluma`). The user part is *the sender id the
+// channel adapter reports* — QQ number for SnowLuma, openid for the official
+// QQ Bot, snowflake for Discord. Never a nickname: nicknames are not unique and
+// can be changed by anyone.
+// ---------------------------------------------------------------------------
+
+export const OPERATOR_ALL = '*';
+// Channel prefix: same alphabet the conversation key allows. User part: any
+// non-space run without a colon (openids, QQ numbers, snowflakes, emails).
+const OPERATOR_RE = /^(?:\*|[a-z0-9_-]{1,20}:[^\s:]{1,120}|[^\s:]{1,120})$/iu;
+
+/** Canonical operator list: trimmed, de-duplicated (case-insensitive), capped. */
+export function normalizeOperators(input) {
+  const raw = Array.isArray(input) ? input : [];
+  const seen = new Map();
+  for (const value of raw) {
+    const text = String(value ?? '').trim().replace(/^@+/u, '');
+    if (!text || !OPERATOR_RE.test(text)) continue;
+    const key = text.toLowerCase();
+    if (!seen.has(key)) seen.set(key, text);
+    if (seen.size >= 50) break;
+  }
+  return [...seen.values()];
+}
+
+/** Does one whitelist entry match this sender? */
+export function operatorMatches(entry, channel, senderId) {
+  const value = String(entry ?? '').trim();
+  const id = String(senderId ?? '').trim();
+  if (!value || !id) return false;
+  if (value === OPERATOR_ALL) return true;
+  const colon = value.indexOf(':');
+  if (colon > 0) {
+    const wantChannel = value.slice(0, colon).toLowerCase();
+    if (wantChannel !== String(channel ?? '').trim().toLowerCase()) return false;
+    return value.slice(colon + 1).toLowerCase() === id.toLowerCase();
+  }
+  return value.toLowerCase() === id.toLowerCase();
+}
+
+/** Whitelist check. An empty list means "nobody", not "everybody". */
+export function isOperatorId(operators, channel, senderId) {
+  const list = Array.isArray(operators) ? operators : [];
+  return list.some((entry) => operatorMatches(entry, channel, senderId));
+}
+
+/**
+ * The canonical string the Settings card asks the operator to paste, built from
+ * what an adapter actually reported.
+ */
+export function operatorEntryFor(channel, senderId) {
+  const c = String(channel ?? '').trim();
+  const id = String(senderId ?? '').trim();
+  if (!id) return '';
+  return c ? `${c}:${id}` : id;
+}
+
 export function conversationKey(channel, kind, externalId) {
   const c = String(channel ?? '').trim();
   const k = kind === 'private' ? 'private' : 'group';
@@ -110,6 +180,9 @@ export function defaultDomain() {
     model: '',
     knowledgeScopes: ['default'],
     allowedHostTools: [],
+    // Strict by default: nobody is an administrator until listed. `['*']`
+    // restores "trust the whole room".
+    operators: [],
     autoReply: true,
     trigger: 'all',
     triggers: ['all'],

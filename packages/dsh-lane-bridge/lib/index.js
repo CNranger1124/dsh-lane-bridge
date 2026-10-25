@@ -133,6 +133,10 @@ export async function apply(ctx, config = {}) {
       lastAt: Date.now(),
       lastText: String(message.text ?? '').slice(0, 500),
       replyToId: String(message.replyToId ?? ''),
+      // Remembered so the operator whitelist can be filled by copying an id
+      // instead of guessing an openid from the logs.
+      senderId: String(message.senderId ?? ''),
+      senderName: String(message.senderName ?? ''),
     });
     const state = store.get();
     const resolved = resolveConversation(state, key);
@@ -144,7 +148,7 @@ export async function apply(ctx, config = {}) {
     if (!text && (!message.images || message.images.length === 0)) return;
     logger.debug?.(
       `[lane-bridge] 入站 ${key}（${message.kind}，mentionsBot=${message.mentionsBot === true}`
-      + `，replyToBot=${message.replyToBot === true}）：${text.slice(0, 40)}`
+      + `，replyToBot=${message.replyToBot === true}，sender=${message.senderId || '?'}）：${text.slice(0, 40)}`
     );
     if (!shouldTrigger(state, key, message)) {
       logger.debug?.(

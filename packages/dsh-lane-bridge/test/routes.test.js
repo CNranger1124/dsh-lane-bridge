@@ -149,6 +149,31 @@ test('domains and roles validate before writing', async () => {
   }
 });
 
+test('operator ids are validated with a readable error', async () => {
+  const { dir, store, routes } = await setup();
+  try {
+    const bad = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/domains',
+      body: { domains: [{ id: 'vip', name: 'VIP', role: '客服', operators: ['有 空格'] }] },
+    }), bad);
+    assert.equal(bad.status, 400);
+    assert.match(JSON.parse(bad.body).error, /管理者 id 格式不对/u);
+
+    const good = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/domains',
+      body: { domains: [{ id: 'vip', name: 'VIP', role: '客服', operators: ['qqbot:8FD96C63', '123456789', '*'] }] },
+    }), good);
+    assert.equal(good.status, 200);
+    assert.deepEqual(store.get().domains[0].operators, ['qqbot:8FD96C63', '123456789', '*']);
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test('bindings accept conversation keys and reject unknown domains', async () => {
   const { dir, store, routes } = await setup();
   try {

@@ -561,6 +561,19 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false);
       const domains = data.state.domains;
       const conversations = Object.values(data.state.conversations ?? {}).sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0));
+      // Recent participants, keyed by the exact string the operator whitelist
+      // wants. Clicking a chip copies it so nobody has to retype an openid.
+      const senderRows = (convo) => Object.entries(convo?.senders ?? {})
+        .sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
+      const copyEntry = async (entry) => {
+        try {
+          await navigator.clipboard.writeText(entry);
+          setError('');
+          setMessage(`已复制 ${entry}`);
+        } catch {
+          setError(`复制失败，请手动选中复制：${entry}`);
+        }
+      };
       const setBinding = (key, patch) => {
         setDraft((current) => {
           const next = clone(current);
@@ -623,7 +636,7 @@ window.__ModuleLoader__.load({
           h('div', { style: { overflowX: 'auto' } },
             h('table', { className: 'lb-table' },
               h('thead', null, h('tr', null,
-                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, 'DSH 会话'), h('th', null, '领域'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
+                h('th', null, '会话'), h('th', null, '最近消息'), h('th', null, '最近发言者'), h('th', null, 'DSH 会话'), h('th', null, '领域'), h('th', null, '角色卡'), h('th', null, '自动回复'), h('th', null, '')
               )),
               h('tbody', null, ...(conversations.length ? conversations.map((convo) => {
                 const binding = draft[convo.key];
@@ -636,6 +649,21 @@ window.__ModuleLoader__.load({
                   h('td', null,
                     h('div', { className: 'lb-muted' }, convo.lastAt ? new Date(convo.lastAt).toLocaleString() : ''),
                     h('div', null, String(convo.lastText ?? '').slice(0, 60))
+                  ),
+                  h('td', null,
+                    (() => {
+                      const rows = senderRows(convo);
+                      if (rows.length === 0) return h('span', { className: 'lb-muted' }, '—');
+                      return h('div', { className: 'lb-actions', style: { flexWrap: 'wrap', gap: 4 } },
+                        ...rows.slice(0, 3).map(([entry, meta]) => h('button', {
+                          key: entry,
+                          className: 'lb-btn',
+                          title: `点击复制「${entry}」，粘贴到领域 → 管理者`,
+                          style: { fontSize: 11, padding: '2px 6px' },
+                          onClick: () => void copyEntry(entry),
+                        }, `${meta?.name || '成员'} · ${entry.length > 22 ? `${entry.slice(0, 22)}…` : entry}`))
+                      );
+                    })()
                   ),
                   h('td', null,
                     sessionId
@@ -680,7 +708,7 @@ window.__ModuleLoader__.load({
                     )
                   )
                 );
-              }) : [h('tr', null, h('td', { colSpan: 7, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
+              }) : [h('tr', null, h('td', { colSpan: 8, className: 'lb-muted' }, '还没有收到过消息。让机器人上线后发一条消息，或手动添加。'))]))
             )
           ),
           h('div', { className: 'lb-row' },
@@ -785,7 +813,7 @@ window.__ModuleLoader__.load({
         const id = `domain-${Date.now().toString(36)}`;
         setDraft((list) => [...list, {
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
-          knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
+          knowledgeScopes: ['default'], allowedHostTools: [], operators: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
           kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
         }]);
         setSelected(id);
@@ -863,6 +891,18 @@ window.__ModuleLoader__.load({
               ),
               h(Field, { label: '允许的宿主工具', hint: '逗号分隔；留空=无宿主工具' },
                 h('input', { className: 'lb-input', value: (current.allowedHostTools ?? []).join(', '), onChange: (e) => patch('allowedHostTools', linesToArray(e.target.value)) })
+              ),
+              h(Field, {
+                label: '管理者（白名单）',
+                hint: '每行一个，或逗号分隔。格式「渠道:id」：qqbot:8FD96C63…（官方 QQ Bot openid）／snowluma:123456789（QQ 号）／discord:123456789012345678（Discord 用户 ID）。不带渠道前缀＝任意渠道的这个 id；* ＝所有人；留空＝没有人是管理员。下文「已发现的会话」里有成员 id，可直接复制。',
+              },
+                h('textarea', {
+                  className: 'lb-textarea',
+                  style: { minHeight: 64 },
+                  placeholder: 'qqbot:8FD96C63927394130884C87F9F708895\nsnowluma:123456789',
+                  value: (current.operators ?? []).join('\n'),
+                  onChange: (e) => patch('operators', linesToArray(e.target.value)),
+                })
               ),
               h(Field, { label: '单条回复上限', hint: '0=使用全局' },
                 h('input', { className: 'lb-input', type: 'number', min: 0, value: current.maxReplyChars ?? 0, onChange: (e) => patch('maxReplyChars', Number(e.target.value)) })

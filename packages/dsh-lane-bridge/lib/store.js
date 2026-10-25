@@ -10,7 +10,9 @@ import {
   defaultConfig,
   defaultDomain,
   defaultState,
+  normalizeOperators,
   normalizeTriggers,
+  operatorEntryFor,
   sampleKnowledge,
   sampleRoleCard,
   STATE_VERSION,
@@ -59,6 +61,34 @@ export function mergeConfig(previous, patch) {
   return next;
 }
 
+/**
+ * Recent participants of one conversation, keyed by the exact string the
+ * operator whitelist expects (`channel:senderId`). This exists so filling the
+ * whitelist never requires guessing an openid from the logs.
+ */
+export const MAX_SENDERS_PER_CONVERSATION = 10;
+
+function normalizeSenders(raw) {
+  const out = {};
+  if (!isObject(raw)) return out;
+  for (const [entry, value] of Object.entries(raw)) {
+    const id = String(entry ?? '').trim();
+    if (!id || id.length > 140 || /\s/u.test(id)) continue;
+    out[id] = {
+      name: String(value?.name ?? '').slice(0, 80),
+      at: Number(value?.at) || 0,
+    };
+  }
+  return out;
+}
+
+function rememberSender(senders, entry, name, at) {
+  if (!entry) return senders;
+  const next = { ...senders, [entry]: { name: String(name ?? '').slice(0, 80), at } };
+  const rows = Object.entries(next).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+  return Object.fromEntries(rows.slice(0, MAX_SENDERS_PER_CONVERSATION));
+}
+
 function normalizeRoleList(raw) {
   const list = Array.isArray(raw) ? raw : [];
   const seen = new Set();
@@ -97,6 +127,7 @@ function normalizeDomainList(raw, defaultDomainId) {
       allowedHostTools: Array.isArray(item?.allowedHostTools)
         ? [...new Set(item.allowedHostTools.map((s) => String(s).trim()).filter(Boolean))]
         : [],
+      operators: normalizeOperators(item?.operators),
       autoReply: item?.autoReply !== false,
       trigger: triggers[0],
       triggers,
@@ -195,6 +226,7 @@ export function normalizeState(raw) {
         lastText: String(value.lastText ?? '').slice(0, 500),
         replyToId: String(value.replyToId ?? ''),
         seenCount: Number(value.seenCount) || 0,
+        senders: normalizeSenders(value.senders),
       };
     }
   }
@@ -462,9 +494,15 @@ export class LaneStore {
   async touchConversation(conversation) {
     return this.update((draft) => {
       const current = draft.conversations[conversation.key] ?? {};
+      const senderEntry = operatorEntryFor(
+        conversation.channel ?? current.channel ?? String(conversation.key).split(':')[0],
+        conversation.senderId
+      );
+      const { senderId, senderName, ...rest } = conversation;
       draft.conversations[conversation.key] = {
         ...current,
-        ...conversation,
+        ...rest,
+        senders: rememberSender(current.senders ?? {}, senderEntry, senderName, Number(conversation.lastAt) || Date.now()),
         seenCount: (Number(current.seenCount) || 0) + 1,
       };
     });

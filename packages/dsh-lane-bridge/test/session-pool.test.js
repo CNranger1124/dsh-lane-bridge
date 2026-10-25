@@ -350,11 +350,12 @@ test('lane_send marks the turn as sent and reaches the channel manager', async (
 test('lane_send can broadcast only to bound conversations', async () => {
   const env = await setup();
   try {
+    await env.store.setDomains([{ ...defaultDomain(), operators: ['snowluma:123'] }]);
     await env.store.setBindings({
       'snowluma:group:1': { domainId: 'default', enabled: true },
       'snowluma:group:2': { domainId: 'default', enabled: true },
     });
-    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '你好' });
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderId: '123', senderName: '小明', text: '你好' });
     const agent = env.agents.get('session-1');
     const send = agent.tools.get('lane_send');
     const result = await send.execute({ targets: ['snowluma:group:1', 'snowluma:group:2'], messages: '通知' });
@@ -372,6 +373,66 @@ test('lane_send can broadcast only to bound conversations', async () => {
   }
 });
 
+
+test('a member outside the operator whitelist cannot use admin-only tools', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{
+      ...defaultDomain(),
+      memoryEnabled: true,
+      repoEnabled: true,
+      operators: ['snowluma:999'],
+    }]);
+    await env.store.setBindings({
+      'snowluma:group:1': { domainId: 'default', enabled: true },
+      'snowluma:group:2': { domainId: 'default', enabled: true },
+    });
+    await env.pool.prompt('snowluma:group:1', {
+      channel: 'snowluma', kind: 'group', externalId: '1', senderId: '123', senderName: '路人', text: '帮我提个 issue',
+    });
+    const agent = env.agents.get('session-1');
+    await assert.rejects(() => agent.tools.get('lane_repo_create_issue').execute({ title: 't', body: 'b' }), /仅限管理员/u);
+    await assert.rejects(() => agent.tools.get('lane_memory_add').execute({ text: 'x' }), /仅限管理员/u);
+    await assert.rejects(
+      () => agent.tools.get('lane_send').execute({ target: 'snowluma:group:2', messages: 'x' }),
+      /仅限管理员/u
+    );
+    // Talking in its own conversation is still allowed.
+    const own = await agent.tools.get('lane_send').execute({ messages: '好的' });
+    assert.equal(own.ok, true);
+    assert.deepEqual(own.targets, ['snowluma:group:1']);
+    const info = await agent.tools.get('lane_conversation_info').execute({});
+    assert.equal(info.isOperator, false);
+    assert.equal(info.senderId, '123');
+    assert.doesNotMatch(env.prompts[0].content[0].text, /本领域管理员/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
+test('a whitelisted sender is marked as administrator in the prompt', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), operators: ['qqbot:8FD96C63'] }]);
+    await env.store.setSession('snowluma:group:1', { sessionId: 'session-old', role: '客服', preset: 'lane-support', roleKey: '' });
+    await env.pool.prompt('snowluma:group:1', {
+      channel: 'snowluma', kind: 'group', externalId: '1', senderId: '123', senderName: '小明', text: '你好',
+    });
+    // Channel-scoped entry must not leak to another channel.
+    assert.doesNotMatch(env.prompts[0].content[0].text, /本领域管理员/u);
+
+    await env.pool.reset('snowluma:group:1');
+    await env.store.setDomains([{ ...defaultDomain(), operators: ['snowluma:123'] }]);
+    await env.pool.prompt('snowluma:group:1', {
+      channel: 'snowluma', kind: 'group', externalId: '1', senderId: '123', senderName: '小明', text: '你好',
+    });
+    assert.match(env.prompts[1].content[0].text, /本次发言者：小明（本领域管理员，可执行管理操作）/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
 
 test('reset forgets the session mapping so the next message starts fresh', async () => {
   const env = await setup();
@@ -392,9 +453,9 @@ test('reset forgets the session mapping so the next message starts fresh', async
 test('domain memory is injected into the prompt', async () => {
   const env = await setup();
   try {
-    await env.store.setDomains([{ ...defaultDomain(), autoReply: true, memoryEnabled: true, memoryMaxChars: 2000 }]);
+    await env.store.setDomains([{ ...defaultDomain(), autoReply: true, memoryEnabled: true, memoryMaxChars: 2000, operators: ['snowluma:123'] }]);
     env.memoryStore.append('default', '玩家 A 在 1.2.3 闪退，Windows 11');
-    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '又闪退了' });
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderId: '123', senderName: '小明', text: '又闪退了' });
     const text = env.prompts[0].content[0].text;
     assert.match(text, /【领域共享记忆】/);
     assert.match(text, /Windows 11/);

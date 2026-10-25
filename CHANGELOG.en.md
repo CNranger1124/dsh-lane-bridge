@@ -2,6 +2,71 @@
 
 # Changelog
 
+## 0.2.14
+
+- **Operator whitelist.** A domain's `operators` decides who administers the bot.
+  Entries are `channel:id` — `qqbot:8FD96C63927394130884C87F9F708895` (official QQ
+  Bot openid), `snowluma:123456789` (QQ number), `discord:123456789012345678`
+  (Discord user id) — or a bare id (any channel) or `*` (everyone). **Empty means
+  nobody**, which is the new strict default (there was no identity check before).
+- Admin-only actions: `lane_repo_create_issue`, `lane_send` to any conversation
+  other than the current one, and `lane_memory_add` (shared domain memory).
+  Everything else is unchanged: multi-bubble replies in the current chat,
+  `lane_kb_draft` (review queue), `lane_escalate`.
+- Identity is scoped to a **single inbound turn**, never to the session:
+  `SessionPool.prompt()` records that turn's `senderId` and `isOperator` and the
+  `lane_*` tools read it, so one member cannot inherit the previous speaker's
+  rights. Nicknames are prompt text only and never used for authorization.
+- On an operator's turn the prompt prefix becomes
+  「本次发言者：X（本领域管理员，可执行管理操作）」; `lane_conversation_info` also
+  returns `senderId` / `isOperator`.
+- **New "recent senders" column** in the conversations table: each member shows
+  as `channel:id`, one click copies it for the operator field.
+  `conversations[key].senders` keeps the last 10 participants.
+- Inbound logs print `sender=…`.
+- Saving a domain validates operator ids and fails with
+  「管理者 id 格式不对：…」 instead of silently dropping them.
+- 116 tests.
+
+## 0.2.13
+
+- Fix "group @ gets no reply" on the official QQ Bot: `GROUP_AT_MESSAGE_CREATE`
+  already means the bot was mentioned, but the payload carries no `mentions`
+  array while the adapter checked `mentions.length > 0`, so a mention-only
+  trigger policy threw the message away. Detection is now event-type based.
+- Inbound logs gained `mentionsBot` / `replyToBot` / `kind` so a trigger miss is
+  readable from the log.
+- Documented that the official QQ Bot only delivers @-messages in groups, so
+  keyword triggers there need SnowLuma.
+- 108 tests.
+
+## 0.2.12
+
+- Fix the first message after a DSH restart always failing with
+  `prompt variable "{{model}}" has no value for this assembly`: cold-resuming via
+  `agents.resume` skipped the Session Controller setup, so the session had no
+  model selection. `sessionController.resolveAgent()` is now preferred.
+- 107 tests.
+
+## 0.2.11
+
+- Fix the "type it manually" option in the preset dropdown: selecting it now
+  switches to the text input and keeps the previous value.
+
+## 0.2.10
+
+- **Agent preset is a dropdown** fed by the host's `agentPresets` registry
+  (`GET /api/presets`), with name/id, default and broken markers, plus a note
+  describing what the preset gives the session. Unknown ids can still be typed.
+- **Push supports multiple targets**: checkboxes with select-all/clear, `targets`
+  payload, per-target success/failure, 207 on partial failure.
+- 106 tests.
+
+## 0.2.9
+
+- Trigger multi-select polish: unchecking "all messages" switches to "@ or reply",
+  unchecking "off" returns to "all messages" instead of doing nothing.
+
 ## 0.2.8
 
 - **Group attention policies are now multi-select**: "@ or reply" and "keyword"

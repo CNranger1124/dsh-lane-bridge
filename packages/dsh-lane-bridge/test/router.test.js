@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { conversationKey, parseConversationKey, defaultState, sampleRoleCard } from '../lib/defaults.js';
-import { resolveConversation, canReply, shouldTrigger, buildContextPrefix, roleContent } from '../lib/router.js';
+import { resolveConversation, canReply, shouldTrigger, buildContextPrefix, roleContent, isOperator } from '../lib/router.js';
 
 test('conversation keys round-trip', () => {
   const key = conversationKey('snowluma', 'group', 123456);
@@ -165,4 +165,41 @@ test('paused bindings stop auto-replies until resumed', () => {
   const resolved = resolveConversation(state, 'snowluma:group:1');
   assert.equal(resolved.paused, true);
   assert.equal(canReply(state, 'snowluma:group:1'), false);
+});
+
+
+test('operator whitelist is per-domain, channel-scoped, and empty means nobody', () => {
+  const state = defaultState();
+  state.bindings['snowluma:group:1'] = { domainId: 'default', enabled: true };
+  state.bindings['qqbot:group:9'] = { domainId: 'default', enabled: true };
+  // Default install: no administrators at all.
+  assert.equal(isOperator(state, 'snowluma:group:1', '123'), false);
+
+  state.domains[0].operators = ['snowluma:123', 'qqbot:8FD96C63'];
+  assert.equal(isOperator(state, 'snowluma:group:1', '123'), true);
+  // Channel prefix must match: the same id on another channel is not enough.
+  assert.equal(isOperator(state, 'qqbot:group:9', '123'), false);
+  assert.equal(isOperator(state, 'qqbot:group:9', '8FD96C63'), true);
+  // A channel-less entry matches any channel.
+  state.domains[0].operators = ['123'];
+  assert.equal(isOperator(state, 'qqbot:group:9', '123'), true);
+  assert.equal(isOperator(state, 'snowluma:group:1', ''), false);
+
+  // `*` is the explicit "trust the room" escape hatch.
+  state.domains[0].operators = ['*'];
+  assert.equal(isOperator(state, 'snowluma:group:1', 'anyone'), true);
+
+  // A second domain does not inherit the first domain's whitelist.
+  state.domains.push({ ...state.domains[0], id: 'vip', name: 'VIP', operators: [] });
+  state.bindings['snowluma:group:2'] = { domainId: 'vip', enabled: true };
+  assert.equal(isOperator(state, 'snowluma:group:2', 'anyone'), false);
+});
+
+test('the prompt marks an operator and stays quiet for everyone else', () => {
+  const base = {
+    resolved: { domain: { name: '默认客服' }, role: '客服' },
+    roleText: '', memoryText: '', channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明',
+  };
+  assert.match(buildContextPrefix(base), /本次发言者：小明\n/u);
+  assert.match(buildContextPrefix({ ...base, senderIsOperator: true }), /本次发言者：小明（本领域管理员，可执行管理操作）/u);
 });

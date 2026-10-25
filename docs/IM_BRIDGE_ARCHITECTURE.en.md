@@ -107,6 +107,34 @@ This is deliberately stricter than the legacy bridge's preset-level guard: the
 restriction is attached to the exact conversation's agent, so a new preset or a
 new DSH version cannot silently widen the surface.
 
+### Identity: the operator whitelist
+
+A group shares one DSH session, so "who said this" can only be scoped to a
+**single inbound turn**, never to the session:
+
+- Every inbound message carries `senderId` (QQ number for SnowLuma, openid for
+  the official QQ Bot, snowflake for Discord). `senderName` is prompt text only
+  and **never** used for authorization.
+- The domain holds `operators: string[]`. Entries are `channel:id`
+  (`qqbot:8FD9…`, `snowluma:123456789`, `discord:123…`), a bare id (any channel),
+  or `*` (everyone). The channel must match the conversation key's prefix. An
+  **empty array means nobody**.
+- `SessionPool.prompt()` records `{ senderId, senderName, isOperator }` in
+  `turnSender[key]` before submitting the turn; `lane_*` tools read it through
+  `pool.currentSender(key)`, so one member can never inherit the previous
+  speaker's rights.
+- Gated actions: `lane_repo_create_issue`, `lane_send` with a target other than
+  the current conversation, and `lane_memory_add`. Everything else (multi-bubble
+  replies in the same chat, KB drafts, human escalation) stays open to everyone.
+- On an operator's turn the prompt prefix says
+  「本次发言者：X（本领域管理员，可执行管理操作）」.
+- `conversations[key].senders` keeps the last 10 participants per conversation
+  (`channel:id` plus nickname) so the settings page can offer one-click copy.
+
+This is still *channel identity*, not strong authentication: the SnowLuma QQ
+number is only as trustworthy as the OneBot gateway, whereas openids are issued
+by the platform and are unique per bot.
+
 ## 4. Data model
 
 Everything lives under `$DSH_HOME/lane-bridge/` by default (override with the

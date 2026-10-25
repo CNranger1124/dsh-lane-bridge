@@ -1,6 +1,6 @@
 // Pure conversation/domain resolution. No fs, no DSH, no timers: the host and
 // the tests share exactly one implementation.
-import { normalizeTriggers, parseConversationKey } from './defaults.js';
+import { isOperatorId, normalizeOperators, normalizeTriggers, parseConversationKey } from './defaults.js';
 
 export function findDomain(state, id) {
   const domains = Array.isArray(state?.domains) ? state.domains : [];
@@ -57,6 +57,7 @@ export function resolveConversation(state, key) {
     repo: String(domain?.repo || state?.config?.github?.repo || '').trim(),
     repoBranch: String(domain?.branch || state?.config?.github?.branch || '').trim(),
     allowedHostTools: Array.isArray(domain?.allowedHostTools) ? domain.allowedHostTools : [],
+    operators: normalizeOperators(domain?.operators),
     autoReply: autoReply && domain?.autoReply !== false,
     paused: binding?.paused === true,
     maxReplyChars: Number(binding?.maxReplyChars) > 0
@@ -99,6 +100,17 @@ export function shouldTrigger(state, key, inbound) {
   return false;
 }
 
+/**
+ * Whether this sender is a declared administrator of the conversation's domain.
+ * The whitelist lives on the domain (`operators`), so every group/private chat
+ * bound to that domain shares it, and an empty list means "nobody".
+ */
+export function isOperator(state, key, senderId) {
+  const parsed = parseConversationKey(key);
+  const resolved = resolveConversation(state, key);
+  return isOperatorId(resolved.operators, parsed?.channel ?? '', senderId);
+}
+
 export function roleContent(state, name) {
   const roles = Array.isArray(state?.roles) ? state.roles : [];
   return roles.find((role) => role.name === name)?.content ?? '';
@@ -113,11 +125,11 @@ export function conversationLabel(state, key) {
 }
 
 /** Render the first-turn context: domain + role card + channel facts. */
-export function buildContextPrefix({ resolved, roleText, memoryText, channel, kind, externalId, senderName }) {
+export function buildContextPrefix({ resolved, roleText, memoryText, channel, kind, externalId, senderName, senderIsOperator }) {
   const lines = [];
   lines.push('【IM 会话】');
   lines.push(`渠道：${channel}；类型：${kind === 'private' ? '私聊' : '群聊'}；会话 id：${externalId}`);
-  if (senderName) lines.push(`本次发言者：${senderName}`);
+  if (senderName) lines.push(`本次发言者：${senderName}${senderIsOperator ? '（本领域管理员，可执行管理操作）' : ''}`);
   if (resolved?.domain?.name) lines.push(`当前领域：${resolved.domain.name}`);
   if (resolved?.domain?.systemPrompt) {
     lines.push('');

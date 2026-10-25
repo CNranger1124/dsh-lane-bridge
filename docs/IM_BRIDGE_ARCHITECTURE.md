@@ -23,7 +23,7 @@
 | --- | --- |
 | **Channel / 渠道** | 一个传输账号：`snowluma`（OneBot v11）、`qqbot`（官方 QQ Bot），以及 `discord`。 |
 | **Conversation / 会话** | 渠道看到的一个聊天线程：群或私聊。Key：`<channel>:<group|private>:<externalId>`。 |
-| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、群聊触发策略（all/mention/keyword/off，可多选：mention 与 keyword 取或，all/off 互斥）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
+| **Domain / 领域** | 可复用的行为：角色卡、agent preset、模型、知识库 scope、宿主工具白名单、管理者白名单（`operators`）、群聊触发策略（all/mention/keyword/off，可多选：mention 与 keyword 取或，all/off 互斥）、回复策略、可选的 GitHub 仓库/分支覆盖。可以理解为“租户”或“产品线”。 |
 | **Binding / 绑定** | 会话 → 领域（可选按会话覆盖角色/preset/模型）。没有绑定的会话会被 *发现*，但不会调用模型。 |
 | **Role card / 角色卡** | 共享角色库里的 Markdown 人格。领域和绑定按名字引用。 |
 | **Knowledge base / 知识库** | 共享 Markdown 目录树（`knowledge/<scope>/...`），由 `lane_kb_*` 工具读取。领域选择 scope。 |
@@ -96,6 +96,19 @@ adapter.onMessage(cb)                 // cb({ channel, kind, externalId, senderI
 然后调用 `agent.ctx.tools.restrict({ allow: domain.allowedHostTools })` 隐藏继承来的宿主工具（bash、fs、subagent、plugin manager……）。默认白名单为空：客服 agent 只能聊天、读知识库、推送，别的都没有。领域可以显式放行只读宿主工具，例如 `web_search`。
 
 这比旧桥接的 preset 级守卫更严格：限制挂在**具体会话的 agent** 上，新 preset 或新 DSH 版本不能悄悄扩大能力面。
+
+### 身份：管理者白名单
+
+一个群共用一个 DSH session，所以“谁说的话”只能在**每一轮入站**上区分，不能挂在 session 上：
+
+- 入站消息带 `senderId`（SnowLuma = QQ 号；官方 QQ Bot = openid；Discord = snowflake）。`senderName` 只用于提示词文案，**永不**参与鉴权。
+- 领域里有 `operators: string[]`，写法是 `渠道:id`（`qqbot:8FD9…`、`snowluma:123456789`、`discord:123…`）、纯 id（任意渠道）或 `*`（所有人）。`渠道` 必须与会话 key 的前缀一致。**空数组＝没有人是管理员**。
+- `SessionPool.prompt()` 在提交回合前把 `{ senderId, senderName, isOperator }` 记到 `turnSender[key]`；`lane_*` 工具通过 `pool.currentSender(key)` 读取，所以上一位发言者的权限不会漏给下一位。
+- 受限动作：`lane_repo_create_issue`、`lane_send` 的跨会话目标、`lane_memory_add`。其余（本会话多条气泡、KB 草稿、转人工）对所有人生效。
+- 管理员那一轮的提示词前缀会带「本次发言者：X（本领域管理员，可执行管理操作）」。
+- `conversations[key].senders` 记录每个会话最近的 10 位成员（`渠道:id` + 昵称），供设置页一键复制填白名单。
+
+注意这仍是**渠道身份**，不是强认证：SnowLuma 的 QQ 号可信度取决于 OneBot 网关；openid 由官方平台签发，才具备跨会话唯一性。
 
 ## 4. 数据模型
 

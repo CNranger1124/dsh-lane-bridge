@@ -47,13 +47,23 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
   const getState = () => store.get();
   const currentResolved = () => resolveConversation(getState(), key);
 
+  // Who is being served right now. The domain whitelist decides; an agent turn
+  // is always attributed to the message that started it, so a group member can
+  // never inherit the previous speaker's rights.
+  const sender = () => pool.currentSender?.(key) ?? null;
+  const isOperatorNow = () => sender()?.isOperator === true;
+  const OPERATOR_HINT = '（这是管理员操作：在 Settings → IM 桥接 → 领域 → 管理者 里加上该成员的「渠道:id」；需要人工处理时用 lane_escalate 转人工）';
+  const requireOperator = (what) => {
+    if (!isOperatorNow()) throw new Error(`${what}仅限管理员${OPERATOR_HINT}`);
+  };
+
   const laneSend = define(
     'lane_send',
     '向当前会话或另一个已绑定会话发送消息。messages 字符串=一条，数组=多条。需要在同一轮里分多条气泡、或主动推送到别的群/私聊时使用；用了本工具的这一轮，最终文本不会再自动发送。',
     {
       type: 'object',
       properties: {
-        target: { ...TEXT_SCHEMA, description: '目标会话 key（如 snowluma:group:123456）或会话名称；省略=当前会话' },
+        target: { ...TEXT_SCHEMA, description: '目标会话 key（如 snowluma:group:123456）或会话名称；省略=当前会话。发到当前会话以外的目标仅限管理员' },
         targets: { type: 'array', items: TEXT_SCHEMA, description: '可选：广播到多个已绑定会话' },
         messages: {
           oneOf: [
@@ -79,6 +89,9 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
         if (targetKey !== key && !state.bindings?.[targetKey]) {
           throw new Error(`目标会话未绑定：${targetKey}；只能向当前会话或已绑定会话发送`);
         }
+        // Cross-conversation delivery is an operator action: a random group
+        // member must not be able to make the bot speak in another group.
+        if (targetKey !== key) requireOperator('往其他会话发送消息');
         return targetKey;
       };
       const rawTargets = Array.isArray(args.targets) && args.targets.length > 0
@@ -142,6 +155,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     async () => {
       const state = getState();
       const resolved = resolveConversation(state, key);
+      const who = sender();
       return {
         key,
         label: conversationLabel(state, key),
@@ -153,6 +167,9 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
         knowledgeScopes: resolved.knowledgeScopes,
         allowedHostTools: resolved.allowedHostTools,
         autoReply: resolved.autoReply,
+        senderId: who?.senderId ?? '',
+        senderName: who?.senderName ?? '',
+        isOperator: who?.isOperator === true,
         sessionId: state.sessions?.[key]?.sessionId ?? '',
       };
     },
@@ -168,6 +185,9 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
         knowledgeScopes: { type: 'array', items: { type: 'string' } },
         allowedHostTools: { type: 'array', items: { type: 'string' } },
         autoReply: { type: 'boolean' },
+        senderId: { type: 'string' },
+        senderName: { type: 'string' },
+        isOperator: { type: 'boolean' },
         sessionId: { type: 'string' },
       },
       required: ['key', 'bound'],
@@ -434,7 +454,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
 
   const repoCreateIssue = define(
     'lane_repo_create_issue',
-    '在仓库新建 issue（默认关闭，需管理员开启）。只在问题已经定位清楚、用户也确认后使用；会自动带标记标签。',
+    '在仓库新建 issue（默认关闭，需管理员开启；且只允许本领域管理员调用）。只在问题已经定位清楚、用户也确认后使用；会自动带标记标签。非管理员要求提 issue 时，收集信息后用 lane_escalate 转人工。',
     {
       type: 'object',
       properties: {
@@ -445,7 +465,10 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
       required: ['title', 'body'],
       additionalProperties: false,
     },
-    async (args) => requireRepo().createIssue(args)
+    async (args) => {
+      requireOperator('新建 issue');
+      return requireRepo().createIssue(args);
+    }
   );
 
   const memoryRead = define(
@@ -479,7 +502,7 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
 
   const memoryAdd = define(
     'lane_memory_add',
-    '向当前领域的共享记忆追加一条短事实/经验（<=500 字）。适合记：用户反复报的问题、已确认的环境、有效的临时方案。不要记隐私、凭据、一次性闲聊。',
+    '向当前领域的共享记忆追加一条短事实/经验（<=500 字，仅管理员可调用）。适合记：用户反复报的问题、已确认的环境、有效的临时方案。不要记隐私、凭据、一次性闲聊。',
     {
       type: 'object',
       properties: {
@@ -491,6 +514,9 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
     async (args) => {
       const resolved = currentResolved();
       if (!resolved.memoryEnabled || !memoryStore) throw new Error('当前领域未启用共享记忆');
+      // Shared memory is domain-wide, so writing to it is an operator action:
+      // otherwise any member can pin a wrong "fact" that every chat inherits.
+      requireOperator('写入共享记忆');
       const result = memoryStore.append(resolved.domain.id, args.text, { source: `agent:${key}` });
       return { ok: true, domainId: resolved.domain.id, count: result.entries };
     },

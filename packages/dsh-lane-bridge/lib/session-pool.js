@@ -13,6 +13,7 @@ import {
   buildContextPrefix,
   conversationLabel,
   formatInboundText,
+  isOperator,
   resolveConversation,
   roleContent,
 } from './router.js';
@@ -84,6 +85,7 @@ export class SessionPool {
     this.configured = new Map(); // key -> { sessionId, signature, disposers }
     this.handles = new Map(); // key -> AgentHandle (resume-created only)
     this.turnSent = new Map(); // key -> count
+    this.turnSender = new Map(); // key -> { senderId, senderName, isOperator, at }
     this.keyBySession = new Map(); // sessionId -> key
   }
 
@@ -102,6 +104,16 @@ export class SessionPool {
 
   markTurnSent(key) {
     this.turnSent.set(key, (this.turnSent.get(key) ?? 0) + 1);
+  }
+
+  /**
+   * Who is speaking right now in this conversation. Set by prompt() before the
+   * turn is submitted, read by the lane_* tools to decide whether the caller is
+   * an operator. One session serves the whole group, so this must be per-turn,
+   * not stored on the session.
+   */
+  currentSender(key) {
+    return this.turnSender.get(key) ?? null;
   }
 
   consumeTurnSent(key) {
@@ -283,6 +295,7 @@ export class SessionPool {
       kind: inbound.kind,
       externalId: inbound.externalId,
       senderName: inbound.senderName,
+      senderIsOperator: isOperator(this.store.get(), key, inbound.senderId),
     });
     return { text: `${prefix}${formatInboundText(inbound)}`, injectedRole: needRole ? resolved.role : '', roleKey };
   }
@@ -314,6 +327,14 @@ export class SessionPool {
 
   async prompt(key, inbound) {
     const resolved = resolveConversation(this.store.get(), key);
+    // Remember who is speaking before the turn starts: the lane_* tools read
+    // this to gate operator-only actions.
+    this.turnSender.set(key, {
+      senderId: String(inbound?.senderId ?? ''),
+      senderName: String(inbound?.senderName ?? ''),
+      isOperator: isOperator(this.store.get(), key, inbound?.senderId),
+      at: Date.now(),
+    });
     const sessionId = await this.ensureSession(key, resolved);
     await this.startFollow(sessionId, key);
     await this.waitForAgentReady(sessionId, key);
