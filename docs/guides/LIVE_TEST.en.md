@@ -115,7 +115,12 @@ Common failures:
 
 1. Create a bot in the Discord Developer Portal, enable **Message Content
    Intent**, and invite it with `bot` + `applications.commands` scopes.
-2. Fill the bot token in the Discord channel card and enable the channel.
+2. The only credential needed is the **Bot Token** (Developer Portal → your app
+   → **Bot** page → `Reset Token`; it is shown once). Fill it in the Discord
+   channel card and enable the channel. The OAuth2 *Client ID / Client Secret*
+   and the General Information *Public Key* are **not** used: the former is for
+   authorization-code flows, the latter verifies HTTP interactions, and this
+   adapter uses the gateway websocket.
 3. Wait for **已连接**, then send a DM or a message in a bound guild channel.
 4. Recommended: enable **群聊里必须 @ 或回复机器人才响应** so the bot is not
    triggered by every guild message.

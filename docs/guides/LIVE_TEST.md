@@ -97,7 +97,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 ## 4. Discord
 
 1. 在 Discord Developer Portal 创建 bot，开启 **Message Content Intent**，用 `bot` + `applications.commands` scope 邀请。
-2. 在 Discord 渠道卡片填 bot token 并启用。
+2. 凭据只需要 **Bot Token**（开发者门户 → 你的应用 → **Bot** 页 → `Reset Token`，只显示一次），填进 Discord 渠道卡片并启用。OAuth2 页的「客户端 ID / 客户端密钥」和 General Information 页的「公钥」都不需要——前者是授权码流程用的，后者是 HTTP Interactions 验签用的，我们走的是网关长连接。
 3. 等 **已连接**，然后发 DM 或在已绑定频道发消息。
 4. 建议打开 **群聊里必须 @ 或回复机器人才响应**，避免每条服务器消息都触发。
 5. 服务器频道绑 `discord:group:<channelId>`；DM 绑 `discord:private:<userId>`。

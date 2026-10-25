@@ -69,7 +69,10 @@ connected" usually means SnowLuma is not running, or the WS port is wrong.
 3. In the **启动通道** card at the top, find **SnowLuma / QQ** and click
    **Start**. The pill should turn **已连接**. If not, the row shows the reason.
 4. For official QQ Bot / Discord: fill AppID+AppSecret / Bot Token, then click
-   **Start**. Click **Stop** for channels you do not use.
+   **Start**. Click **Stop** for channels you do not use. Discord takes exactly
+   one credential, the **Bot Token** (Developer Portal → your app → **Bot** page
+   → `Reset Token`); the OAuth2 client secret and the General Information public
+   key are not used.
 5. If it is started but still disconnected, click **Retry** or **Reconnect all**.
 
 > **Start/Stop** saves and reconnects immediately. The cards below are for
@@ -97,7 +100,8 @@ only a one-shot legacy migration script for moving an existing install.
   platform only pushes **@-mentions** in group chats (`GROUP_AT_MESSAGE_CREATE`),
   never ordinary group traffic, so keyword triggers cannot work there; use
   SnowLuma when you need every group message.
-- Discord adapter (`discord.js`; DM + guild channels, optional mention gate).
+- Discord adapter (`discord.js`; DM + guild channels, optional mention gate; the
+  only credential is a Bot Token).
 - Domain / binding model: one DSH session per group or private chat, with a
   domain-level role card, preset, model, KB scopes, and host-tool allow-list.
   Group attention policies are multi-select: mention/reply and keyword can be

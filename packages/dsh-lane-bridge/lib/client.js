@@ -500,7 +500,7 @@ window.__ModuleLoader__.load({
           ['appId', 'AppID', 'text'],
           ['appSecret', 'AppSecret', 'password'],
         ]],
-        ['discord', 'Discord', 'discord.js；需要开启 Message Content Intent', [
+        ['discord', 'Discord', 'discord.js；凭据只要 Bot Token（开发者门户 → 应用 → Bot 页 → Reset Token）', [
           ['token', 'Bot Token', 'password'],
         ]],
       ];
@@ -664,6 +664,13 @@ window.__ModuleLoader__.load({
                 })
               ))
             ),
+            id === 'discord' ? h('div', { className: 'lb-field' },
+              h('div', { className: 'lb-muted' },
+                '只有 Bot Token 这一项凭据，形如三段用点分开的长串。它不是 OAuth2 页的「客户端密钥」，也不是 General Information 页的「公钥」——这两个都用不上。'
+                + 'Token 只在 Bot 页的 Reset Token 里出现一次，重置后旧的立即失效。还要在 Bot 页打开 Message Content Intent（没开时收不到正文），'
+                + '并用 OAuth2 URL Generator 勾 bot + Send Messages / Read Message History / Attach Files 把机器人邀请进服务器。'
+              )
+            ) : null,
             id === 'discord' ? h('label', { className: 'lb-check' },
               h('input', {
                 type: 'checkbox',

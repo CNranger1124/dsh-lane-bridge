@@ -55,7 +55,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 1. 先自行启动 SnowLuma：双击 SnowLuma 目录里的 `launcher.bat`，或在目录里运行 `node index.mjs`；确认日志出现 `listening 127.0.0.1:3001`。插件不会代启动它（EULA 原因）。
 2. 打开 **Settings → IM 桥接 → 概览与通道**。
 3. 在页面顶部 **启动通道** 卡片里，找 **SnowLuma / QQ** 点 **启动**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
-4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点对应行的 **启动**；不需要的通道点 **停止**。
+4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点对应行的 **启动**；不需要的通道点 **停止**。Discord 只认 **Bot Token**（开发者门户 → 应用 → **Bot** 页 → `Reset Token`）：OAuth2 页的客户端密钥和 General Information 页的公钥都用不上。
 5. 已启动但连不上时，点 **重试连接** 或 **全部重连**。
 
 > **启动/停止** 会立即保存并重连；下面的通道卡片更适合改多个字段后统一「保存通道设置」。
@@ -73,7 +73,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 - 渠道适配器接口 + SnowLuma（OneBot v11）适配器（QQ）。
 - 官方 QQ Bot 适配器（实验性；需要 AppID/AppSecret）。群聊默认只推送 **@ 机器人**的消息（`GROUP_AT_MESSAGE_CREATE`）；机器人在开放平台开通「接收所有消息」后，平台会额外推送 `GROUP_MESSAGE_CREATE`（每条群消息），此时「关键词触发」可用。两个事件里 `mentions` 含义不同——全量模式下它包含被 @ 的**其他人**，桥接按机器人自己的 openid 判定是否真的被 @。
-- Discord 适配器（`discord.js`；私聊 + 服务器频道，可选 mention gate）。
+- Discord 适配器（`discord.js`；私聊 + 服务器频道，可选 mention gate；凭据只有一个 Bot Token）。
 - 领域/绑定模型：**会话 → 角色 → 领域**。会话只选角色，角色绑定领域，领域是基础设施（知识库 scope、共享记忆、仓库、管理者、触发策略）。领域级 preset（下拉选择，带作用说明）、模型、宿主工具白名单、**管理者白名单**（渠道下拉 + id，加号添加/减号移除；存成 `qqbot:8FD9…`，留空＝没有人是管理员）；群聊触发策略可多选（「@ 或回复」和「命中关键词」可同时生效，命中任意一条就回复；也可选「所有消息」或「关闭」）。
 - 共享角色卡库、共享知识库（`lane_kb_*`）、可选的领域共享记忆（`lane_memory_*`）。
 - **知识库草稿与人工审批**：`lane_kb_draft` 只写 `_待审/`；Settings 新增「知识库审批」页，采纳/丢弃后才影响检索。

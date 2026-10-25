@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 0.5.2
+
+- **The Discord card now says which credential to paste**: only the **Bot Token**
+  (Developer Portal → your app → Bot page → `Reset Token`). The card explains that
+  the OAuth2 client secret and the General Information public key are unused — the
+  former belongs to authorization-code flows, the latter verifies HTTP
+  interactions, and this adapter uses the gateway websocket. Mirrored into the
+  README and LIVE_TEST.
+- No behavior change; hints and docs only.
+
 ## 0.5.1
 
 - **Rename a document from the editor**: the edit card now has a "file name" field,
