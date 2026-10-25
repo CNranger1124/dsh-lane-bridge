@@ -2,6 +2,24 @@
 
 # Changelog
 
+## 0.2.15
+
+- **Role cards and the domain's extra instructions can branch on identity**:
+  `{{#if operator}}…{{else}}…{{/if}}` (`else` optional), with `group` / `private`
+  as extra conditions and `{{identity}}`, `{{sender}}`, `{{senderId}}`,
+  `{{channel}}`, `{{kind}}`, `{{externalId}}`, `{{domain}}`, `{{role}}` as
+  variables. No nesting, loops or expressions; a mistyped variable renders as
+  nothing instead of leaking braces into the prompt.
+- The prompt gained an explicit 「发言者身份：管理员／普通成员」 line next to the
+  operator marker, so both template conditions and the model have a clear basis.
+- Fix the cache problem this exposed: the role card is injected per `roleKey`, so
+  identity flips must re-inject it or two speakers share the first one's version.
+  `roleKey` now carries `admin`/`member`.
+- Restating the split: templates only change wording. Authorization (issue
+  creation, cross-conversation push, shared memory) stays in `tools.js` behind
+  the operator whitelist; "you are an administrator" in a card unlocks nothing.
+- 125 tests.
+
 ## 0.2.14
 
 - **Operator whitelist.** A domain's `operators` decides who administers the bot.

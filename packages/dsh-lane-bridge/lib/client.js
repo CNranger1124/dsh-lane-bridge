@@ -1007,7 +1007,10 @@ window.__ModuleLoader__.load({
                 h('input', { className: 'lb-input', value: (current.keywords ?? []).join(', '), onChange: (e) => patch('keywords', linesToArray(e.target.value)) })
               )
             ),
-            h(Field, { label: '领域附加说明', hint: '会追加在角色卡之前；可写产品口径/禁止事项' },
+            h(Field, {
+              label: '领域附加说明',
+              hint: '会追加在角色卡之前；可写产品口径/禁止事项。支持按身份分支：{{#if operator}}管理员看到这段{{else}}其他人看到这段{{/if}}；变量 {{identity}} {{sender}} {{channel}} {{kind}}',
+            },
               h('textarea', { className: 'lb-textarea', value: current.systemPrompt ?? '', onChange: (e) => patch('systemPrompt', e.target.value) })
             )
           ) : null
@@ -1131,6 +1134,10 @@ window.__ModuleLoader__.load({
                 },
               })
             )
+          ),
+          h('div', { className: 'lb-muted' },
+            '支持按身份分支（软约束，硬权限在「管理者白名单」）：{{#if operator}}管理员看这段{{else}}普通成员看这段{{/if}}；'
+            + '可用变量 {{identity}}（管理员/普通成员）、{{sender}}、{{senderId}}、{{channel}}、{{kind}}、{{domain}}、{{role}}；条件还可写 group / private'
           ),
           h('textarea', { className: 'lb-textarea lb-textarea--tall', value: current?.content ?? '', onChange: (e) => patch('content', e.target.value) }),
           h('div', { className: 'lb-footer' },

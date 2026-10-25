@@ -129,6 +129,44 @@ Rules that matter:
 - On an operator's turn the prompt carries
   "本次发言者：X（本领域管理员，可执行管理操作）" so the model knows.
 
+## Different wording per identity (templates)
+
+Role cards and the domain's extra instructions accept two tiny constructs so the
+same card can say different things to an administrator and to a member:
+
+```md
+## Permissions
+{{#if operator}}
+This speaker is an administrator: internal roadmaps, repo branches and config
+are fair game; creating an issue is allowed.
+{{else}}
+This speaker is an ordinary member: no internal details, no schedule promises;
+gather the facts and escalate with lane_escalate.
+{{/if}}
+
+Identity: {{identity}} | from: {{kind}} | channel: {{channel}}
+```
+
+- Variables: `{{identity}}` (管理员/普通成员), `{{sender}}`, `{{senderId}}`,
+  `{{channel}}`, `{{kind}}`, `{{externalId}}`, `{{domain}}`, `{{role}}`.
+- Conditions: `operator`, `group`, `private`, written as
+  `{{#if cond}}A{{else}}B{{/if}}`; `else` is optional (nothing renders when the
+  condition is false).
+- No nesting, loops or expressions — a role card is prose. A mistyped variable
+  renders as nothing instead of leaking `{{…}}` into the prompt.
+- Re-rendered on every turn; the role card is re-injected when the speaker flips
+  between administrator and member, so one person's version never sticks.
+
+**Keep the two layers apart**:
+
+| | Mechanism | Strength |
+| --- | --- | --- |
+| "may this happen" | domain operator whitelist + `repoEnabled` / `kbDraftEnabled`, enforced in `lane_*` tools | hard, prompt injection cannot override |
+| "how should it be phrased" | `{{#if operator}}` in the role card / domain prompt | soft, the model can be talked around |
+
+If ordinary members must not obtain some information at all, do not rely on the
+prompt — put it in another domain with another knowledge scope.
+
 ## Migrating from `qq-bridge`
 
 ```sh

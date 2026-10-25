@@ -180,6 +180,8 @@ test('domain cards expose a save button in the header and footer', async () => {
   assert.ok(text.includes('管理者（白名单）'), text.join(' '));
   assert.ok(text.some((line) => line.includes('qqbot:') && line.includes('snowluma:')), text.join(' '));
   assert.ok(text.some((line) => line.includes('* ＝所有人')), text.join(' '));
+  // The domain prompt field documents the identity template syntax.
+  assert.ok(text.some((line) => line.includes('{{#if operator}}')), text.join(' '));
   delete globalThis.window;
   delete globalThis.document;
   delete globalThis.__laneBundle;

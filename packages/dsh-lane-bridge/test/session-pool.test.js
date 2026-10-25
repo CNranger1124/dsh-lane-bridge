@@ -434,6 +434,29 @@ test('a whitelisted sender is marked as administrator in the prompt', async () =
   }
 });
 
+test('alternating speakers re-inject the role card so identity branches stay correct', async () => {
+  const env = await setup();
+  try {
+    await env.store.setDomains([{ ...defaultDomain(), operators: ['snowluma:123'] }]);
+    const say = (senderId, senderName) => env.pool.prompt('snowluma:group:1', {
+      channel: 'snowluma', kind: 'group', externalId: '1', senderId, senderName, text: '你好',
+    });
+    await say('456', '路人');
+    await say('123', '小明');
+    await say('456', '路人');
+    const cards = env.prompts.map((prompt) => prompt.content[0].text);
+    // Every turn flips identity, so the (potentially branch-y) role card must be
+    // re-injected each time instead of being cached from the first speaker.
+    for (const text of cards) assert.match(text, /【角色卡：客服】/u);
+    assert.match(cards[0], /发言者身份：普通成员/u);
+    assert.match(cards[1], /发言者身份：管理员/u);
+    assert.match(cards[2], /发言者身份：普通成员/u);
+  } finally {
+    await env.pool.stop();
+    cleanup(env.dir);
+  }
+});
+
 test('reset forgets the session mapping so the next message starts fresh', async () => {
   const env = await setup();
   try {

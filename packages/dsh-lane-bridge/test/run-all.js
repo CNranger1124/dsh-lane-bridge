@@ -5,6 +5,7 @@
 // reports pass/fail and exits non-zero on failure.
 import './manifest.test.js';
 import './router.test.js';
+import './template.test.js';
 import './store.test.js';
 import './knowledge.test.js';
 import './memory.test.js';

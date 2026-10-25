@@ -202,4 +202,34 @@ test('the prompt marks an operator and stays quiet for everyone else', () => {
   };
   assert.match(buildContextPrefix(base), /本次发言者：小明\n/u);
   assert.match(buildContextPrefix({ ...base, senderIsOperator: true }), /本次发言者：小明（本领域管理员，可执行管理操作）/u);
+  // The identity line is what template blocks and the model can both rely on.
+  assert.match(buildContextPrefix(base), /发言者身份：普通成员/u);
+  assert.match(buildContextPrefix({ ...base, senderIsOperator: true }), /发言者身份：管理员/u);
+});
+
+test('role cards and domain prompts can branch on the speaker identity', () => {
+  const resolved = {
+    domain: { name: '默认客服', systemPrompt: '口径：{{#if operator}}可以报价{{else}}只说价格以后再谈{{/if}}' },
+    role: '客服',
+  };
+  const roleText = '## 权限\n{{#if operator}}可以建 issue{{else}}只收集信息{{/if}}';
+  const base = { resolved, roleText, memoryText: '', channel: 'qqbot', kind: 'group', externalId: 'G1', senderName: '小明', senderId: '8FD9' };
+
+  const admin = buildContextPrefix({ ...base, senderIsOperator: true });
+  assert.match(admin, /口径：可以报价/u);
+  assert.match(admin, /可以建 issue/u);
+  assert.doesNotMatch(admin, /只收集信息/u);
+  assert.doesNotMatch(admin, /只说价格以后再谈/u);
+  assert.match(admin, /发言者身份：管理员/u);
+
+  const member = buildContextPrefix({ ...base, senderIsOperator: false });
+  assert.match(member, /口径：只说价格以后再谈/u);
+  assert.match(member, /只收集信息/u);
+  assert.doesNotMatch(member, /可以建 issue/u);
+  assert.doesNotMatch(member, /可以报价/u);
+  assert.match(member, /发言者身份：普通成员/u);
+
+  // Group / private is branchable too, and no literal braces reach the model.
+  assert.doesNotMatch(admin, /\{\{/u);
+  assert.match(buildContextPrefix({ ...base, kind: 'private', senderIsOperator: false }), /口径：/u);
 });

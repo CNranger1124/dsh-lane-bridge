@@ -280,9 +280,13 @@ export class SessionPool {
     const state = this.store.get();
     const record = state.sessions?.[key];
     const roleText = roleContent(state, resolved.role);
+    const senderIsOperator = isOperator(state, key, inbound.senderId);
     // Include a short content hash: editing a role card must re-inject it even
-    // when the name did not change.
-    const roleKey = `${resolved.role}:${crypto.createHash('sha1').update(roleText).digest('hex').slice(0, 10)}`;
+    // when the name did not change. The identity suffix matters because a role
+    // card may branch on `{{#if operator}}`: the same card renders differently
+    // for an administrator, so changing speaker must re-inject it.
+    const roleKey = `${resolved.role}:${crypto.createHash('sha1').update(roleText).digest('hex').slice(0, 10)}`
+      + `:${senderIsOperator ? 'admin' : 'member'}`;
     const needRole = record?.roleKey !== roleKey;
     const memoryText = resolved.memoryEnabled && this.memoryStore
       ? this.memoryStore.render(resolved.domain?.id, resolved.memoryMaxChars)
@@ -295,7 +299,8 @@ export class SessionPool {
       kind: inbound.kind,
       externalId: inbound.externalId,
       senderName: inbound.senderName,
-      senderIsOperator: isOperator(this.store.get(), key, inbound.senderId),
+      senderId: inbound.senderId,
+      senderIsOperator,
     });
     return { text: `${prefix}${formatInboundText(inbound)}`, injectedRole: needRole ? resolved.role : '', roleKey };
   }

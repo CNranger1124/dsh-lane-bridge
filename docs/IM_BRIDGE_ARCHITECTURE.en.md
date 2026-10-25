@@ -127,9 +127,27 @@ A group shares one DSH session, so "who said this" can only be scoped to a
   the current conversation, and `lane_memory_add`. Everything else (multi-bubble
   replies in the same chat, KB drafts, human escalation) stays open to everyone.
 - On an operator's turn the prompt prefix says
-  「本次发言者：X（本领域管理员，可执行管理操作）」.
+  「本次发言者：X（本领域管理员，可执行管理操作）」 plus an explicit
+  「发言者身份：管理员／普通成员」 line.
 - `conversations[key].senders` keeps the last 10 participants per conversation
   (`channel:id` plus nickname) so the settings page can offer one-click copy.
+
+### Identity branching in prompts (soft layer)
+
+Role cards and `domain.systemPrompt` run through `renderTemplate()`
+(`lib/template.js`) before injection: `{{identity}}` and friends, plus
+`{{#if operator}}…{{else}}…{{/if}}`. The render context and `isOperator()` share
+one source, so the identity the prompt sees can never disagree with the identity
+the tool gate checks.
+
+Two constraints worth remembering:
+
+- Rendering happens once, inside `buildContextPrefix()`, and `roleKey` carries an
+  `admin`/`member` suffix, so flipping identity re-injects the role card —
+  otherwise the cache would hand the first speaker's version to everyone.
+- Templates only change wording. Authorization still happens exclusively in
+  `tools.js`'s `requireOperator()`; writing "you are an administrator" in a card
+  does not unlock a tool.
 
 This is still *channel identity*, not strong authentication: the SnowLuma QQ
 number is only as trustworthy as the OneBot gateway, whereas openids are issued

@@ -1,6 +1,7 @@
 // Pure conversation/domain resolution. No fs, no DSH, no timers: the host and
 // the tests share exactly one implementation.
 import { isOperatorId, normalizeOperators, normalizeTriggers, parseConversationKey } from './defaults.js';
+import { renderTemplate } from './template.js';
 
 export function findDomain(state, id) {
   const domains = Array.isArray(state?.domains) ? state.domains : [];
@@ -125,16 +126,35 @@ export function conversationLabel(state, key) {
 }
 
 /** Render the first-turn context: domain + role card + channel facts. */
-export function buildContextPrefix({ resolved, roleText, memoryText, channel, kind, externalId, senderName, senderIsOperator }) {
+export function buildContextPrefix({
+  resolved, roleText, memoryText, channel, kind, externalId, senderName, senderId, senderIsOperator,
+}) {
+  const isGroup = kind !== 'private';
+  // Everything a role card / domain prompt may branch on. Rendered once here so
+  // both text sources see exactly the same view of "who is speaking".
+  const templateContext = {
+    operator: senderIsOperator === true,
+    group: isGroup,
+    private: !isGroup,
+    identity: senderIsOperator === true ? '管理员' : '普通成员',
+    sender: senderName || '',
+    senderId: senderId || '',
+    channel: channel || '',
+    kind: isGroup ? '群聊' : '私聊',
+    externalId: externalId || '',
+    domain: resolved?.domain?.name ?? '',
+    role: resolved?.role ?? '',
+  };
   const lines = [];
   lines.push('【IM 会话】');
-  lines.push(`渠道：${channel}；类型：${kind === 'private' ? '私聊' : '群聊'}；会话 id：${externalId}`);
+  lines.push(`渠道：${channel}；类型：${isGroup ? '群聊' : '私聊'}；会话 id：${externalId}`);
   if (senderName) lines.push(`本次发言者：${senderName}${senderIsOperator ? '（本领域管理员，可执行管理操作）' : ''}`);
+  lines.push(`发言者身份：${templateContext.identity}`);
   if (resolved?.domain?.name) lines.push(`当前领域：${resolved.domain.name}`);
   if (resolved?.domain?.systemPrompt) {
     lines.push('');
     lines.push('【领域附加说明】');
-    lines.push(String(resolved.domain.systemPrompt).trim());
+    lines.push(renderTemplate(String(resolved.domain.systemPrompt), templateContext).trim());
   }
   if (memoryText) {
     lines.push('');
@@ -145,7 +165,7 @@ export function buildContextPrefix({ resolved, roleText, memoryText, channel, ki
   if (roleText) {
     lines.push('');
     lines.push(`【角色卡：${resolved?.role ?? ''}】`);
-    lines.push(String(roleText).trim());
+    lines.push(renderTemplate(String(roleText), templateContext).trim());
   }
   lines.push('');
   lines.push('【用户消息】');

@@ -105,8 +105,17 @@ adapter.onMessage(cb)                 // cb({ channel, kind, externalId, senderI
 - 领域里有 `operators: string[]`，写法是 `渠道:id`（`qqbot:8FD9…`、`snowluma:123456789`、`discord:123…`）、纯 id（任意渠道）或 `*`（所有人）。`渠道` 必须与会话 key 的前缀一致。**空数组＝没有人是管理员**。
 - `SessionPool.prompt()` 在提交回合前把 `{ senderId, senderName, isOperator }` 记到 `turnSender[key]`；`lane_*` 工具通过 `pool.currentSender(key)` 读取，所以上一位发言者的权限不会漏给下一位。
 - 受限动作：`lane_repo_create_issue`、`lane_send` 的跨会话目标、`lane_memory_add`。其余（本会话多条气泡、KB 草稿、转人工）对所有人生效。
-- 管理员那一轮的提示词前缀会带「本次发言者：X（本领域管理员，可执行管理操作）」。
+- 管理员那一轮的提示词前缀会带「本次发言者：X（本领域管理员，可执行管理操作）」和「发言者身份：管理员／普通成员」。
 - `conversations[key].senders` 记录每个会话最近的 10 位成员（`渠道:id` + 昵称），供设置页一键复制填白名单。
+
+### 提示词按身份分支（软层）
+
+角色卡和 `domain.systemPrompt` 在注入前会过一遍 `renderTemplate()`（`lib/template.js`），支持 `{{identity}}` 等变量和 `{{#if operator}}…{{else}}…{{/if}}` 块。渲染上下文与 `isOperator()` 同源，所以提示词里看到的身份与工具门禁看到的身份不可能不一致。
+
+两条约束值得记住：
+
+- 模板只在 `buildContextPrefix()` 里渲染一次，`roleKey` 里带了 `admin`/`member` 后缀，因此身份切换会重新注入角色卡——否则缓存会把第一个发言者的版本留给所有人。
+- 模板能改的只是“说法”。权限判断仍然只发生在 `tools.js` 的 `requireOperator()`，模板里写“你是管理员”不会让工具放行。
 
 注意这仍是**渠道身份**，不是强认证：SnowLuma 的 QQ 号可信度取决于 OneBot 网关；openid 由官方平台签发，才具备跨会话唯一性。
 
