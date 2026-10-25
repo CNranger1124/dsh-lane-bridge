@@ -113,7 +113,7 @@ only a one-shot legacy migration script for moving an existing install.
   domains, roles, KB, approval, and push, sharing one state.
 - The top **启动通道** card has Start/Stop/Retry per channel plus View logs, with
   actionable connection hints (for example, "SnowLuma is not running").
-- Every channel card has its own Save button; every module collapses from its
+- Every module header has its own Save button; every module collapses from its
   title row.
 - The save bar is sticky at the bottom of the page, so Save is always visible.
 - Inbound image understanding: safe image download (SSRF/byte caps) + multimodal
@@ -131,18 +131,20 @@ installation details.
 
 ## Status
 
-`0.2.3` makes GitHub repos a global default with per-domain overrides, lists every
-repo visible to the account in the dropdown, adds per-channel Save buttons, and
-makes every module collapsible. `0.2.2` ports the legacy GitHub read-only tools
-and KB draft approval, and adds explicit channel launch buttons, channel logs,
-and a sticky save bar. The legacy
+`0.2.4` adds an explicit Save button to every module header and fixes fresh
+sessions being prompted before their inbox projection was ready, which sent only
+the apology and never produced a model reply. `0.2.3` makes GitHub repos a global
+default with per-domain overrides, lists every repo visible to the account in the
+dropdown, adds per-channel Save buttons, and makes every module collapsible.
+`0.2.2` ports the legacy GitHub read-only tools and KB draft approval, and adds
+explicit channel launch buttons, channel logs, and a sticky save bar. The legacy
 standalone `qq-bridge` project still has features the plugin does not yet port:
 group slang learning, sticker library, voice messages, cost conversion, and the
 simulation scheduler. The architecture doc tracks the migration.
 
-The code, tests, and package are complete; **live DSH installation and real
-SnowLuma / QQ Bot / Discord traffic are not verified yet**. Use
-[LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
+The code, tests, and package are complete; real DSH / official QQ Bot acceptance
+is in progress, while SnowLuma / Discord end-to-end traffic is not verified yet.
+Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
 
 ## Credits
 

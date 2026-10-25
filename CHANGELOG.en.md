@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.2.4
+
+- Every module header now has an **explicit Save button** (domains, bindings,
+  general, GitHub, each channel, role card, memory, knowledge), so saving no
+  longer depends on the bottom bar. The domain card has Save in its title row.
+- Fix a freshly created session being prompted before its inbox projection was
+  active, which surfaced as `session/agent-busy` and sent only the apology
+  without a model reply. The bridge now waits for projection readiness and
+  retries that transient failure.
+- Bridge failures (turn submission, tool registration, etc.) now appear in the
+  channel **View logs** panel instead of only in the host console.
+- Ignore late `disconnected` events from a replaced adapter so they cannot
+  overwrite the live `connected` status.
+- Test suite grows to 97.
+
 ## 0.2.3
 
 - GitHub is now a **global default plus per-domain overrides**: each domain can

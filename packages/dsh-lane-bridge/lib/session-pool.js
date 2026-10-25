@@ -19,6 +19,22 @@ import {
 import { publicError, splitText, stripMarkdown } from './text.js';
 import { fetchImage } from './media.js';
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function promptErrorText(error) {
+  return [
+    error?.code ?? '',
+    error?.message ?? '',
+    error?.details?.reason ?? '',
+  ].filter(Boolean).join(' ');
+}
+
+function isTransientProjectionError(error) {
+  const text = promptErrorText(error);
+  return /inbox|projection|not active|not registered|not ready/iu.test(text)
+    || String(error?.code ?? '') === 'session/agent-busy';
+}
+
 function normalizeFollowRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const outer = raw.event && typeof raw.event === 'object' ? raw.event : raw;
@@ -207,6 +223,28 @@ export class SessionPool {
     }
   }
 
+  /**
+   * A freshly created Agent can be published a tick before its inbox
+   * projection is active. Prompting in that window is rejected as
+   * `session/agent-busy`, and the message is never recorded. Wait briefly for
+   * the projection to answer before submitting.
+   */
+  async waitForAgentReady(sessionId, key = '') {
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const agent = this.ctx.agents.get(sessionId);
+      if (agent) {
+        try {
+          if (typeof agent.inbox?.current === 'function') agent.inbox.current();
+          return true;
+        } catch {}
+      }
+      await sleep(50);
+    }
+    this.logger?.warn?.(`[lane-bridge] ${key} 会话 ${sessionId.slice(0, 8)} 投影仍未就绪，继续尝试提交`);
+    return false;
+  }
+
   /** Build the prompt text, injecting the role card on first turn / role change. */
   async buildPrompt(key, inbound, resolved) {
     const state = this.store.get();
@@ -260,6 +298,7 @@ export class SessionPool {
     const resolved = resolveConversation(this.store.get(), key);
     const sessionId = await this.ensureSession(key, resolved);
     await this.startFollow(sessionId, key);
+    await this.waitForAgentReady(sessionId, key);
     await this.applyModel(sessionId, resolved);
     const { text, injectedRole, roleKey } = await this.buildPrompt(key, inbound, resolved);
     const content = await this.buildContent(text, inbound);
@@ -269,14 +308,28 @@ export class SessionPool {
       mode: 'queue',
       content: parts,
     });
+    const submitWithRetry = async (parts) => {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          return await submit(parts);
+        } catch (error) {
+          if (attempt < 2 && isTransientProjectionError(error)) {
+            this.logger?.warn?.(`[lane-bridge] ${key} 提交被会话投影拒绝，等待后重试：${promptErrorText(error)}`);
+            await sleep(250 * (attempt + 1));
+            continue;
+          }
+          throw error;
+        }
+      }
+    };
     try {
       try {
-        await submit(content);
+        await submitWithRetry(content);
       } catch (error) {
         const code = String(error?.code ?? '');
         if (content.length > 1 && code.includes('attachment-invalid')) {
           this.logger?.warn?.(`[lane-bridge] ${key} 模型不接受图片，改为纯文本重试：${error?.message ?? error}`);
-          await submit([{ type: 'text', text }]);
+          await submitWithRetry([{ type: 'text', text }]);
         } else {
           throw error;
         }
@@ -301,6 +354,8 @@ export class SessionPool {
         this.logger?.warn?.(`[lane-bridge] 会话 ${sessionId.slice(0, 8)} 不可用，重建后重试一次`);
         await this.store.setSession(key, null);
         const fresh = await this.ensureSession(key, resolved);
+        await this.startFollow(fresh, key);
+        await this.waitForAgentReady(fresh, key);
         await this.ctx.sessionController.prompt({
           requestId: crypto.randomUUID(),
           sessionId: fresh,

@@ -56,7 +56,7 @@ function eventQueue() {
   };
 }
 
-async function setup({ existingSession = '', repo = null } = {}) {
+async function setup({ existingSession = '', repo = null, promptImpl = null } = {}) {
   const dir = tempDir();
   const store = new LaneStore({ dataDir: dir });
   await store.load();
@@ -83,6 +83,7 @@ async function setup({ existingSession = '', repo = null } = {}) {
       },
       prompt: async (request) => {
         prompts.push(request);
+        if (promptImpl) return promptImpl(request);
         return { accepted: true };
       },
       selectModel: async () => ({}),
@@ -206,6 +207,28 @@ test('repo tools use the current domain repository and branch', async () => {
     const result = await agent.tools.get('lane_repo_list_issues').execute({}, {});
     assert.deepEqual(result.issues, []);
     assert.deepEqual(calls.at(-1), { repo: 'studio/game', branch: 'dev' });
+  } finally {
+    cleanup(env.dir);
+  }
+});
+
+test('prompt retries once when the inbox projection is not active yet', async () => {
+  let attempts = 0;
+  const env = await setup({
+    promptImpl: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw Object.assign(new Error('prompt rejected'), {
+          code: 'session/agent-busy',
+          details: { reason: 'agent inbox projection is not active' },
+        });
+      }
+      return { accepted: true };
+    },
+  });
+  try {
+    await env.pool.prompt('snowluma:group:1', { channel: 'snowluma', kind: 'group', externalId: '1', senderName: '小明', text: '你好' });
+    assert.equal(attempts, 2);
   } finally {
     cleanup(env.dir);
   }

@@ -96,6 +96,11 @@ export class ChannelManager {
           }
         });
         adapter.on('status', (status) => {
+          // A stopped adapter can emit a late disconnect after its replacement
+          // has already connected. Ignore events from anything but the current
+          // adapter, otherwise a stale "disconnected" overwrites the live
+          // status and the UI looks offline while the bot is actually online.
+          if (this.adapters.get(id) !== adapter) return;
           this.statuses.set(id, { ...status, enabled: true, label: CHANNEL_LABELS[id], lastEventAt: adapter.state.lastEventAt });
           if (status?.lastError) this.logger.warn(`[${id}] ${status.lastError}`);
           else if (status?.connected) this.logger.info(`[${id}] 已连接`);

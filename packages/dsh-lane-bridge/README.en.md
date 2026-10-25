@@ -70,7 +70,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   `gh auth login`), token redaction, path guards, ETag cache. Issue creation is
   off by default.
 - **Channel launcher**: Start/Stop/Retry and View logs per channel at the top,
-  with an actionable reason when disconnected. Each channel card has its own
+  with an actionable reason when disconnected. Every module header has its own
   Save button, every module collapses, and the save bar is sticky.
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as

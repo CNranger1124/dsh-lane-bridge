@@ -293,7 +293,10 @@ window.__ModuleLoader__.load({
             ? h('div', { className: 'lb-muted' }, '还没有日志。点「全部重连」后再看。')
             : h('pre', { className: 'lb-log' }, ...logs.slice(0, 120).map((line) => `${new Date(line.at).toLocaleTimeString()} ${String(line.level).toUpperCase()} ${line.text}\n`))
         ) : null,
-        h(Card, { title: '通用' },
+        h(Card, {
+          title: '通用',
+          extra: h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: () => void save('已保存通用设置') }, busy ? '保存中…' : '保存通用设置'),
+        },
           h('div', { className: 'lb-grid' },
             h(Field, { label: '插件启用' },
               h('label', { className: 'lb-check' },
@@ -376,7 +379,12 @@ window.__ModuleLoader__.load({
                 className: `lb-btn ${entry.enabled ? 'lb-btn--danger' : 'lb-btn--primary'}`,
                 disabled: busy,
                 onClick: () => void toggleChannel(id, !entry.enabled),
-              }, entry.enabled ? '停止' : '启动')
+              }, entry.enabled ? '停止' : '启动'),
+              h('button', {
+                className: 'lb-btn',
+                disabled: busy,
+                onClick: () => void save(`已保存 ${label} 设置`),
+              }, busy ? '保存中…' : '保存')
             ),
           },
             h('div', { className: 'lb-muted' }, hint),
@@ -414,7 +422,13 @@ window.__ModuleLoader__.load({
             )
           );
         }),
-        h(Card, { title: 'GitHub 仓库（可选）', extra: data.github?.repo ? h('span', { className: 'lb-mono lb-muted' }, data.github.repo) : null },
+        h(Card, {
+          title: 'GitHub 仓库（可选）',
+          extra: h('div', { className: 'lb-actions' },
+            data.github?.repo ? h('span', { className: 'lb-mono lb-muted' }, data.github.repo) : null,
+            h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: () => void save('已保存 GitHub 设置') }, busy ? '保存中…' : '保存 GitHub 设置')
+          ),
+        },
           h('div', { className: 'lb-muted' }, '给客服一个只读的远程仓库入口：查 issue、读文件、搜代码、看最近提交。这里填的是全局默认仓库；每个领域可以在「领域」里覆盖成不同仓库。token 不会回显。'),
           h('div', { className: 'lb-grid' },
             h(Field, { label: '启用' },
@@ -575,7 +589,13 @@ window.__ModuleLoader__.load({
         setManual('');
       };
       return h('div', { className: 'lb-root' },
-        h(Card, { title: '已发现的会话', extra: h('span', { className: 'lb-muted' }, `${conversations.length} 个`) },
+        h(Card, {
+          title: '已发现的会话',
+          extra: h('div', { className: 'lb-actions' },
+            h('span', { className: 'lb-muted' }, `${conversations.length} 个`),
+            h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存绑定')
+          ),
+        },
           h('div', { className: 'lb-muted' }, '未绑定的会话只会被记录，不会触发模型。绑定后会为它创建一个 DSH 会话。'),
           h('div', { style: { overflowX: 'auto' } },
             h('table', { className: 'lb-table' },
@@ -716,7 +736,10 @@ window.__ModuleLoader__.load({
               onClick: () => setSelected(domain.id),
             }, h('span', null, domain.name || domain.id), h('span', { className: 'lb-mono lb-muted' }, domain.id)))
           ),
-          current ? h(Card, { title: `领域：${current.name || current.id}` },
+          current ? h(Card, {
+            title: `领域：${current.name || current.id}`,
+            extra: h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存领域'),
+          },
             h('div', { className: 'lb-grid' },
               h(Field, { label: '名称' }, h('input', { className: 'lb-input', value: current.name, onChange: (e) => patch('name', e.target.value) })),
               h(Field, { label: 'ID', hint: '只读（绑定用它）' }, h('input', { className: 'lb-input', value: current.id, readOnly: true })),
@@ -937,7 +960,8 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'lb-root' },
         h(Card, { title: '共享角色卡', extra: h('div', { className: 'lb-actions' },
           h('button', { className: 'lb-btn', onClick: add }, '+ 新建'),
-          h('button', { className: 'lb-btn lb-btn--danger', onClick: remove }, '删除')
+          h('button', { className: 'lb-btn lb-btn--danger', onClick: remove }, '删除'),
+          h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存角色卡')
         ) },
           h('div', { className: 'lb-grid' },
             h(Field, { label: '角色名' },
@@ -967,7 +991,10 @@ window.__ModuleLoader__.load({
             h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存角色卡')
           )
         ),
-        h(Card, { title: '领域共享记忆', extra: h('button', { className: 'lb-btn', onClick: () => loadMemory(memDomain) }, '刷新') },
+        h(Card, { title: '领域共享记忆', extra: h('div', { className: 'lb-actions' },
+          h('button', { className: 'lb-btn', onClick: () => loadMemory(memDomain) }, '刷新'),
+          h('button', { className: 'lb-btn lb-btn--primary', onClick: saveMemory }, '保存记忆')
+        ) },
           h('div', { className: 'lb-muted' }, '同一领域下的群/私聊共享；每行一条，模型可通过 lane_memory_add 追加。与知识库冲突时以知识库为准。'),
           h('div', { className: 'lb-grid' },
             h(Field, { label: '领域' },
@@ -984,7 +1011,10 @@ window.__ModuleLoader__.load({
             h('button', { className: 'lb-btn lb-btn--primary', onClick: saveMemory }, '保存记忆')
           )
         ),
-        h(Card, { title: '共享知识库', extra: h('button', { className: 'lb-btn', onClick: loadKb }, '刷新') },
+        h(Card, { title: '共享知识库', extra: h('div', { className: 'lb-actions' },
+          h('button', { className: 'lb-btn', onClick: loadKb }, '刷新'),
+          kbFile ? h('button', { className: 'lb-btn lb-btn--primary', onClick: saveKb }, '保存文档') : null
+        ) },
           h('div', { className: 'lb-muted' }, `目录：${data.paths?.dataDir ?? ''}/knowledge（Markdown / TXT；按 scope 分目录）`),
           kbError ? h('div', { className: 'lb-error' }, kbError) : null,
           kb ? h('div', null,
@@ -1243,7 +1273,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'lb-head' },
           h('div', null,
             h('h2', { className: 'lb-title' }, 'IM 桥接'),
-            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。每个模块可点标题折叠；通道、GitHub、领域都有各自的保存按钮，页面底部也有固定的保存栏。')
+            h('p', { className: 'lb-sub' }, 'QQ / 官方 QQ Bot / Discord 共用一个客服层：领域、角色卡、知识库与统一推送。每个模块可点标题折叠，标题栏有独立保存按钮，页面底部也有固定保存栏。')
           ),
           h('button', { className: 'lb-btn', onClick: load }, '刷新')
         ),
@@ -1342,7 +1372,7 @@ window.__ModuleLoader__.load({
 
     const exportsObject = { name, inject, apply };
     if (globalThis.__LANE_TEST__) {
-      exportsObject.__components = { Card, Conversations, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
+      exportsObject.__components = { Card, Conversations, Domains, KbDrafts, LanePanel, LaneSettings, LaneSidebar };
     }
     return exportsObject;
   },

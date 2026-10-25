@@ -127,6 +127,57 @@ test('cards render a collapsible header with an explicit toggle', async () => {
   delete globalThis.__LANE_TEST__;
 });
 
+test('domain cards expose a save button in the header and footer', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class { constructor(props) { this.props = props; this.state = {}; } setState() {} },
+  };
+  globalThis.document = { getElementById: () => ({ remove() {} }), createElement: () => ({}), head: { appendChild() {} } };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?domains');
+  const { Domains } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: { defaultDomainId: 'default', github: { repo: 'owner/repo' } },
+      domains: [{
+        id: 'default', name: '默认客服', role: '客服', preset: 'lane-support', model: '',
+        knowledgeScopes: ['default'], allowedHostTools: [], autoReply: true, trigger: 'all',
+        keywords: [], memoryEnabled: false, memoryMaxChars: 2000, kbDraftEnabled: true,
+        repoEnabled: true, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
+      }],
+      roles: [{ name: '客服', content: '' }],
+    },
+  };
+  const tree = Domains({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  assert.ok(text.filter((line) => line === '保存领域').length >= 2, text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
 test('empty conversation list renders a placeholder instead of throwing', async () => {
   globalThis.__LANE_TEST__ = true;
   const react = {

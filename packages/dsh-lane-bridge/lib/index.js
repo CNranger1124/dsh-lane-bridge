@@ -72,11 +72,12 @@ export async function apply(ctx, config = {}) {
   });
 
   let pool = null;
+  const runtimeLogger = channelManager.logger ?? logger;
   const dispatchReply = createReplyDispatcher({
     store,
     channels: channelManager,
     consumeSent: (key) => pool?.consumeTurnSent(key) ?? 0,
-    logger,
+    logger: runtimeLogger,
   });
   pool = new SessionPool({
     ctx,
@@ -87,7 +88,7 @@ export async function apply(ctx, config = {}) {
     memoryStore,
     usageStore,
     repo,
-    logger,
+    logger: runtimeLogger,
     onTurnEnd: dispatchReply,
   });
 
@@ -95,7 +96,7 @@ export async function apply(ctx, config = {}) {
     try {
       await channelManager.sendKey(key, ['抱歉，我这边处理这条消息时出错了，请稍后再试。']);
     } catch (error) {
-      logger.warn?.(`[lane-bridge] ${key} 错误提示发送失败：${error?.message ?? error}`);
+      runtimeLogger.warn?.(`[lane-bridge] ${key} 错误提示发送失败：${error?.message ?? error}`);
     }
   }
 
@@ -105,13 +106,14 @@ export async function apply(ctx, config = {}) {
       if (stopped) return;
       try {
         await pool.prompt(key, message);
-        logger.debug?.(`[lane-bridge] ${key} -> 会话已接受`);
+        runtimeLogger.debug?.(`[lane-bridge] ${key} -> 会话已接受`);
       } catch (error) {
-        logger.warn?.(`[lane-bridge] ${key} 提交回合失败：${publicError(error)}`);
+        const reason = error?.details?.reason ? `（${String(error.details.reason).slice(0, 300)}）` : '';
+        runtimeLogger.warn?.(`[lane-bridge] ${key} 提交回合失败 [${error?.code ?? 'error'}]：${publicError(error)}${reason}`);
         await sendApology(key);
       }
     },
-    logger,
+    logger: runtimeLogger,
   });
 
   async function handleInbound(message) {
