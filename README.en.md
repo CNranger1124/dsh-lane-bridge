@@ -46,7 +46,9 @@ only a one-shot legacy migration script for moving an existing install.
 - Tests for the store, resolver, route handlers, and the plugin harness.
 
 See [docs/IM_BRIDGE_ARCHITECTURE.en.md](./docs/IM_BRIDGE_ARCHITECTURE.en.md) for the
-architecture and migration plan.
+architecture and migration plan, and
+[docs/guides/PUBLISHING.en.md](./docs/guides/PUBLISHING.en.md) for publishing and
+installation details.
 
 ## Install (after publishing)
 

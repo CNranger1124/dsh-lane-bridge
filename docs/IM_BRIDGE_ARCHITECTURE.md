@@ -181,7 +181,7 @@ dsh plugin --profile web add dsh-lane-bridge@<新版本>
 - `dsh-lane-bridge` host 行（带 `inject` services）；
 - `lane-support` agent preset 行（persona，无内置工具）。
 
-没有第二个进程、没有端口、没有控制台 token。升级插件不会碰 `state.json`、角色或知识库。
+没有第二个进程、没有端口、没有控制台 token。升级插件不会碰 `state.json`、角色或知识库。发布/安装细节见 [guides/PUBLISHING.md](./guides/PUBLISHING.md)。
 
 ## 10. 验证状态
 

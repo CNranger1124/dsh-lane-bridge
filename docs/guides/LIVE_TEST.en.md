@@ -19,6 +19,8 @@ For a local checkout:
 dsh plugin --profile web add link:/absolute/path/to/repo/packages/dsh-lane-bridge
 ```
 
+Publishing/install details: [PUBLISHING.en.md](PUBLISHING.en.md).
+
 Restart DSH (or let the plugin manager reload it), then open
 **Settings → IM 桥接**.
 

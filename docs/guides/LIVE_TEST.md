@@ -18,6 +18,8 @@ dsh plugin --profile web add link:/absolute/path/to/repo/packages/dsh-lane-bridg
 
 Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 
+发布/安装细节见 [PUBLISHING.md](PUBLISHING.md)。
+
 重启 DSH（或让插件管理器重载），然后打开 **Settings → IM 桥接**。
 
 预期：

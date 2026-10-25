@@ -221,7 +221,8 @@ The package declares one bundle patch that inserts:
 - the `lane-support` agent preset row (persona + no built-in tools).
 
 No second process. No port. No console token. Upgrading the plugin does not
-touch `state.json`, roles, or knowledge.
+touch `state.json`, roles, or knowledge. Publishing/install details:
+[guides/PUBLISHING.en.md](./guides/PUBLISHING.en.md).
 
 ## 10. Verification status
 

@@ -30,7 +30,7 @@
 - 本地 Token 用量账本 + 「用量」页（按会话统计输入/输出/缓存 token）。
 - 覆盖 store、resolver、路由、会话编排和插件 harness 的测试。
 
-架构与迁移计划见 [docs/IM_BRIDGE_ARCHITECTURE.md](./docs/IM_BRIDGE_ARCHITECTURE.md)。
+架构与迁移计划见 [docs/IM_BRIDGE_ARCHITECTURE.md](./docs/IM_BRIDGE_ARCHITECTURE.md)；发布与安装细节见 [docs/guides/PUBLISHING.md](./docs/guides/PUBLISHING.md)。
 
 ## 安装
 
