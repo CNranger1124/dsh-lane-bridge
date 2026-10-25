@@ -42,6 +42,12 @@ dsh plugin --profile web add dsh-lane-bridge@0.1.0
 
 Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 
+npm 发布前也可以直接从 GitHub Release 安装 tarball：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+```
+
 然后在 DSH 中打开 **Settings → IM 桥接**。首次运行会创建
 `~/.dsh/lane-bridge/`，包含默认领域、示例角色卡和知识库骨架。
 

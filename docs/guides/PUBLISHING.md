@@ -135,6 +135,18 @@ dsh plugin --profile desktop add dsh-lane-bridge@0.1.0
 
 建议固定版本号，不要用 `@latest`，避免宿主与插件版本错配。
 
+也可以直接从 GitHub Release 安装 tarball（npm 发布前可用）：
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+```
+
+本地 tarball：
+
+```sh
+dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge-0.1.0.tgz
+```
+
 然后完全重启 DSH，打开 **Settings → IM 桥接**。
 
 ## 4. 更新、卸载与数据

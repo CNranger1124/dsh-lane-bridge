@@ -143,6 +143,18 @@ dsh plugin --profile desktop add dsh-lane-bridge@0.1.0
 
 Pin the version; avoid `@latest` so host and plugin versions cannot drift.
 
+You can also install the GitHub Release tarball before the npm release:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+```
+
+Or a local tarball:
+
+```sh
+dsh plugin --profile web add file:F:/path/to/dsh-lane-bridge-0.1.0.tgz
+```
+
 Then fully restart DSH and open **Settings → IM 桥接**.
 
 ## 4. Update, uninstall, data

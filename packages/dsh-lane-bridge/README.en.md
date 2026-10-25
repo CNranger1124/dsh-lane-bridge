@@ -31,6 +31,12 @@ dsh plugin --profile web add dsh-lane-bridge@0.1.0
 
 Desktop: replace `web` with `desktop` and fully quit DSH Desktop first.
 
+Before the npm release, you can install the GitHub Release tarball:
+
+```sh
+dsh plugin --profile web add https://github.com/CNranger1124/dsh-lane-bridge/releases/download/v0.1.0/dsh-lane-bridge-0.1.0.tgz
+```
+
 Then open **Settings → IM 桥接**. The first run creates
 `~/.dsh/lane-bridge/` with a default domain, a sample role card, and a KB
 skeleton.
