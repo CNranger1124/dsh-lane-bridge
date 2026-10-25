@@ -21,7 +21,7 @@ import {
 } from './knowledge.js';
 import { redactState } from './store.js';
 import { normalizeMessages, splitText, stripMarkdown } from './text.js';
-import { normalizeOperators, parseConversationKey } from './defaults.js';
+import { channelKindOf, normalizeChannelId, normalizeOperators, parseConversationKey } from './defaults.js';
 
 const PREFIX = '/lane-bridge';
 const MAX_BODY = 2 * 1024 * 1024;
@@ -124,13 +124,37 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     const previous = store.get().config;
     const patch = { ...body.config };
     if (patch.channels && typeof patch.channels === 'object') {
-      patch.channels = Object.fromEntries(
-        Object.entries(patch.channels).filter(([key]) => ['snowluma', 'qqbot', 'discord'].includes(key))
-      );
+      // Each entry is one bot. Unknown ids and kinds are dropped instead of
+      // being persisted as half-configured ghosts; store.normalizeState does the
+      // field-level sanitizing.
+      const entries = {};
+      for (const [rawId, entry] of Object.entries(patch.channels)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const id = normalizeChannelId(rawId);
+        if (!id || !channelKindOf(id, entry)) continue;
+        entries[id] = entry;
+      }
+      patch.channels = entries;
     }
     await store.setConfig(patch);
-    if (patch.channels || patch.enabled !== previous.enabled) {
+    // Only restart the instances whose entry actually changed: saving one card
+    // must not drop every other bot's connection.
+    let changed = null;
+    if (patch.channels) {
+      const next = store.get().config.channels ?? {};
+      changed = Object.keys(patch.channels).filter((id) => {
+        const before = previous.channels?.[id];
+        return !before || JSON.stringify(before) !== JSON.stringify(next[id]);
+      });
+      for (const id of Object.keys(previous.channels ?? {})) {
+        if (!Object.hasOwn(next, id) && !changed.includes(id)) changed.push(id);
+      }
+    }
+    const fullRestart = patch.enabled !== undefined && patch.enabled !== previous.enabled;
+    if (fullRestart) {
       await channels.sync().catch((error) => logger?.warn?.(`[lane-bridge] 通道重启失败：${error?.message ?? error}`));
+    } else if (changed && changed.length > 0) {
+      await channels.sync(changed).catch((error) => logger?.warn?.(`[lane-bridge] 通道重启失败：${error?.message ?? error}`));
     }
     return handleState(req, res);
   }
@@ -454,7 +478,30 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
 
   async function handleRestart(req, res) {
     if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    const body = await readBody(req);
+    const id = normalizeChannelId(body?.id);
+    if (id) {
+      // One bot per request: the 通道 card retries itself, not the whole fleet.
+      if (!store.get().config.channels?.[id]) {
+        return sendJson(res, 404, { ok: false, error: `未知通道：${id}` });
+      }
+      await channels.restart(id);
+      return handleState(req, res);
+    }
     await channels.sync();
+    return handleState(req, res);
+  }
+
+  async function handleRemoveChannel(req, res) {
+    if (!canWriteFromBrowser(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+    const body = await readBody(req);
+    const id = normalizeChannelId(body?.id);
+    if (!id) return sendJson(res, 400, { ok: false, error: '通道 id 不合法' });
+    if (!store.get().config.channels?.[id]) {
+      return sendJson(res, 404, { ok: false, error: `未知通道：${id}` });
+    }
+    await store.removeChannels([id]);
+    await channels.sync().catch((error) => logger?.warn?.(`[lane-bridge] 通道重启失败：${error?.message ?? error}`));
     return handleState(req, res);
   }
 
@@ -493,6 +540,7 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
       if (route === '/api/memory') return await handleMemory(req, res);
       if (route === '/api/usage') return await handleUsage(req, res);
       if (route === '/api/channels/restart' && req.method === 'POST') return await handleRestart(req, res);
+      if (route === '/api/channels/remove' && req.method === 'POST') return await handleRemoveChannel(req, res);
       if (route === '/api/channels/logs') return await handleChannelLogs(req, res);
       if (route === '/api/knowledge') return await handleKnowledge(req, res);
       if (route === '/api/kb') return await handleKnowledgeBases(req, res);

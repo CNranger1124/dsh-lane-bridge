@@ -5,7 +5,7 @@
 A **DeepSeek Harness (DSH) plugin** that connects QQ (SnowLuma OneBot v11),
 the official QQ Bot, and Discord to DSH agents: **one plugin, many channels,
 shared knowledge bases, per-conversation personas, and a single outbound push
-API**. Current version: `0.7.0`.
+API**. Current version: `0.8.0`.
 
 This repository started from `qq-bridge` (a standalone QQ ↔ DSH bridge). The
 plugin in [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge) is the new home
@@ -73,10 +73,29 @@ connected" usually means SnowLuma is not running, or the WS port is wrong.
    one credential, the **Bot Token** (Developer Portal → your app → **Bot** page
    → `Reset Token`); the OAuth2 client secret and the General Information public
    key are not used.
-5. If it is started but still disconnected, click **Retry** or **Reconnect all**.
+5. If it is started but still disconnected, click **Retry** on that bot's card —
+   it reconnects only that bot and leaves every other one alone.
 
-> **Start/Stop** saves and reconnects immediately. The cards below are for
-> editing several fields and saving them together.
+> **Start/Stop** saves and reconnects just that instance. The cards below are for
+> editing several fields and saving them together. Use **Add bot** to run another
+> AppID of the same transport (two AppIDs are two bots), then point a domain at it
+> on the **Domain** page so that project is served only by that bot.
+
+## One project, one bot
+
+An AppID is a bot, and `openid`s are scoped per bot: the same group has different
+ids under two bots, so conversations, memory, and bindings are not shared. To give
+each project its own bot:
+
+1. **Channels** page → **Add bot**: pick **Official QQ Bot**, give it a project-ish
+   name (for example "Shajin support"), then fill the second AppID/AppSecret and
+   save.
+2. **Domains** page → select the project's domain → set **Bot this domain uses**.
+3. Unbound groups/private chats on that bot now resolve to that domain and use its
+   knowledge bases, persona, and wake policy. An explicit role binding still wins.
+
+Deleting a bot asks for a second click; conversation history is kept, and domains
+that pointed at it fall back to generic routing.
 
 ## Why a plugin instead of a separate app?
 
@@ -95,9 +114,10 @@ only a one-shot legacy migration script.
 
 ## What it gives you
 
-- **Three channels**: SnowLuma (OneBot v11), official QQ Bot (AppID/AppSecret),
-  and Discord (Bot Token + Message Content Intent). The launcher card starts,
-  stops, and retries each channel, and shows the last 300 connect/error lines.
+- **Multiple bots**: SnowLuma (OneBot v11), official QQ Bot (AppID/AppSecret), and
+  Discord (Bot Token + Message Content Intent), each addable several times (several
+  AppIDs / tokens). Every bot starts, reconnects, and reports status on its own,
+  and the page keeps the last 300 connect/error lines.
 - **Conversation → role → domain**: a conversation only picks a role card; the
   role is bound to a domain; the domain owns the infrastructure (bound knowledge
   bases, shared memory, repo, operators, attention policy, preset/model).
@@ -189,7 +209,7 @@ draft approval, archival budget, QQ Bot passive vs active messages) lives in
 
 ## Status
 
-`0.7.0` adds the `lane-chat` preset (group chit-chat / role-play, role card first).
+`0.8.0` turns channels into bot instances: several AppIDs per transport, one bot per project, a domain picks the bot it uses, and reconnects/saves only touch that one instance. `0.7.0` adds the `lane-chat` preset (group chit-chat / role-play, role card first).
 `0.6.0` makes knowledge bases first-class: drafts require triggers, land only in a
 base the domain binds, and approving creates a standalone document (the approval
 page edits the triggers). `0.5.x` added knowledge-base CRUD, cross-base moves and

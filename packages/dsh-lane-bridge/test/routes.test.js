@@ -117,6 +117,108 @@ test('config writes merge and resync channels', async () => {
   }
 });
 
+test('config accepts a second bot and restarts only the changed instance', async () => {
+  const { dir, store, channels, routes } = await setup();
+  try {
+    const next = JSON.parse(JSON.stringify(store.get().config));
+    next.channels['qqbot-2'] = {
+      kind: 'qqbot', label: '砂金客服', enabled: true, appId: '102222', appSecret: 's2', allowActive: false,
+    };
+    const res = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/config',
+      body: { config: next },
+    }), res);
+    assert.equal(res.status, 200);
+    assert.equal(store.get().config.channels['qqbot-2'].label, '砂金客服');
+    assert.equal(store.get().config.channels.qqbot.kind, 'qqbot');
+    // A second bot is a real instance, not a typo to be filtered away.
+    assert.deepEqual(channels.calls.sync.at(-1), ['qqbot-2']);
+
+    // Saving the same map again must not reconnect anything.
+    channels.calls.sync.length = 0;
+    const same = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/config',
+      body: { config: JSON.parse(JSON.stringify(store.get().config)) },
+    }), same);
+    assert.equal(same.status, 200);
+    assert.equal(channels.calls.sync.length, 0);
+
+    // Editing one bot restarts exactly that bot.
+    const edited = JSON.parse(JSON.stringify(store.get().config));
+    edited.channels['qqbot-2'].label = '砂金客服 2';
+    const editRes = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/config',
+      body: { config: edited },
+    }), editRes);
+    assert.deepEqual(channels.calls.sync.at(-1), ['qqbot-2']);
+
+    // Unknown transports are dropped instead of being persisted.
+    const junk = JSON.parse(JSON.stringify(store.get().config));
+    junk.channels['qqbot-3'] = { kind: 'telegram', appId: '1' };
+    const junkRes = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/config',
+      body: { config: junk },
+    }), junkRes);
+    assert.equal(junkRes.status, 200);
+    assert.equal(store.get().config.channels['qqbot-3'], undefined);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('channel restart and removal target one instance', async () => {
+  const { dir, store, channels, routes } = await setup();
+  try {
+    await store.setConfig({
+      channels: { 'qqbot-2': { kind: 'qqbot', label: '砂金', enabled: true, appId: '2', appSecret: 's2' } },
+    });
+    const restart = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/channels/restart',
+      body: { id: 'qqbot-2' },
+    }), restart);
+    assert.equal(restart.status, 200);
+    assert.deepEqual(channels.calls.restart, ['qqbot-2']);
+
+    const missingRestart = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/channels/restart',
+      body: { id: 'nope' },
+    }), missingRestart);
+    assert.equal(missingRestart.status, 404);
+
+    const removed = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/channels/remove',
+      body: { id: 'qqbot-2' },
+    }), removed);
+    assert.equal(removed.status, 200);
+    assert.equal(store.get().config.channels['qqbot-2'], undefined);
+    assert.equal(channels.calls.sync.at(-1), null, 'removal runs a full reconcile');
+
+    const missingRemove = mockResponse();
+    await routes.handle(mockRequest({
+      method: 'POST',
+      url: '/lane-bridge/api/channels/remove',
+      body: { id: 'qqbot-2' },
+    }), missingRemove);
+    assert.equal(missingRemove.status, 404);
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test('domains and roles validate before writing', async () => {
   const { dir, store, routes } = await setup();
   try {

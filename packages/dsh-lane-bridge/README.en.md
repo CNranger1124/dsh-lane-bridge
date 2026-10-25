@@ -77,9 +77,12 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
   repo visible to the account via the `gh` CLI (no manual token after
   `gh auth login`), token redaction, path guards, ETag cache. Issue creation is
   off by default.
-- **Channel launcher**: Start/Stop/Retry and View logs per channel at the top,
-  with an actionable reason when disconnected. Every module header has its own
-  Save button, every module collapses, and the save bar is sticky.
+- **Multiple bots**: each transport (SnowLuma / official QQ Bot / Discord) can be
+  added several times — several AppIDs are several QQ bots. Every bot starts,
+  retries, and reports status on its own, and saving one card only restarts the
+  instance that actually changed. Point a domain at a bot on the **Domains** page
+  and that project is served only by it (unbound conversations on that bot fall
+  into that domain).
 - **Unified push**: `lane_send` tool + `POST /lane-bridge/api/push` (single or broadcast).
 - **Images**: inbound attachments are downloaded with SSRF/byte caps and sent as
   multimodal prompt parts; non-vision models fall back to text.
@@ -492,7 +495,8 @@ SnowLuma.
 | `POST` | `/lane-bridge/api/conversations` | Delete a discovered conversation record (`{key, remove:true}`) |
 | `POST` | `/lane-bridge/api/push` | Send to one `target` or many `targets` (bearer token or same-origin, max 50) |
 | `POST` | `/lane-bridge/api/session/reset` | Forget a conversation's DSH session (next message starts fresh) |
-| `POST` | `/lane-bridge/api/channels/restart` | Reconnect adapters |
+| `POST` | `/lane-bridge/api/channels/restart` | Reconnect channels; `{ id }` reconnects just that bot, no id reconciles all |
+| `POST` | `/lane-bridge/api/channels/remove` | Delete one bot instance |
 | `GET` | `/lane-bridge/api/channels/logs` | Last 300 channel connect/error lines |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | List / write KB documents; `POST {action:'move', ...}` renames or moves across bases |
 | `GET` | `/lane-bridge/api/knowledge/read` | Read one document, including frontmatter |

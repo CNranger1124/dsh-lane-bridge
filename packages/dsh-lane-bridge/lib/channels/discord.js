@@ -26,8 +26,8 @@ export class DiscordAdapter extends ChannelAdapter {
    * @param {object} [options.logger]
    * @param {() => Promise<object>} [options.loadDiscordModule] test seam
    */
-  constructor({ config, logger = null, loadDiscordModule = null }) {
-    super({ id: 'discord', kind: 'discord', logger });
+  constructor({ id = 'discord', config, logger = null, loadDiscordModule = null }) {
+    super({ id, kind: 'discord', logger });
     this.config = config ?? {};
     this.loadDiscordModule = loadDiscordModule;
     this.client = null;

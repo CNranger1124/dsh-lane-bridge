@@ -112,6 +112,105 @@ export function parseConversationKey(key) {
   return { channel: m[1], kind: m[2], externalId: m[3], key: `${m[1]}:${m[2]}:${m[3]}` };
 }
 
+// ---------------------------------------------------------------------------
+// Channel instances.
+//
+// A *kind* is a transport (OneBot WS, official QQ Bot, Discord). An *instance*
+// is one bot on that transport: `{ id, kind, label, …credentials }`. The map
+// key is the instance id and it is what ends up in conversation keys
+// (`<id>:group:<external id>`), so two QQ bots have two independent sets of
+// conversations, roles, domains and sessions.
+//
+// Before 0.8.0 there was exactly one entry per kind and its id was the kind
+// name. `channelKindOf` keeps those states working; because the default
+// instances keep ids `snowluma` / `qqbot` / `discord`, every existing
+// conversation key and binding stays valid without migration.
+export const CHANNEL_KINDS = ['snowluma', 'qqbot', 'discord'];
+
+export const CHANNEL_KIND_LABELS = {
+  snowluma: 'SnowLuma (QQ)',
+  qqbot: '官方 QQ Bot',
+  discord: 'Discord',
+};
+
+export function channelKindOf(id, entry) {
+  const kind = String(entry?.kind ?? '').trim();
+  if (CHANNEL_KINDS.includes(kind)) return kind;
+  const legacy = String(id ?? '').trim();
+  return CHANNEL_KINDS.includes(legacy) ? legacy : '';
+}
+
+/** Instance ids end up in conversation keys, so keep them boring. */
+export function normalizeChannelId(value) {
+  const id = String(value ?? '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_-]{0,31}$/u.test(id) ? id : '';
+}
+
+export function defaultChannelEntry(kind, id = kind) {
+  const base = {
+    id,
+    kind,
+    label: CHANNEL_KIND_LABELS[kind] ?? kind,
+    enabled: false,
+  };
+  if (kind === 'snowluma') return { ...base, wsUrl: 'ws://127.0.0.1:3001', accessToken: '', homeDir: '' };
+  if (kind === 'qqbot') return { ...base, appId: '', appSecret: '', allowActive: false };
+  if (kind === 'discord') return { ...base, token: '', requireMention: false };
+  return base;
+}
+
+/**
+ * Sanitize the `channels` map. Anything with an unknown id or kind is dropped
+ * instead of being carried around as a half-configured ghost.
+ *
+ * Deliberately authoritative: defaults are NOT merged back in, otherwise a
+ * deleted bot would reappear (disabled, without credentials) on every reload.
+ */
+export function normalizeChannels(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!value || typeof value !== 'object') continue;
+    const id = normalizeChannelId(key);
+    if (!id) continue;
+    const kind = channelKindOf(id, value);
+    if (!kind) continue;
+    const base = defaultChannelEntry(kind, id);
+    const entry = {
+      ...base,
+      enabled: value.enabled === true,
+      label: String(value.label ?? '').trim().slice(0, 40) || base.label,
+    };
+    if (kind === 'snowluma') {
+      entry.wsUrl = String(value.wsUrl ?? base.wsUrl).trim().slice(0, 300);
+      entry.accessToken = String(value.accessToken ?? '');
+      entry.homeDir = String(value.homeDir ?? '').trim().slice(0, 300);
+    } else if (kind === 'qqbot') {
+      entry.appId = String(value.appId ?? '').trim().slice(0, 64);
+      entry.appSecret = String(value.appSecret ?? '');
+      entry.allowActive = value.allowActive === true;
+    } else if (kind === 'discord') {
+      entry.token = String(value.token ?? '');
+      entry.requireMention = value.requireMention === true;
+    }
+    out[id] = entry;
+  }
+  return out;
+}
+
+/** Credentials a channel entry needs before it can connect. */
+export function channelConfigured(entry) {
+  const kind = channelKindOf(entry?.id, entry);
+  if (kind === 'snowluma') {
+    return Boolean(String(entry?.wsUrl ?? '').trim() || String(entry?.homeDir ?? '').trim());
+  }
+  if (kind === 'qqbot') {
+    return Boolean(String(entry?.appId ?? '').trim() && String(entry?.appSecret ?? '').trim());
+  }
+  if (kind === 'discord') return Boolean(String(entry?.token ?? '').trim());
+  return false;
+}
+
 export function defaultConfig() {
   return {
     enabled: true,
@@ -153,29 +252,18 @@ export function defaultConfig() {
       maxCreatesPerHour: 3,
       maxFileChars: 20000,
     },
+    // One entry per running bot. The three defaults keep the legacy ids, so a
+    // 0.7.x state keeps its conversation keys; extra instances are added from
+    // the 通道 page (`qqbot-2`, `support-bot`, …).
+    //
+    // QQ: passive replies carry msg_id (valid 5 minutes, ≤5 replies per
+    // message); active messages are rate-limited (60 qpm certified / 30 qpm
+    // otherwise, 20 qpm per relationship, 1000/day per group) and a bot without
+    // the permission gets 40034105. So sending without msg_id stays opt-in.
     channels: {
-      snowluma: {
-        enabled: true,
-        wsUrl: 'ws://127.0.0.1:3001',
-        accessToken: '',
-        homeDir: '',
-      },
-      qqbot: {
-        enabled: false,
-        appId: '',
-        appSecret: '',
-        // QQ: passive replies carry msg_id (valid 5 minutes, ≤5 replies per
-        // message); active messages are rate-limited (60 qpm certified / 30 qpm
-        // otherwise, 20 qpm per relationship, 1000/day per group) and a bot
-        // without the permission gets 40034105. So sending without msg_id stays
-        // opt-in.
-        allowActive: false,
-      },
-      discord: {
-        enabled: false,
-        token: '',
-        requireMention: false,
-      },
+      snowluma: { ...defaultChannelEntry('snowluma'), enabled: true },
+      qqbot: defaultChannelEntry('qqbot'),
+      discord: defaultChannelEntry('discord'),
     },
   };
 }
@@ -190,6 +278,10 @@ export function defaultDomain() {
     preset: 'lane-support',
     model: '',
     knowledgeScopes: ['default'],
+    // Which bot serves this domain (project). Empty = the generic bot: routing
+    // falls back to per-conversation bindings and the global default domain,
+    // exactly like every state written before 0.8.0.
+    channelId: '',
     allowedHostTools: [],
     // Strict by default: nobody is an administrator until listed. `['*']`
     // restores "trust the whole room".

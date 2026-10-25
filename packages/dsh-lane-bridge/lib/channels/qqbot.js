@@ -20,8 +20,8 @@ function loggerFacade(logger) {
 }
 
 export class QqbotAdapter extends ChannelAdapter {
-  constructor({ config, logger = null, loadQqbotModule = null }) {
-    super({ id: 'qqbot', kind: 'qqbot', logger });
+  constructor({ id = 'qqbot', config, logger = null, loadQqbotModule = null }) {
+    super({ id, kind: 'qqbot', logger });
     this.config = config ?? {};
     this.loadQqbotModule = loadQqbotModule;
     this.bot = null;

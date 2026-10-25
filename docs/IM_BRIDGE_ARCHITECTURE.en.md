@@ -91,6 +91,31 @@ adapter.onMessage(cb)                 // cb({ channel, kind, externalId, senderI
 Adapters own only transport concerns. They never touch DSH sessions, role cards,
 or the store.
 
+### Channel instances: one bot per entry
+
+`config.channels` is an **instance map**: the key is the instance id (also the
+conversation-key prefix), and the value carries `kind` (`snowluma` / `qqbot` /
+`discord`), `label`, and credentials. The same transport can therefore run several
+bots side by side (two AppIDs are two QQ bots).
+
+- The default instances keep the ids `snowluma` / `qqbot` / `discord`. Older
+  states have no `kind`; it is inferred from the id, so 0.7.x conversation keys
+  (`qqbot:group:<openid>`), bindings, operator lists, and memory stay valid with
+  no migration.
+- New instances (`qqbot-2`, `support-bot`, …) get a namespace of their own:
+  conversations, roles, domains, and sessions are keyed per instance id.
+- `ChannelManager` is per instance: `startOne` / `stopOne` / `restart(id)` /
+  `sync(ids)`. Saving config compares entries one by one and restarts only the
+  ones that actually changed; deletion goes through `POST /api/channels/remove`
+  (a config patch deep-merges and can never drop a key).
+- A domain claims a bot through `domain.channelId`. Unbound conversations resolve
+  as: bound role → legacy binding `domainId` → the domain that claims the bot →
+  the global default domain. Once a domain owns a bot, unbound conversations on
+  that bot follow that domain's `autoReply` and wake policy instead of the global
+  "unbound groups" switch.
+- If several domains claim the same bot, inbound uses the first in the domain
+  list and the domain page warns; one domain claims at most one bot.
+
 ### Why one DSH session per conversation?
 
 - The transcript is inspectable in the DSH sidebar, with tools and approvals.

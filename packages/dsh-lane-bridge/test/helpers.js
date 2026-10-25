@@ -47,12 +47,15 @@ export function mockRequest({ method = 'GET', url = '/lane-bridge/api/state', bo
 
 export function fakeChannels() {
   const sent = [];
+  const calls = { sync: [], restart: [] };
   return {
     sent,
+    calls,
     status: () => [
       { id: 'snowluma', kind: 'snowluma', label: 'SnowLuma', enabled: true, started: true, connected: false },
     ],
-    sync: async () => {},
+    sync: async (ids = null) => { calls.sync.push(ids); },
+    restart: async (id) => { calls.restart.push(id); },
     sendKey: async (key, messages) => {
       sent.push({ key, messages });
       return messages.map(() => ({ ok: true }));

@@ -65,8 +65,8 @@ function imagesOf(segments) {
 }
 
 export class SnowLumaAdapter extends ChannelAdapter {
-  constructor({ config, logger = null }) {
-    super({ id: 'snowluma', kind: 'snowluma', logger });
+  constructor({ id = 'snowluma', config, logger = null }) {
+    super({ id, kind: 'snowluma', logger });
     this.config = config ?? {};
     this.client = null;
   }

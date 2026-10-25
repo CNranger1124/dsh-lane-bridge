@@ -2,6 +2,45 @@
 
 # Changelog
 
+## 0.8.0
+
+- **Channels are bot instances now.** `config.channels` is no longer the fixed
+  `snowluma` / `qqbot` / `discord` trio but any number of bots. The same transport
+  can be added several times (`qqbot`, `qqbot-2`, …), each with its own id, name,
+  credentials and status — two AppIDs are two QQ bots. Entries gain a `kind`
+  field; states written by 0.7.x infer it from the id, so **no migration** is
+  needed and every existing conversation key, binding, operator whitelist entry
+  and memory keeps working.
+- **One project, one bot.** The domain page gained a **bot this domain uses**
+  dropdown fed by the configured instances. Unbound conversations on that bot
+  resolve to that domain instead of the global default (leaving it empty keeps
+  the old behaviour: conversation → role → domain → global default). An explicit
+  role binding still wins, so one bot serving several projects remains possible.
+  When two domains claim the same bot the page warns, and inbound routing takes
+  the first one.
+- **An owned bot answers as its domain**: unbound groups/private chats on it
+  follow that domain's `autoReply` and wake policy, so the global "unbound groups"
+  switch is no longer required. Bots nobody claims keep the old record-only rule.
+- **Reconnects are per instance.** "Reconnect all" is gone; each card retries
+  itself. Saving config compares instance entries and restarts only the ones that
+  actually changed, so editing one AppID no longer drops every other bot.
+  `POST /api/channels/restart` now accepts `{ id }` (full reconcile only without
+  one).
+- **New delete endpoint** `POST /api/channels/remove`: "Delete this bot" asks for
+  a second click; deleting removes only that instance, keeps conversation history,
+  and moves domains that pointed at it back to generic routing.
+- **Channels page usability**: cards show name, transport, instance id (the
+  conversation-key prefix), status and the domain that owns them; a new "Add bot"
+  card (pick transport, name it, add) generates a collision-free id (`qqbot-2`,
+  `qqbot-3`); two enabled QQ bots sharing an AppID get a red "the platform will
+  kick one of them" warning.
+- The operator channel dropdown now lists the configured bot instances, so the
+  stored ids match real conversation keys; domain and knowledge page hints were
+  updated to match.
+- Tests grew to 168 (instance normalization, deletion that stays deleted,
+  per-instance reconnect, domain-owns-bot resolution order, incremental resync on
+  save, two-bot rendering, duplicate-AppID warning).
+
 ## 0.7.0
 
 - **New `lane-chat` preset: group chit-chat and role-play.** Like `lane-support`

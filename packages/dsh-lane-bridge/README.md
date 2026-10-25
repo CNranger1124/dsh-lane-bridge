@@ -54,7 +54,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **共享库**：角色卡和 Markdown 知识库共享；领域可以绑定**多个知识库**，绑定后就能按文档自己的触发词命中。领域记忆（`lane_memory_*`）跨会话积累经验。
 - **知识库草稿 + 人工审批**：`lane_kb_draft` 写的是**一篇文章草稿**（标题 + 触发词 + 正文 + 来源），落在该领域绑定知识库的 `_待审/` 里；「知识库审批」页可以改触发词，采纳后才变成那个知识库里一篇带触发词的正式文档（同名不覆盖，自动加序号）。
 - **GitHub 只读**：全局默认仓库 + 每个领域可覆盖成不同仓库/分支；issue/文件/代码/提交查询；支持 `gh` CLI 读取账号可见的全部仓库/分支下拉，`gh auth login` 后无需手填 token；token 脱敏、路径校验、ETag 缓存。建 issue 默认关闭。
-- **启动通道**：页面顶部每个渠道有启动/停止/重试按钮和「查看日志」，未连接时显示原因（例如 SnowLuma 未启动）。每个模块标题栏都有独立保存按钮，所有模块可折叠，保存栏固定在底部。
+- **多机器人**：三种渠道（SnowLuma / 官方 QQ Bot / Discord）都可以加多个实例——多个 AppID 就是多个 QQ 机器人。每个机器人独立启动、独立重试、独立状态与日志，保存一张卡只重启真正改过的那个。到 **领域** 页把某个领域指向一个机器人，这个项目就只在那台机器人上接待（未绑定的会话自动归入该领域）。
 - **统一推送**：`lane_send` 工具 + `POST /lane-bridge/api/push`（单发或广播）。
 - **图片**：入站附件经 SSRF/字节上限检查后作为多模态 prompt part 发送；非视觉模型降级为文本。
 - **人工接管**：`lane_escalate` 暂停会话、通知配置的接管会话，并可在 Settings 恢复。
@@ -348,7 +348,8 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 | `POST` | `/lane-bridge/api/conversations` | 删除已发现会话记录（`{key, remove:true}`） |
 | `POST` | `/lane-bridge/api/push` | 发到单个 `target` 或多个 `targets`（bearer token 或同源，最多 50 个） |
 | `POST` | `/lane-bridge/api/session/reset` | 忘记会话的 DSH session（下一条消息新建） |
-| `POST` | `/lane-bridge/api/channels/restart` | 重连适配器 |
+| `POST` | `/lane-bridge/api/channels/restart` | 重连通道；`{ id }` 只重连那个机器人，不带 id 才全量 |
+| `POST` | `/lane-bridge/api/channels/remove` | 删除一个机器人实例（需二次确认后由前端调用） |
 | `GET` | `/lane-bridge/api/channels/logs` | 最近 300 条渠道连接/错误日志 |
 | `GET`/`POST` | `/lane-bridge/api/knowledge` | 列出/写入知识库文档；`POST {action:'move', ...}` 改名或跨库转移 |
 | `GET` | `/lane-bridge/api/knowledge/read` | 读取单篇文档（含 frontmatter） |

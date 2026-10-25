@@ -278,19 +278,76 @@ test('redactState never leaks secrets but reports presence', () => {
   state.config.channels.snowluma.accessToken = 'ws';
   state.config.channels.qqbot.appSecret = 'qq';
   state.config.channels.discord.token = 'dc';
+  state.config.channels['qqbot-2'] = { kind: 'qqbot', label: '砂金', enabled: true, appId: '2', appSecret: 'qq2', allowActive: false };
   state.config.github.token = 'gh';
   const { state: safe, secretStatus } = redactState(state);
   assert.equal(safe.config.pushToken, '');
   assert.equal(safe.config.channels.snowluma.accessToken, '');
   assert.equal(safe.config.channels.qqbot.appSecret, '');
+  assert.equal(safe.config.channels['qqbot-2'].appSecret, '');
   assert.equal(safe.config.github.token, '');
+  // Presence is per instance: a blank field on the 通道 card must keep *that*
+  // bot's secret, and the other bot's secret must not be mistaken for it.
   assert.deepEqual(secretStatus, {
     pushToken: true,
-    snowlumaAccessToken: true,
-    qqbotAppSecret: true,
-    discordToken: true,
     githubToken: true,
+    channelSecrets: { snowluma: true, qqbot: true, discord: true, 'qqbot-2': true },
   });
+});
+
+test('channel instances normalize by kind and keep the legacy ids', () => {
+  const state = normalizeState({
+    config: {
+      channels: {
+        // 0.7.x shape: id implies the kind, no label yet.
+        qqbot: { enabled: true, appId: '102111', appSecret: 's1' },
+        // 0.8.0 shape: a second bot of the same kind.
+        'qqbot-2': { kind: 'qqbot', label: '砂金客服', enabled: true, appId: '102222', appSecret: 's2' },
+        // Valid id but no kind → not a transport we know, dropped.
+        'snowluma-9': { wsUrl: 'ws://127.0.0.1:3001' },
+        // Known kind but an unknown transport → dropped.
+        'qqbot-3': { kind: 'telegram', appId: '102333' },
+        // Spaces/case are not a valid conversation-key prefix → dropped.
+        'QQ Bot 2': { kind: 'qqbot', appId: '102444' },
+      },
+    },
+  });
+  assert.deepEqual(Object.keys(state.config.channels).sort(), ['qqbot', 'qqbot-2']);
+  assert.equal(state.config.channels.qqbot.kind, 'qqbot');
+  assert.equal(state.config.channels.qqbot.label, '官方 QQ Bot');
+  assert.equal(state.config.channels['qqbot-2'].label, '砂金客服');
+  assert.equal(state.config.channels['qqbot-2'].appSecret, 's2');
+  // A domain from an older state has no bot binding.
+  assert.equal(state.domains[0].channelId, '');
+});
+
+test('the channel map is authoritative: a deleted bot stays deleted across reloads', async () => {
+  const dir = tempDir();
+  try {
+    const store = new LaneStore({ dataDir: dir });
+    await store.load();
+    await store.setConfig({
+      channels: { 'qqbot-2': { kind: 'qqbot', label: '砂金', enabled: true, appId: '2', appSecret: 's2' } },
+    });
+    assert.equal(store.get().config.channels['qqbot-2'].label, '砂金');
+    // Point the default domain at the new bot, then delete the bot.
+    await store.setDomains(store.get().domains.map((domain) => ({ ...domain, channelId: 'qqbot-2' })));
+    assert.equal(store.get().domains[0].channelId, 'qqbot-2');
+
+    await store.removeChannels(['qqbot-2']);
+    assert.equal(store.get().config.channels['qqbot-2'], undefined);
+    assert.equal(store.get().config.channels.qqbot.kind, 'qqbot');
+    // The domain falls back to generic routing instead of silently answering
+    // nothing.
+    assert.equal(store.get().domains[0].channelId, '');
+
+    const reload = new LaneStore({ dataDir: dir });
+    await reload.load();
+    assert.equal(reload.get().config.channels['qqbot-2'], undefined);
+    assert.equal(reload.get().config.channels.qqbot.kind, 'qqbot');
+  } finally {
+    cleanup(dir);
+  }
 });
 
 test('knowledge bases are adopted from disk and default is always registered', async () => {

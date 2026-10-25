@@ -258,3 +258,64 @@ test('role cards and domain prompts can branch on the speaker identity', () => {
   assert.doesNotMatch(admin, /\{\{/u);
   assert.match(buildContextPrefix({ ...base, kind: 'private', senderIsOperator: false }), /口径：/u);
 });
+
+test('a domain that owns a bot catches that bot’s unbound conversations', () => {
+  const state = defaultState();
+  state.config.channels['qqbot-2'] = {
+    kind: 'qqbot', label: '砂金客服', enabled: true, appId: '102222', appSecret: 's2', allowActive: false,
+  };
+  state.domains.push({
+    ...state.domains[0], id: 'shajin', name: '砂金客服', channelId: 'qqbot-2', knowledgeScopes: ['shajin'],
+  });
+  state.roles.push({ name: '砂金客服', content: '', domainId: 'shajin', updatedAt: 0 });
+
+  const onSecond = resolveConversation(state, 'qqbot-2:group:987654');
+  assert.equal(onSecond.domain.id, 'shajin');
+  assert.equal(onSecond.role, '砂金客服');
+  assert.equal(onSecond.channelDomainId, 'shajin');
+  assert.equal(onSecond.channel, 'qqbot-2');
+
+  // The same group id on the generic bot is a different project: domains are
+  // resolved per bot instance, not per external id.
+  const onDefault = resolveConversation(state, 'qqbot:group:987654');
+  assert.equal(onDefault.domain.id, 'default');
+  assert.equal(onDefault.role, '客服');
+  assert.equal(onDefault.channelDomainId, '');
+});
+
+test('an explicit role binding still beats the bot owner', () => {
+  const state = defaultState();
+  state.domains.push({
+    ...state.domains[0], id: 'shajin', name: '砂金客服', channelId: 'qqbot-2',
+  });
+  state.roles.push({ name: '砂金客服', content: '', domainId: 'shajin', updatedAt: 0 });
+  state.bindings['qqbot-2:group:42'] = {
+    domainId: 'default', role: '客服', enabled: true, updatedAt: 0,
+  };
+  const resolved = resolveConversation(state, 'qqbot-2:group:42');
+  assert.equal(resolved.source, 'binding');
+  assert.equal(resolved.domain.id, 'default');
+  assert.equal(resolved.role, '客服');
+  // The claim is still reported so the UI/log can explain the fallback.
+  assert.equal(resolved.channelDomainId, 'shajin');
+});
+
+test('a bot nobody claims falls back to the global default domain', () => {
+  const state = defaultState();
+  state.domains.push({ ...state.domains[0], id: 'shajin', name: '砂金客服', channelId: 'qqbot-2' });
+  const resolved = resolveConversation(state, 'qqbot:group:1');
+  assert.equal(resolved.domain.id, 'default');
+  assert.equal(resolved.channelDomainId, '');
+});
+
+test('an unbound conversation on an owned bot follows that domain’s policy', () => {
+  const state = defaultState();
+  // No global opt-in: an owned bot still answers, because it is that project's
+  // front desk. Bots nobody claims keep the old "record but never answer" rule.
+  state.domains.push({ ...state.domains[0], id: 'shajin', name: '砂金客服', channelId: 'qqbot-2' });
+  assert.equal(canReply(state, 'qqbot-2:private:7'), true);
+  assert.equal(canReply(state, 'qqbot:private:7'), false);
+  // A domain switched off still silences its own bot.
+  state.domains.find((domain) => domain.id === 'shajin').autoReply = false;
+  assert.equal(canReply(state, 'qqbot-2:private:7'), false);
+});

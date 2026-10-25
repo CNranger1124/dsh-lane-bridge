@@ -83,6 +83,16 @@ adapter.onMessage(cb)                 // cb({ channel, kind, externalId, senderI
 
 适配器只负责传输，不碰 DSH session、角色卡或 store。
 
+### 通道实例：一个机器人一个实例
+
+`config.channels` 是一张**实例表**：key 是实例 id（同时是会话键前缀），value 带 `kind`（`snowluma` / `qqbot` / `discord`）、`label` 和凭据。所以同一个渠道可以并排跑多个机器人（两个 AppID = 两个 QQ 机器人）。
+
+- 默认实例沿用 `snowluma` / `qqbot` / `discord`。老状态里没有 `kind`，按 id 推断，因此 0.7.x 的 `qqbot:group:<openid>` 会话键、绑定、管理员白名单、记忆全部有效，无需迁移。
+- 新实例（`qqbot-2`、`support-bot`…）天然有独立命名空间：会话、角色、领域、session 都按实例 id 分开。
+- `ChannelManager` 的生命周期是**按实例**的：`startOne` / `stopOne` / `restart(id)` / `sync(ids)`。保存配置时后端逐条比对实例条目，只重启真正变了的实例；删除走 `POST /api/channels/remove`（配置补丁是深合并，删不掉 key）。
+- 领域用 `domain.channelId` 认领一个机器人。未绑定会话的解析顺序：绑定角色 → 绑定遗留 `domainId` → 认领该机器人的领域 → 全局默认领域。认领机器人后，该机器人上未绑定的会话按这个领域自己的 `autoReply` 与唤醒策略回答（不再依赖全局「未绑定群聊自动回复」开关）。
+- 同一个机器人被多个领域认领时入站取领域列表里第一个，领域页红字提示；一个领域只认领一个机器人。
+
 ### 为什么一个外部会话一个 DSH session？
 
 - 转录在 DSH 侧栏可见，工具和审批也都在。

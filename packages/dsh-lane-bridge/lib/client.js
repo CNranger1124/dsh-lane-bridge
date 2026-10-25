@@ -253,11 +253,13 @@ window.__ModuleLoader__.load({
     }
 
     // Channel enumerations for the operator whitelist. `channel:id` is the
-    // stored format; the UI never asks the operator to type the prefix.
-    const OPERATOR_CHANNELS = [
-      ['qqbot', '官方 QQ Bot'],
-      ['snowluma', 'SnowLuma（OneBot）'],
-      ['discord', 'Discord'],
+    // stored format; the UI never asks the operator to type the prefix. The
+    // list is the *configured bot instances* (0.8.0), so an operator can be
+    // scoped to one bot per project, and ids match the conversation keys.
+    const FALLBACK_CHANNELS = [
+      { id: 'qqbot', label: '官方 QQ Bot', kind: 'qqbot' },
+      { id: 'snowluma', label: 'SnowLuma（OneBot）', kind: 'snowluma' },
+      { id: 'discord', label: 'Discord', kind: 'discord' },
     ];
     const OPERATOR_ID_HINTS = {
       qqbot: 'openid，例如 8FD96C63927394130884C87F9F708895',
@@ -284,10 +286,10 @@ window.__ModuleLoader__.load({
     // "最近发言者" copies the full `channel:id`. Pasting that must just work:
     // a known prefix wins over the dropdown, and the prefix is stripped from the
     // id so it cannot end up duplicated (`qqbot:qqbot8FD9…`).
-    function normalizeOperatorInput(selectedChannel, raw) {
+    function normalizeOperatorInput(selectedChannel, raw, options = FALLBACK_CHANNELS) {
       const text = String(raw ?? '').trim();
-      const match = /^([a-z0-9_-]{1,20}):(.+)$/iu.exec(text);
-      const known = match && OPERATOR_CHANNELS.some(([id]) => id === match[1].toLowerCase());
+      const match = /^([a-z0-9_-]{1,32}):(.+)$/iu.exec(text);
+      const known = match && options.some((item) => item.id === match[1].toLowerCase());
       if (known) return { channel: match[1].toLowerCase(), id: match[2] };
       return { channel: selectedChannel, id: text };
     }
@@ -297,24 +299,29 @@ window.__ModuleLoader__.load({
      * an enum dropdown, id typed once. `*` is its own switch instead of a magic
      * string in a textarea.
      */
-    function OperatorEditor({ values, onChange }) {
+    function OperatorEditor({ values, onChange, channels = [] }) {
+      const options = Array.isArray(channels) && channels.length > 0 ? channels : FALLBACK_CHANNELS;
+      const hintFor = (id) => {
+        const kind = options.find((item) => item.id === id)?.kind ?? id;
+        return OPERATOR_ID_HINTS[kind] ?? '用户 id';
+      };
       const list = Array.isArray(values) ? values : [];
       const everyone = list.includes('*');
       const rows = list.filter((entry) => entry !== '*');
-      const [channel, setChannel] = useState('qqbot');
+      const [channel, setChannel] = useState(options[0]?.id ?? 'qqbot');
       const [text, setText] = useState('');
       const extraChannels = [...new Set(rows
         .map((entry) => splitOperatorEntry(entry).channel)
-        .filter((value) => value && !OPERATOR_CHANNELS.some(([id]) => id === value)))];
+        .filter((value) => value && !options.some((item) => item.id === value)))];
       const add = () => {
-        const parsed = normalizeOperatorInput(channel, text);
+        const parsed = normalizeOperatorInput(channel, text, options);
         const entry = joinOperatorEntry(parsed.channel, parsed.id);
         if (!entry) return;
         onChange(list.includes(entry) ? [...rows] : [...rows, entry]);
         setText('');
       };
       const replace = (index, nextChannel, nextId) => {
-        const parsed = normalizeOperatorInput(nextChannel, nextId);
+        const parsed = normalizeOperatorInput(nextChannel, nextId, options);
         const entry = joinOperatorEntry(parsed.channel, parsed.id);
         const next = rows.map((item, i) => (i === index ? entry : item)).filter(Boolean);
         onChange([...new Set(next)]);
@@ -332,8 +339,10 @@ window.__ModuleLoader__.load({
           rows.length === 0 ? h('span', { className: 'lb-muted' }, '还没有管理员：建 issue / 跨会话推送 / 写共享记忆对所有人关闭') : null,
           ...rows.map((entry, index) => {
             const parsed = splitOperatorEntry(entry);
-            const options = [...OPERATOR_CHANNELS];
-            if (parsed.channel && !options.some(([id]) => id === parsed.channel)) options.push([parsed.channel, parsed.channel]);
+            const rowOptions = [...options];
+            if (parsed.channel && !rowOptions.some((item) => item.id === parsed.channel)) {
+              rowOptions.push({ id: parsed.channel, label: parsed.channel, kind: parsed.channel });
+            }
             return h('div', { key: `${entry}-${index}`, className: 'lb-opitem' },
               h('select', {
                 className: 'lb-select',
@@ -341,12 +350,12 @@ window.__ModuleLoader__.load({
                 onChange: (event) => replace(index, event.target.value, parsed.id),
               },
                 parsed.channel === '' ? h('option', { value: '' }, '任意渠道') : null,
-                ...options.map(([id, label]) => h('option', { key: id, value: id }, label))
+                ...rowOptions.map((item) => h('option', { key: item.id, value: item.id }, item.label))
               ),
               h('input', {
                 className: 'lb-input lb-mono',
                 value: parsed.id,
-                placeholder: OPERATOR_ID_HINTS[parsed.channel] ?? '用户 id',
+                placeholder: hintFor(parsed.channel),
                 onChange: (event) => replace(index, parsed.channel, event.target.value),
               }),
               h('button', {
@@ -360,13 +369,13 @@ window.__ModuleLoader__.load({
         ),
         everyone ? null : h('div', { className: 'lb-oprow' },
           h('select', { className: 'lb-select', value: channel, onChange: (event) => setChannel(event.target.value) },
-            ...OPERATOR_CHANNELS.map(([id, label]) => h('option', { key: id, value: id }, label)),
+            ...options.map((item) => h('option', { key: item.id, value: item.id }, item.label)),
             ...extraChannels.map((value) => h('option', { key: value, value }, value))
           ),
           h('input', {
             className: 'lb-input lb-mono',
             value: text,
-            placeholder: OPERATOR_ID_HINTS[channel] ?? '用户 id',
+            placeholder: hintFor(channel),
             onChange: (event) => setText(event.target.value),
             onKeyDown: (event) => {
               if (event.key === 'Enter') {
@@ -443,14 +452,6 @@ window.__ModuleLoader__.load({
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
-      const restartChannels = async () => {
-        setBusy(true); setError(''); setMessage('');
-        try {
-          await api('/channels/restart', { method: 'POST', body: '{}' });
-          setMessage('已请求重连，稍等几秒看状态');
-          await refresh();
-        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
-      };
       const loadLogs = async () => {
         setLogError('');
         try {
@@ -491,33 +492,121 @@ window.__ModuleLoader__.load({
           setGhBranches(result.branches ?? []);
         } catch (err) { setGhBranches([]); setGhError(String(err.message ?? err)); } finally { setGhBusy(''); }
       };
-      const channels = [
-        ['snowluma', 'SnowLuma / QQ', 'OneBot v11 WebSocket；可填 SnowLuma 安装目录自动读 token', [
-          ['wsUrl', 'WebSocket 地址', 'text'],
-          ['accessToken', 'Access Token', 'password'],
-          ['homeDir', 'SnowLuma 安装目录（可选）', 'text'],
-        ]],
-        ['qqbot', '官方 QQ Bot', 'QQ 开放平台 AppID/Secret', [
-          ['appId', 'AppID', 'text'],
-          ['appSecret', 'AppSecret', 'password'],
-        ]],
-        ['discord', 'Discord', 'discord.js；凭据只要 Bot Token（开发者门户 → 应用 → Bot 页 → Reset Token）', [
-          ['token', 'Bot Token', 'password'],
-        ]],
-      ];
-      const anyEnabled = channels.some(([id]) => cfg.channels?.[id]?.enabled === true);
+      // A channel *kind* is a transport; every entry of `cfg.channels` is one
+      // bot. One AppID = one bot, so "different project → different bot" means
+      // adding another qqbot entry here and pointing a domain at it.
+      const KIND_META = {
+        snowluma: {
+          label: 'SnowLuma / QQ',
+          hint: 'OneBot v11 WebSocket；可填 SnowLuma 安装目录自动读 token。两个 QQ 号需要两个 SnowLuma 网关。',
+          fields: [
+            ['wsUrl', 'WebSocket 地址', 'text'],
+            ['accessToken', 'Access Token', 'password'],
+            ['homeDir', 'SnowLuma 安装目录（可选）', 'text'],
+          ],
+        },
+        qqbot: {
+          label: '官方 QQ Bot',
+          hint: 'QQ 开放平台 AppID/Secret；一个 AppID 就是一个机器人，两个项目就用两个 AppID。',
+          fields: [
+            ['appId', 'AppID', 'text'],
+            ['appSecret', 'AppSecret', 'password'],
+          ],
+        },
+        discord: {
+          label: 'Discord',
+          hint: 'discord.js；凭据只要 Bot Token（开发者门户 → 应用 → Bot 页 → Reset Token）。',
+          fields: [['token', 'Bot Token', 'password']],
+        },
+      };
+      const KIND_ORDER = ['snowluma', 'qqbot', 'discord'];
+      const channelIds = Object.keys(cfg.channels ?? {});
+      const anyEnabled = channelIds.some((id) => cfg.channels[id]?.enabled === true);
+      const [newKind, setNewKind] = useState('qqbot');
+      const [newLabel, setNewLabel] = useState('');
+      const [confirmRemove, setConfirmRemove] = useState('');
+      const blankChannel = (kind, id) => ({
+        id,
+        kind,
+        label: '',
+        enabled: false,
+        ...(kind === 'snowluma'
+          ? { wsUrl: 'ws://127.0.0.1:3001', accessToken: '', homeDir: '' }
+          : kind === 'qqbot'
+            ? { appId: '', appSecret: '', allowActive: false }
+            : { token: '', requireMention: false }),
+      });
+      const nextChannelId = (kind) => {
+        if (!Object.hasOwn(cfg.channels ?? {}, kind)) return kind;
+        for (let i = 2; i < 100; i += 1) {
+          const candidate = `${kind}-${i}`;
+          if (!Object.hasOwn(cfg.channels ?? {}, candidate)) return candidate;
+        }
+        return `${kind}-${Date.now().toString(36)}`;
+      };
+      const addChannel = () => {
+        const id = nextChannelId(newKind);
+        const suffix = id === newKind ? '' : ` ${id.split('-').pop()}`;
+        const label = String(newLabel).trim() || `${KIND_META[newKind].label}${suffix}`;
+        setCfg((current) => {
+          const next = clone(current);
+          next.channels = { ...(next.channels ?? {}), [id]: { ...blankChannel(newKind, id), label } };
+          return next;
+        });
+        setNewLabel('');
+        setMessage(`已添加「${label}」（id ${id}）：填好凭据后点保存`);
+      };
+      const removeChannel = async (id) => {
+        setBusy(true); setError(''); setMessage('');
+        try {
+          // An unsaved card only exists in this draft; a saved one must go
+          // through the API, which is authoritative and reconnects the rest.
+          if (Object.hasOwn(data.state.config.channels ?? {}, id)) {
+            await api('/channels/remove', { method: 'POST', body: JSON.stringify({ id }) });
+          }
+          setCfg((current) => {
+            const next = clone(current);
+            delete next.channels[id];
+            return next;
+          });
+          setConfirmRemove('');
+          setMessage('已删除通道');
+          await refresh();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
+      };
+      const restartChannel = async (id, label) => {
+        setBusy(true); setError(''); setMessage('');
+        try {
+          await api('/channels/restart', { method: 'POST', body: JSON.stringify({ id }) });
+          setMessage(`已请求重连「${label}」，只影响这一个机器人`);
+          await refresh();
+        } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
+      };
+      // Same AppID twice means the platform kicks one of them off; the plugin
+      // cannot know which, so warn instead of pretending.
+      const appIdOwners = {};
+      for (const [id, entry] of Object.entries(cfg.channels ?? {})) {
+        if (entry?.kind !== 'qqbot' || !String(entry.appId ?? '').trim()) continue;
+        const key = String(entry.appId).trim();
+        appIdOwners[key] = [...(appIdOwners[key] ?? []), id];
+      }
+      const duplicatedAppIds = Object.entries(appIdOwners).filter(([, ids]) => ids.length > 1);
+      const domainNamesFor = (id) => data.state.domains
+        .filter((domain) => domain.channelId === id)
+        .map((domain) => domain.name || domain.id);
       return h('div', { className: 'lb-root' },
         !anyEnabled ? h('div', { className: 'lb-error' }, '还没有启动任何聊天通道。用下面的「启动通道」卡片逐个启动；如果只是想让机器人在 QQ 上跑，先启动 SnowLuma。') : null,
+        duplicatedAppIds.length > 0 ? h('div', { className: 'lb-error' },
+          `同一个 AppID 配给了多个机器人：${duplicatedAppIds.map(([appId, ids]) => `${ids.join(' / ')}（${appId}）`).join('；')}。QQ 开放平台只允许一个连接，它们会互相踢线。`) : null,
         message ? h('div', { className: 'lb-ok' }, message) : null,
         error ? h('div', { className: 'lb-error' }, error) : null,
         h(Card, {
           title: '启动通道',
           extra: h('div', { className: 'lb-actions' },
-            h('button', { className: 'lb-btn', disabled: busy, onClick: () => void restartChannels() }, '全部重连'),
             h('button', { className: 'lb-btn', onClick: () => void loadLogs() }, showLogs ? '刷新日志' : '查看日志')
           ),
         },
-          h('div', { className: 'lb-muted' }, '顺序：1）先启动 SnowLuma（本插件不会代启动）；2）点对应通道的「启动」；3）等状态变成「已连接」。官方 QQ Bot / Discord 先填凭据再启动。'),
+          h('div', { className: 'lb-muted' }, '每个机器人独立启动/重连，互不影响。官方 QQ Bot / Discord 先填凭据再点「启动」；SnowLuma 需要先自己启动网关（本插件不会代启动）。'),
           ...data.channels.map((status) => {
             const entry = cfg.channels?.[status.id] ?? {};
             return h('div', { className: 'lb-listitem', key: `launch-${status.id}` },
@@ -537,7 +626,7 @@ window.__ModuleLoader__.load({
                 entry.enabled ? h('button', {
                   className: 'lb-btn',
                   disabled: busy,
-                  onClick: () => void restartChannels(),
+                  onClick: () => void restartChannel(status.id, status.label),
                 }, '重试连接') : null,
                 entry.enabled ? h('button', {
                   className: 'lb-btn lb-btn--danger',
@@ -551,7 +640,7 @@ window.__ModuleLoader__.load({
         showLogs ? h(Card, { title: '通道日志', extra: h('button', { className: 'lb-btn', onClick: () => void loadLogs() }, '刷新') },
           logError ? h('div', { className: 'lb-error' }, logError) : null,
           !logs ? h('div', { className: 'lb-muted' }, '加载中…') : logs.length === 0
-            ? h('div', { className: 'lb-muted' }, '还没有日志。点「全部重连」后再看。')
+            ? h('div', { className: 'lb-muted' }, '还没有日志。点某个机器人的「重试连接」后再看。')
             : h('pre', { className: 'lb-log' }, ...logs.slice(0, 120).map((line) => `${new Date(line.at).toLocaleTimeString()} ${String(line.level).toUpperCase()} ${line.text}\n`))
         ) : null,
         h(Card, {
@@ -628,9 +717,14 @@ window.__ModuleLoader__.load({
             error ? h('span', { className: 'lb-error' }, error) : null
           )
         ),
-        ...channels.map(([id, label, hint, fields]) => {
-          const entry = cfg.channels?.[id] ?? {};
+        ...channelIds.map((id) => {
+          const entry = cfg.channels[id] ?? {};
+          const kind = entry.kind ?? id;
+          const meta = KIND_META[kind] ?? KIND_META.qqbot;
           const status = data.channels.find((item) => item.id === id);
+          const label = String(entry.label ?? '').trim() || meta.label;
+          const owners = domainNamesFor(id);
+          const saved = Object.hasOwn(data.state.config.channels ?? {}, id);
           return h(Card, {
             key: id,
             title: label,
@@ -641,51 +735,70 @@ window.__ModuleLoader__.load({
                 disabled: busy,
                 onClick: () => void toggleChannel(id, !entry.enabled),
               }, entry.enabled ? '停止' : '启动'),
+              entry.enabled ? h('button', {
+                className: 'lb-btn',
+                disabled: busy,
+                onClick: () => void restartChannel(id, label),
+              }, '重试连接') : null,
               h('button', {
                 className: 'lb-btn',
                 disabled: busy,
-                onClick: () => void save(`已保存 ${label} 设置`),
+                onClick: () => void save(`已保存「${label}」设置`),
               }, busy ? '保存中…' : '保存')
             ),
           },
-            h('div', { className: 'lb-muted' }, hint),
+            h('div', { className: 'lb-muted' },
+              `${meta.label} · 实例 id ${id}（会话键前缀，不可改）${saved ? '' : ' · 尚未保存'}`),
+            h('div', { className: 'lb-muted' }, meta.hint),
             status?.hint ? h('div', { className: 'lb-muted' }, status.hint) : null,
-            h('label', { className: 'lb-check' },
-              h('input', { type: 'checkbox', checked: entry.enabled === true, onChange: (e) => setChannel(id, 'enabled', e.target.checked) }),
-              '启用该通道'
-            ),
+            owners.length > 0
+              ? h('div', { className: 'lb-muted' },
+                `领域「${owners.join('」「')}」把这个机器人当作自己的入口：它上面未绑定的会话会归到那个领域。`)
+              : null,
             h('div', { className: 'lb-grid' },
-              ...fields.map(([key, labelText, type]) => h(Field, { key, label: labelText },
+              h(Field, { label: '名称', hint: '给这个机器人起个能认出项目的名字；会显示在会话列表与状态里' },
+                h('input', {
+                  className: 'lb-input',
+                  value: entry.label ?? '',
+                  placeholder: meta.label,
+                  onChange: (e) => setChannel(id, 'label', e.target.value),
+                })
+              ),
+              ...meta.fields.map(([key, labelText, type]) => h(Field, { key, label: labelText },
                 h('input', {
                   className: 'lb-input',
                   type,
                   value: entry[key] ?? '',
-                  placeholder: type === 'password' && data.secretStatus?.[`${id}${key === 'accessToken' ? 'AccessToken' : key === 'appSecret' ? 'AppSecret' : 'Token'}`] ? '已配置；留空不修改' : '',
+                  placeholder: type === 'password' && data.secretStatus?.channelSecrets?.[id] ? '已配置；留空不修改' : '',
                   onChange: (e) => setChannel(id, key, e.target.value),
                 })
               ))
             ),
-            id === 'discord' ? h('div', { className: 'lb-field' },
+            h('label', { className: 'lb-check' },
+              h('input', { type: 'checkbox', checked: entry.enabled === true, onChange: (e) => setChannel(id, 'enabled', e.target.checked) }),
+              '启用这个机器人'
+            ),
+            kind === 'discord' ? h('div', { className: 'lb-field' },
               h('div', { className: 'lb-muted' },
                 '只有 Bot Token 这一项凭据，形如三段用点分开的长串。它不是 OAuth2 页的「客户端密钥」，也不是 General Information 页的「公钥」——这两个都用不上。'
                 + 'Token 只在 Bot 页的 Reset Token 里出现一次，重置后旧的立即失效。还要在 Bot 页打开 Message Content Intent（没开时收不到正文），'
                 + '并用 OAuth2 URL Generator 勾 bot + Send Messages / Read Message History / Attach Files 把机器人邀请进服务器。'
               )
             ) : null,
-            id === 'discord' ? h('label', { className: 'lb-check' },
+            kind === 'discord' ? h('label', { className: 'lb-check' },
               h('input', {
                 type: 'checkbox',
                 checked: entry.requireMention === true,
-                onChange: (e) => setChannel('discord', 'requireMention', e.target.checked),
+                onChange: (e) => setChannel(id, 'requireMention', e.target.checked),
               }),
               '群聊里必须 @ 或回复机器人才响应'
             ) : null,
-            id === 'qqbot' ? h('div', { className: 'lb-field' },
+            kind === 'qqbot' ? h('div', { className: 'lb-field' },
               h('label', { className: 'lb-check' },
                 h('input', {
                   type: 'checkbox',
                   checked: entry.allowActive === true,
-                  onChange: (e) => setChannel('qqbot', 'allowActive', e.target.checked),
+                  onChange: (e) => setChannel(id, 'allowActive', e.target.checked),
                 }),
                 '允许主动消息（不使用 msg_id 直接发送）'
               ),
@@ -701,11 +814,47 @@ window.__ModuleLoader__.load({
               h('button', {
                 className: 'lb-btn lb-btn--primary',
                 disabled: busy,
-                onClick: () => void save(`已保存 ${label} 设置`),
-              }, busy ? '保存中…' : `保存 ${label} 设置`)
+                onClick: () => void save(`已保存「${label}」设置`),
+              }, busy ? '保存中…' : `保存「${label}」`)
+            ),
+            h('div', { className: 'lb-actions' },
+              confirmRemove === id
+                ? h('button', {
+                  className: 'lb-btn lb-btn--danger',
+                  disabled: busy,
+                  onClick: () => void removeChannel(id),
+                }, '确认删除（凭据一并移除）')
+                : h('button', {
+                  className: 'lb-btn',
+                  disabled: busy,
+                  onClick: () => setConfirmRemove(id),
+                }, '删除这个机器人')
             )
           );
         }),
+        h(Card, {
+          title: '添加机器人',
+          extra: h('button', { className: 'lb-btn lb-btn--primary', disabled: busy, onClick: addChannel }, '+ 添加'),
+        },
+          h('div', { className: 'lb-muted' }, '同一个渠道可以添加多个机器人：两个 AppID 就是两个 QQ 机器人。添加后填凭据、点保存，再到「领域」页把某个领域的机器人指向它，那个项目就只在这个机器人上接待。'),
+          h('div', { className: 'lb-grid' },
+            h(Field, { label: '通道类型' },
+              h('select', {
+                className: 'lb-select',
+                value: newKind,
+                onChange: (e) => setNewKind(e.target.value),
+              }, ...KIND_ORDER.map((kind) => h('option', { key: kind, value: kind }, KIND_META[kind].label)))
+            ),
+            h(Field, { label: '名称', hint: '例如「砂金客服」；留空用默认名' },
+              h('input', {
+                className: 'lb-input',
+                value: newLabel,
+                placeholder: '砂金客服',
+                onChange: (e) => setNewLabel(e.target.value),
+              })
+            )
+          )
+        ),
         h(Card, {
           title: 'GitHub 仓库（可选）',
           extra: h('div', { className: 'lb-actions' },
@@ -1087,7 +1236,7 @@ window.__ModuleLoader__.load({
         const id = `domain-${Date.now().toString(36)}`;
         setDraft((list) => [...list, {
           id, name: '新领域', role: data.state.roles[0]?.name ?? '客服', preset: 'lane-support', model: '',
-          knowledgeScopes: ['default'], allowedHostTools: [], operators: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
+          knowledgeScopes: ['default'], channelId: '', allowedHostTools: [], operators: [], autoReply: true, trigger: 'all', triggers: ['all'], keywords: [],
           kbDraftEnabled: true, repoEnabled: false, repo: '', branch: '', systemPrompt: '', maxReplyChars: 0,
           kbAutoRetrieve: false, kbTriggerKeywords: [], kbRetrieveChars: 1500, sessionMaxTurns: 0,
         }]);
@@ -1106,6 +1255,14 @@ window.__ModuleLoader__.load({
           await refresh();
         } catch (err) { setError(String(err.message ?? err)); } finally { setBusy(false); }
       };
+      const botName = (id) => {
+        const entry = data.state.config.channels?.[id];
+        return entry?.label || entry?.kind || id;
+      };
+      const channelConflicts = current?.channelId
+        ? draft.filter((domain) => domain.id !== current.id && domain.channelId === current.channelId)
+          .map((domain) => domain.name || domain.id)
+        : [];
       return h('div', { className: 'lb-root' },
         h('div', { className: 'lb-row' },
           h('button', { className: 'lb-btn', onClick: add }, '+ 新建领域'),
@@ -1130,6 +1287,25 @@ window.__ModuleLoader__.load({
               h(Field, { label: '使用它的角色卡', hint: '角色 → 领域：在「角色卡」页把角色指向这个领域；会话只选角色' },
                 h('div', { className: 'lb-muted' },
                   (data.state.roles ?? []).filter((role) => role.domainId === current.id).map((role) => role.name).join('、') || '（还没有角色指向这个领域）'
+                )
+              ),
+              h(Field, { label: '这个领域用的机器人', hint: '从「通道」页已经配好的机器人里选；选了之后，这个机器人上未绑定的会话就归到这个领域，项目之间不会串' },
+                h('div', { className: 'lb-field' },
+                  h('select', {
+                    className: 'lb-select',
+                    value: current.channelId ?? '',
+                    onChange: (e) => patch('channelId', e.target.value),
+                  },
+                    h('option', { value: '' }, '通用（不指定机器人：按会话绑定与全局默认领域）'),
+                    ...Object.entries(data.state.config.channels ?? {}).map(([id, entry]) => h('option', { key: id, value: id },
+                      `${entry?.label || entry?.kind || id} · ${id}${entry?.enabled ? '' : '（未启动）'}`))
+                  ),
+                  current.channelId
+                    ? h('div', { className: 'lb-muted' }, `机器人「${botName(current.channelId)}」上未绑定的会话会归到这个领域。`)
+                    : h('div', { className: 'lb-muted' }, '没有指定机器人：这个领域靠「会话 → 角色」进入，机器人归属不参与解析。'),
+                  channelConflicts.length > 0
+                    ? h('div', { className: 'lb-error' }, `这个机器人也被领域「${channelConflicts.join('」「')}」选中：未绑定会话会归到列表里第一个。`)
+                    : null
                 )
               ),
               h(Field, { label: 'Agent preset', hint: 'preset 决定会话挂哪些 DSH 插件和工具；桥接的 lane_* 工具与角色卡会另外注入。群聊闲聊/角色扮演选 lane-chat，客服选 lane-support；换 preset 后要重置会话' },
@@ -1194,6 +1370,11 @@ window.__ModuleLoader__.load({
                 h(OperatorEditor, {
                   values: current.operators,
                   onChange: (next) => patch('operators', next),
+                  channels: Object.entries(data.state.config.channels ?? {}).map(([id, entry]) => ({
+                    id,
+                    kind: entry?.kind ?? id,
+                    label: entry?.label || entry?.kind || id,
+                  })),
                 })
               ),
               h(Field, { label: '单条回复上限', hint: '0=使用全局' },

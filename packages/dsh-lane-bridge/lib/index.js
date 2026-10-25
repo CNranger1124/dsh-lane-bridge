@@ -208,7 +208,11 @@ export async function apply(ctx, config = {}) {
 
   await channelManager.sync();
   const enabled = store.get().config.channels;
-  logger.info(`[lane-bridge] 已启动；通道：${Object.entries(enabled).filter(([, value]) => value?.enabled).map(([key]) => key).join(', ') || '无'}`);
+  const running = Object.entries(enabled)
+    .filter(([, value]) => value?.enabled)
+    .map(([id, value]) => `${id}(${value?.label || id})`)
+    .join(', ');
+  logger.info(`[lane-bridge] 已启动；通道：${running || '无'}`);
   logger.info(`[lane-bridge] 在 DSH 设置 → IM 桥接 中配置；数据在 ${store.paths.dataDir}`);
 }
 

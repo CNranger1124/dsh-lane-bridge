@@ -2,7 +2,7 @@
 
 # dsh-lane-bridge
 
-把 QQ（SnowLuma OneBot v11）、官方 QQ Bot 和 Discord 接入 DSH 的聊天/客服 Bot 插件：**一个插件、多个渠道、共享知识库、按会话人格、统一推送**。当前版本 `0.7.0`。
+把 QQ（SnowLuma OneBot v11）、官方 QQ Bot 和 Discord 接入 DSH 的聊天/客服 Bot 插件：**一个插件、多个渠道、共享知识库、按会话人格、统一推送**。当前版本 `0.8.0`。
 
 本仓库从独立的 `qq-bridge` 项目演进而来。产品代码在
 [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge)；旧的 `qq-bridge` 源码**不包含**在仓库里，迁移脚本可以读取一个外部的旧项目目录。仓库只包含插件、文档和测试。
@@ -56,9 +56,19 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 2. 打开 **Settings → IM 桥接 → 概览与通道**。
 3. 在页面顶部 **启动通道** 卡片里，找 **SnowLuma / QQ** 点 **启动**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
 4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点对应行的 **启动**；不需要的通道点 **停止**。Discord 只认 **Bot Token**（开发者门户 → 应用 → **Bot** 页 → `Reset Token`）：OAuth2 页的客户端密钥和 General Information 页的公钥都用不上。
-5. 已启动但连不上时，点 **重试连接** 或 **全部重连**。
+5. 已启动但连不上时，点那个机器人卡片上的 **重试连接**——它只重连这一个，不会影响其他机器人。
 
-> **启动/停止** 会立即保存并重连；下面的通道卡片更适合改多个字段后统一「保存通道设置」。
+> **启动/停止** 会立即保存并只重连这一个实例；下面的通道卡片更适合改多个字段后统一「保存」。同一个渠道可以点「添加机器人」再加一个 AppID（两个 AppID 就是两个机器人），到 **领域** 页把某个领域指向它，那个项目就只在这个机器人上接待。
+
+## 多个项目用多个 Bot
+
+一个 AppID 就是一个机器人，`openid` 也按机器人隔离——同一个群在两个 Bot 下拿到的是不同的 id，所以会话、记忆、绑定都不通用。想"一个项目一个机器人"：
+
+1. **通道** 页 →「添加机器人」：类型选 **官方 QQ Bot**，起个能认出项目的名字（例如「砂金客服」），添加后填第二个 AppID/AppSecret，保存。
+2. **领域** 页 → 选中那个项目的领域 → **这个领域用的机器人** 选刚加的机器人。
+3. 之后这个机器人上**未绑定**的群/私聊就归这个领域，按它的知识库、人格、唤醒策略接待；显式绑了角色的会话仍以角色所属领域为准。
+
+删除机器人时卡片上要点两次确认；历史会话保留，指向它的领域会回到"通用"。
 
 ## 为什么做成插件，而不是独立前端？
 
@@ -71,7 +81,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 能做什么
 
-- **三个渠道**：SnowLuma（OneBot v11）、官方 QQ Bot（AppID/AppSecret）、Discord（Bot Token + Message Content Intent）。「启动通道」卡片支持逐个启动/停止/重试，并可查看最近 300 条连接/错误日志。
+- **多机器人**：SnowLuma（OneBot v11）、官方 QQ Bot（AppID/AppSecret）、Discord（Bot Token + Message Content Intent）三种渠道，每种都可以加多个实例（多个 AppID / 多个 Token）；每个机器人独立启动、独立重连、独立状态，可查看最近 300 条连接/错误日志。
 - **会话 → 角色 → 领域**：会话只选角色卡；角色卡绑定领域；领域承载基础设施（绑定的知识库、共享记忆、仓库、管理者、触发策略、preset/模型）。换角色就整套换策略。
 - **领域**：preset 下拉、模型、宿主工具白名单、**管理者白名单**（`渠道:id`，空列表＝没有管理员）、群聊触发策略多选（@/回复、关键词可同时生效，也可选所有消息或关闭）、自动检索与上下文预算（`kbRetrieveChars`、`memoryMaxChars`、`sessionMaxTurns`）。
 - **两种内置人格**：`lane-support` 客服、`lane-chat` 群聊闲聊/角色扮演。后者把角色卡当最高身份设定（卡片优先于通用规则、允许入戏、群聊里可以不说），两者都不注册内置工具。
@@ -119,7 +129,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 ## 状态
 
-`0.7.0` 新增 `lane-chat` preset：群聊闲聊/角色扮演，把角色卡当最高身份设定。`0.6.0` 把知识库变成一等公民：草稿必须带触发词、只能落在领域绑定的库里，采纳＝新建一篇独立文档；审批页可改触发词。`0.5.x` 引入知识库增删改、跨库转移/改名和领域多库绑定；`0.4.x` 修正官方 QQ Bot 的被动回复、全量群消息与 @ 判定；`0.3.x` 把模型改成「会话 → 角色 → 领域」。细节见 [CHANGELOG.md](./CHANGELOG.md)。
+`0.8.0` 把通道变成"机器人实例"：同一渠道可加多个 AppID，一个项目一个 Bot，领域可指定自己用的机器人，重连/保存都只影响那一个实例。`0.7.0` 新增 `lane-chat` preset：群聊闲聊/角色扮演，把角色卡当最高身份设定。`0.6.0` 把知识库变成一等公民：草稿必须带触发词、只能落在领域绑定的库里，采纳＝新建一篇独立文档；审批页可改触发词。`0.5.x` 引入知识库增删改、跨库转移/改名和领域多库绑定；`0.4.x` 修正官方 QQ Bot 的被动回复、全量群消息与 @ 判定；`0.3.x` 把模型改成「会话 → 角色 → 领域」。细节见 [CHANGELOG.md](./CHANGELOG.md)。
 
 代码与测试已完成（157 项通过），真实 DSH/官方 QQ Bot 正在验收，SnowLuma/Discord 尚未做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
 

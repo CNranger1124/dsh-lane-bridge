@@ -28,8 +28,14 @@ export function findRole(state, name) {
  * scopes, shared memory, repo, operators, attention policy). `domainId` on a
  * binding is only read for state written before 0.4.0.
  *
+ * A domain may also claim a bot (`domain.channelId`): conversations on that bot
+ * that nobody bound fall into that domain instead of the global default. That is
+ * what lets one deployment run one bot per project (0.8.0). An explicit role
+ * binding still wins.
+ *
  * @returns {{
- *   key: string, bound: boolean, domain: object|null,
+ *   key: string, channel: string, channelDomainId: string,
+ *   bound: boolean, domain: object|null,
  *   role: string, preset: string, model: string,
  *   knowledgeScopes: string[], allowedHostTools: string[],
  *   autoReply: boolean, maxReplyChars: number,
@@ -42,14 +48,21 @@ export function resolveConversation(state, key) {
   if (!parsed) throw new TypeError(`invalid conversation key: ${key}`);
   const binding = bindingFor(state, key);
   const defaultDomain = findDomain(state, state?.config?.defaultDomainId);
-  const roleName = String(binding?.role || state?.config?.defaultRole || '').trim();
+  // The domain that claims this bot (`domain.channelId`). Strict lookup: when
+  // the id is stale we want "no claim", not "the first domain in the list".
+  const channelDomain = (Array.isArray(state?.domains) ? state.domains : [])
+    .find((domain) => domain?.channelId && domain.channelId === parsed.channel) ?? null;
+  // An explicit role binding always wins. Only when nothing is bound does the
+  // bot's owner decide the domain — otherwise the global `defaultRole` would
+  // pull every conversation on every bot into the same domain.
+  const roleName = String(binding?.role || (channelDomain ? '' : state?.config?.defaultRole) || '').trim();
   const legacyDomainId = String(binding?.domainId ?? '').trim();
   let role = findRole(state, roleName);
   const domain = role?.domainId
     ? findDomain(state, role.domainId)
     : legacyDomainId
       ? findDomain(state, legacyDomainId)
-      : defaultDomain;
+      : (channelDomain ?? defaultDomain);
   // No explicit role: use the first card that belongs to the resolved domain, so
   // the persona and the infrastructure never disagree.
   if (!role) {
@@ -57,7 +70,11 @@ export function resolveConversation(state, key) {
     role = roles.find((item) => item.domainId === domain?.id) ?? roles[0] ?? null;
   }
   const unbound = !binding;
-  const autoReply = binding
+  // An unbound conversation follows the switches unless a domain *owns* this
+  // bot: then the bot is that project's front desk, and its groups answer under
+  // the domain's own policy (the `autoReplyGroups/Private` switches remain the
+  // opt-in for bots nobody claims).
+  const autoReply = binding || channelDomain
     ? domain?.autoReply !== false
     : parsed.kind === 'private'
       ? state?.config?.autoReplyPrivate === true
@@ -65,6 +82,8 @@ export function resolveConversation(state, key) {
   const triggers = normalizeTriggers(domain?.triggers ?? domain?.trigger);
   return {
     key,
+    channel: parsed.channel,
+    channelDomainId: channelDomain?.id ?? '',
     bound: !unbound,
     domain: domain ?? null,
     role: String(role?.name || '客服'),
@@ -153,7 +172,8 @@ export function conversationLabel(state, key) {
   if (convo?.name) return convo.name;
   const parsed = parseConversationKey(key);
   if (!parsed) return key;
-  return `${parsed.channel} ${parsed.kind === 'private' ? '私聊' : '群聊'} ${parsed.externalId}`;
+  const channelLabel = String(state?.config?.channels?.[parsed.channel]?.label ?? '').trim() || parsed.channel;
+  return `${channelLabel} ${parsed.kind === 'private' ? '私聊' : '群聊'} ${parsed.externalId}`;
 }
 
 /** Render the first-turn context: domain + role card + channel facts. */

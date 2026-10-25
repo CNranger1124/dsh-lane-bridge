@@ -11,6 +11,8 @@ import {
   defaultDomain,
   defaultKnowledgeBases,
   defaultState,
+  normalizeChannelId,
+  normalizeChannels,
   normalizeOperators,
   normalizeTriggers,
   operatorEntryFor,
@@ -165,6 +167,8 @@ function normalizeDomainList(raw, defaultDomainId) {
       knowledgeScopes: Array.isArray(item?.knowledgeScopes)
         ? [...new Set(item.knowledgeScopes.map((s) => String(s).trim()).filter(Boolean))]
         : ['default'],
+      // The bot that serves this domain. Empty = generic routing.
+      channelId: normalizeChannelId(item?.channelId),
       allowedHostTools: Array.isArray(item?.allowedHostTools)
         ? [...new Set(item.allowedHostTools.map((s) => String(s).trim()).filter(Boolean))]
         : [],
@@ -201,7 +205,8 @@ function normalizeDomainList(raw, defaultDomainId) {
 export function normalizeState(raw) {
   const base = defaultState();
   const src = isObject(raw) ? raw : {};
-  const config = mergeDeep(defaultConfig(), isObject(src.config) ? src.config : {});
+  const srcConfig = isObject(src.config) ? src.config : {};
+  const config = mergeDeep(defaultConfig(), srcConfig);
   config.enabled = config.enabled !== false;
   config.autoReplyPrivate = config.autoReplyPrivate === true;
   config.autoReplyGroups = config.autoReplyGroups === true;
@@ -230,10 +235,17 @@ export function normalizeState(raw) {
   config.github.issueLabel = String(config.github.issueLabel ?? 'agent').trim().slice(0, 40) || 'agent';
   config.github.maxCreatesPerHour = Math.max(0, Math.min(20, Number(config.github.maxCreatesPerHour) || 3));
   config.github.maxFileChars = Math.max(2000, Math.min(60000, Number(config.github.maxFileChars) || 20000));
-  config.channels = mergeDeep(base.config.channels, isObject(config.channels) ? config.channels : {});
+  // Instance map: read straight from the source, because the merge above
+  // resurrects the default three keys; a deleted bot must stay deleted.
+  config.channels = normalizeChannels(isObject(srcConfig.channels) ? srcConfig.channels : base.config.channels);
 
   const { domains, defaultDomainId } = normalizeDomainList(src.domains, config.defaultDomainId);
   config.defaultDomainId = defaultDomainId;
+  // A domain pointing at a bot that no longer exists would answer nothing.
+  // Clearing it puts the domain back on generic routing; the 领域 page shows it.
+  for (const domain of domains) {
+    if (domain.channelId && !Object.hasOwn(config.channels, domain.channelId)) domain.channelId = '';
+  }
 
   // Migration: older state had `domain.role` naming a role. Turn that into the
   // new direction (role → domain) before normalization, so a state file written
@@ -349,18 +361,25 @@ export function normalizeState(raw) {
 /** Return a browser-safe projection: secrets become presence flags. */
 export function redactState(state) {
   const clone = JSON.parse(JSON.stringify(state));
+  // One flag per channel instance: the 通道 card needs to know whether *that*
+  // bot already has a secret, because a blank field must keep it.
+  const channelSecrets = {};
+  for (const [id, entry] of Object.entries(state?.config?.channels ?? {})) {
+    channelSecrets[id] = Boolean(String(entry?.appSecret || entry?.accessToken || entry?.token || '').trim());
+  }
   const secretStatus = {
     pushToken: Boolean(state?.config?.pushToken),
-    snowlumaAccessToken: Boolean(state?.config?.channels?.snowluma?.accessToken),
-    qqbotAppSecret: Boolean(state?.config?.channels?.qqbot?.appSecret),
-    discordToken: Boolean(state?.config?.channels?.discord?.token),
     githubToken: Boolean(state?.config?.github?.token),
+    channelSecrets,
   };
   if (clone.config) {
     clone.config.pushToken = '';
-    if (clone.config.channels?.snowluma) clone.config.channels.snowluma.accessToken = '';
-    if (clone.config.channels?.qqbot) clone.config.channels.qqbot.appSecret = '';
-    if (clone.config.channels?.discord) clone.config.channels.discord.token = '';
+    for (const entry of Object.values(clone.config.channels ?? {})) {
+      if (!entry || typeof entry !== 'object') continue;
+      if ('appSecret' in entry) entry.appSecret = '';
+      if ('accessToken' in entry) entry.accessToken = '';
+      if ('token' in entry) entry.token = '';
+    }
     if (clone.config.github) clone.config.github.token = '';
   }
   return { state: clone, secretStatus };
@@ -596,6 +615,25 @@ export class LaneStore {
         const exists = draft.domains.some((d) => d.id === draft.config.defaultDomainId);
         if (!exists) draft.config.defaultDomainId = draft.domains[0]?.id ?? 'default';
       }
+    });
+  }
+
+  /**
+   * Delete channel instances outright.
+   *
+   * A config patch deep-merges, so it can never drop a key; the 通道 page needs
+   * an authoritative delete. Conversation history is deliberately untouched:
+   * past messages still belong to the bot that received them.
+   */
+  async removeChannels(ids) {
+    const wanted = new Set((Array.isArray(ids) ? ids : [ids])
+      .map((id) => normalizeChannelId(id))
+      .filter(Boolean));
+    if (wanted.size === 0) return [];
+    return this.update((draft) => {
+      for (const id of wanted) delete draft.config.channels[id];
+      // normalizeState clears domains whose channelId just disappeared.
+      return [...wanted];
     });
   }
 

@@ -746,3 +746,194 @@ test('draft approval explains that it creates a document with its own triggers',
   delete globalThis.__laneBundle;
   delete globalThis.__LANE_TEST__;
 });
+
+test('the channels page lists one card per configured bot', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class { constructor(props) { this.props = props; this.state = {}; } setState() {} },
+  };
+  globalThis.document = { getElementById: () => ({ remove() {} }), createElement: () => ({}), head: { appendChild() {} } };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?multi-bot');
+  const { Overview } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: {
+        channels: {
+          qqbot: { kind: 'qqbot', label: '通用机器人', enabled: true, appId: '111', appSecret: '', allowActive: false },
+          'qqbot-2': { kind: 'qqbot', label: '砂金客服', enabled: true, appId: '222', appSecret: '', allowActive: false },
+        },
+        domains: [{ id: 'default', name: '默认客服', channelId: 'qqbot' }],
+        roles: [],
+        bindings: {},
+        github: {},
+      },
+      domains: [{ id: 'default', name: '默认客服', channelId: 'qqbot' }],
+      roles: [],
+    },
+    channels: [
+      { id: 'qqbot', kind: 'qqbot', label: '通用机器人', enabled: true, connected: true, configured: true, hint: '' },
+      { id: 'qqbot-2', kind: 'qqbot', label: '砂金客服', enabled: true, connected: false, configured: true, hint: '正在连接官方 QQ Bot' },
+    ],
+    secretStatus: { channelSecrets: { qqbot: true, 'qqbot-2': false } },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = Overview({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  const all = text.join(' ');
+  assert.ok(all.includes('通用机器人'), all);
+  assert.ok(all.includes('砂金客服'), all);
+  assert.ok(all.includes('实例 id qqbot-2'), all);
+  assert.ok(all.includes('添加机器人'), 'there is an explicit way to add another AppID');
+  assert.ok(!all.includes('全部重连'), 'a single click must not reconnect every bot');
+  assert.ok(all.includes('重试连接'), 'each bot retries itself');
+  // The domain that claims a bot is named on that bot's card.
+  assert.ok(all.includes('领域「默认客服」把这个机器人当作自己的入口'), all);
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('two bots sharing an AppID are called out', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class { constructor(props) { this.props = props; this.state = {}; } setState() {} },
+  };
+  globalThis.document = { getElementById: () => ({ remove() {} }), createElement: () => ({}), head: { appendChild() {} } };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?duplicate-appid');
+  const { Overview } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: {
+        channels: {
+          qqbot: { kind: 'qqbot', label: 'A', enabled: true, appId: 'same', appSecret: '', allowActive: false },
+          'qqbot-2': { kind: 'qqbot', label: 'B', enabled: true, appId: 'same', appSecret: '', allowActive: false },
+        },
+        domains: [{ id: 'default', name: '默认客服' }],
+        roles: [],
+        bindings: {},
+        github: {},
+      },
+      domains: [{ id: 'default', name: '默认客服' }],
+      roles: [],
+    },
+    channels: [],
+    secretStatus: { channelSecrets: {} },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = Overview({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  assert.ok(text.join(' ').includes('互相踢线'), text.join(' '));
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});
+
+test('the domain page lets a domain pick one of the configured bots', async () => {
+  globalThis.__LANE_TEST__ = true;
+  const react = {
+    createElement(type, props, ...children) {
+      if (typeof type === 'function') {
+        if (type.prototype?.render) return new type(props).render();
+        return type({ ...(props ?? {}), children });
+      }
+      return { type, props, children };
+    },
+    useState(init) { return [typeof init === 'function' ? init() : init, () => {}]; },
+    useEffect() {},
+    useCallback(fn) { return fn; },
+    useMemo(fn) { return fn(); },
+    Component: class { constructor(props) { this.props = props; this.state = {}; } setState() {} },
+  };
+  globalThis.document = { getElementById: () => ({ remove() {} }), createElement: () => ({}), head: { appendChild() {} } };
+  globalThis.window = {
+    __ModuleLoader__: {
+      load({ factory }) {
+        globalThis.__laneBundle = factory((name) => {
+          if (name === 'react') return react;
+          throw new Error(`unexpected require: ${name}`);
+        });
+      },
+    },
+  };
+  await import('../lib/client.js?domain-bot');
+  const { Domains } = globalThis.__laneBundle.__components;
+  const data = {
+    state: {
+      config: {
+        channels: {
+          qqbot: { kind: 'qqbot', label: '通用机器人', enabled: true, appId: '111', appSecret: '' },
+          'qqbot-2': { kind: 'qqbot', label: '砂金客服', enabled: true, appId: '222', appSecret: '' },
+        },
+        github: {},
+      },
+      domains: [{
+        id: 'default', name: '牌山倒海客服', channelId: 'qqbot-2', preset: 'lane-support',
+        knowledgeScopes: ['default'], triggers: ['all'], keywords: [], operators: [], allowedHostTools: [],
+      }],
+      roles: [{ name: '客服', domainId: 'default', content: '' }],
+      knowledgeBases: [{ id: 'default', name: '默认知识库' }],
+    },
+    channels: [],
+    secretStatus: { channelSecrets: {} },
+    paths: { dataDir: '/tmp/lane-bridge' },
+  };
+  const tree = Domains({ data, refresh: async () => {} });
+  const text = [];
+  traverse(tree, (node) => { if (typeof node?.children === 'string') text.push(node.children); });
+  const all = text.join(' ');
+  assert.ok(all.includes('这个领域用的机器人'), all);
+  assert.ok(all.includes('通用（不指定机器人'), all);
+  assert.ok(all.includes('砂金客服'), all);
+  // Selecting a bot explains what it does for routing.
+  assert.ok(all.includes('机器人「砂金客服」上未绑定的会话会归到这个领域'), all);
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.__laneBundle;
+  delete globalThis.__LANE_TEST__;
+});

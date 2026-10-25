@@ -38,6 +38,9 @@ test('migration builds domains, bindings, roles, knowledge, and sessions', () =>
     assert.equal(plan.summary.domains, 2);
     assert.equal(plan.summary.bindings, 2);
     assert.equal(plan.state.config.channels.snowluma.accessToken, 'legacy-token');
+    // Channel instances carry their kind now; a migrated entry keeps working as
+    // instance `snowluma` and existing conversation keys stay valid.
+    assert.equal(plan.state.config.channels.snowluma.kind, 'snowluma');
     assert.equal(plan.state.config.reply.maxChars, 900);
     assert.equal(plan.state.bindings['snowluma:private:111'].domainId, 'default');
     assert.equal(plan.state.bindings['snowluma:group:222'].domainId, 'support');

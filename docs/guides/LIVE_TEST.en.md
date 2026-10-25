@@ -115,6 +115,24 @@ Common failures:
 4. The first reply uses the inbound `msgId`; proactive pushes to c2c may be
    rejected by the platform after the passive-reply window.
 
+### 3.1 A second bot (one project, one bot)
+
+1. **Channels** page → **Add bot** → transport **Official QQ Bot** → name it
+   "Shajin support" → add; fill the second AppID/AppSecret and save.
+2. Each card shows its own status. Click **Retry** on "Shajin support": only that
+   bot reconnects and the first one's status must not flicker (the 0.8.0 point).
+3. **Domains** page → select that project's domain → **Bot this domain uses** →
+   "Shajin support · qqbot-2" → save.
+4. Send a message in a group of the second bot (no binding): it should answer with
+   that domain's knowledge and persona right away, without the global "unbound
+   groups" switch.
+5. No crossover with the same group id on the first bot: both conversation rows
+   show their own bot's name as the channel.
+6. Click **Delete this bot** → a second "Confirm delete" appears → confirm: the card
+   is gone, the domain falls back to **Generic**, and conversation history stays.
+7. Two identical AppIDs must raise the red "the platform will kick one of them"
+   warning.
+
 ## 4. Discord
 
 1. Create a bot in the Discord Developer Portal, enable **Message Content
