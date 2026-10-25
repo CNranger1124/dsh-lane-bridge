@@ -4,7 +4,7 @@
 
 ## 快速安装（默认最新版）
 
-> npm 尚未发布；请用每个小节里的 GitHub Release 命令。npm 发布后，无版本号的 `dsh plugin --profile ... add dsh-lane-bridge` 会自动安装最新版。
+> 两种方式都安装最新版：GitHub Release 用 `latest`，npm 用无版本号命令。npm 尚未发布时请用 GitHub Release。
 
 ### DSH Web
 

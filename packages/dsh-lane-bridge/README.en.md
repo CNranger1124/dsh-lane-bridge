@@ -7,7 +7,7 @@ OneBot v11), the official QQ Bot, and Discord.
 
 ## Quick install (latest by default)
 
-> npm is not published yet; use the GitHub Release command in each subsection. After the npm release, the versionless `dsh plugin --profile ... add dsh-lane-bridge` installs the latest version.
+> Both paths install the latest version: GitHub Release uses `latest`, npm uses the versionless command. Use GitHub Release while npm is not published.
 
 ### DSH Web
 
