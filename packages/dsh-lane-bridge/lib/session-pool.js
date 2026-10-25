@@ -736,7 +736,8 @@ export class SessionPool {
         summary ? `摘要：${String(summary).slice(0, 1000)}` : '',
       ].filter(Boolean);
       try {
-        await this.channelManager.sendKey(targetKey, [lines.join(String.fromCharCode(10))]);
+        // Notification goes to another conversation: a push, not a reply.
+        await this.channelManager.sendKey(targetKey, [lines.join(String.fromCharCode(10))], { reply: targetKey === key });
         notified = true;
       } catch (error) {
         this.logger?.warn?.(`[lane-bridge] 转人工通知失败（${targetKey}）：${error?.message ?? error}`);
@@ -745,7 +746,7 @@ export class SessionPool {
     let ackSent = false;
     if (config.ackMessage) {
       try {
-        await this.channelManager.sendKey(key, [String(config.ackMessage)]);
+        await this.channelManager.sendKey(key, [String(config.ackMessage)], { reply: true });
         ackSent = true;
       } catch {}
     }

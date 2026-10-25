@@ -209,7 +209,8 @@ export function createRoutes({ store, channels, pool, memoryStore = null, usageS
     const results = [];
     for (const target of targets) {
       try {
-        const result = await channels.sendKey(target, chunks);
+        // A push is not a reply: never reuse the conversation's msg_id.
+        const result = await channels.sendKey(target, chunks, { reply: false });
         results.push({ target, ok: true, sent: chunks.length, resultCount: Array.isArray(result) ? result.length : 1 });
       } catch (error) {
         results.push({ target, ok: false, error: String(error?.message ?? error) });

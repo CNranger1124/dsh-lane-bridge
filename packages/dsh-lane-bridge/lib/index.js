@@ -99,7 +99,7 @@ export async function apply(ctx, config = {}) {
 
   async function sendApology(key) {
     try {
-      await channelManager.sendKey(key, ['抱歉，我这边处理这条消息时出错了，请稍后再试。']);
+      await channelManager.sendKey(key, ['抱歉，我这边处理这条消息时出错了，请稍后再试。'], { reply: true });
     } catch (error) {
       runtimeLogger.warn?.(`[lane-bridge] ${key} 错误提示发送失败：${error?.message ?? error}`);
     }

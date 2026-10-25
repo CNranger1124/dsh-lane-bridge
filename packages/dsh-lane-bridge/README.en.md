@@ -299,11 +299,15 @@ Common error codes (from the official send-message docs):
 
 What the bridge does:
 
-- **If a `msg_id` exists it is always sent.** The previous build stripped it after
-  4 minutes, silently turning a valid reply into an active message and triggering
-  `40034105` — that was a bug, now fixed.
+- **A `msg_id` is only attached for an actual reply**: turn replies, error
+  notices and the hand-off ack are replies; the push API, cross-group `lane_send`
+  and the hand-off notification are **active messages** and never reuse the
+  conversation's stored `msg_id` — reusing it is what produced
+  `40034005 回复消息msg_id已过期`.
 - Passive replies are capped at **5 bubbles**; the overflow is dropped with a log
   line (platform hard limit).
+- If a reply's `msg_id` expired while "allow active messages" is on, the send is
+  retried once as an active message (logged); otherwise the expiry is surfaced.
 - Sends **without** a `msg_id` (push, cross-group relay, a conversation that never
   received anything) are refused locally with a reason; tick "allow active
   messages" in Settings → IM Bridge → Official QQ Bot when you really need them.

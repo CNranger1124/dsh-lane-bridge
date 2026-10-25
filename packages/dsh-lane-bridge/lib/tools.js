@@ -109,7 +109,10 @@ export function createLaneTools({ key, pool, store, knowledgeDir, memoryStore = 
       const results = [];
       for (const targetKey of targets) {
         try {
-          const result = await pool.channelManager.sendKey(targetKey, chunks);
+          // Sending back into the current conversation is a reply to the message
+          // being handled; sending elsewhere is a push and must not reuse its
+          // msg_id (QQ would reject it as an expired reply).
+          const result = await pool.channelManager.sendKey(targetKey, chunks, { reply: targetKey === key });
           // Only a successful send to THIS conversation suppresses its final
           // assistant text; a failed send falls back to auto-reply, and a push
           // to another conversation must not swallow the reply to the current user.

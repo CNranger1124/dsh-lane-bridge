@@ -138,26 +138,26 @@ export class QqbotAdapter extends ChannelAdapter {
    *
    * Two kinds of request hit the same endpoint:
    *   - **passive reply**: carries `msg_id` (+ auto `msg_seq`) of a message the
-   *     bot received. Always allowed.
-   *   - **active message**: no `msg_id`. Subject to a platform permission/额度; on
-   *     a bot without it the API answers `主动消息失败, 无权限`.
+   *     bot received; valid 5 minutes, ≤5 replies per message.
+   *   - **active message**: no `msg_id`; rate-limited per bot/relationship and
+   *     needs the bot to have the permission, otherwise `40034105`.
    *
-   * The rule here is therefore about *having a msg_id*, not about its age: if we
-   * have one we always send it and let the platform decide whether it is still
-   * acceptable (stripping it ourselves would silently turn a valid reply into a
-   * rejected active message).
+   * Which one to use is the caller's **intent**, not the age of the stored id:
+   * `conversation.reply === true` means "answering the message that just came
+   * in". A push must never reuse the stored msg_id — doing that is exactly what
+   * produced `40034005 回复消息msg_id已过期`.
    */
   async send(conversation, messages) {
     if (!this.bot) throw new Error('QQ Bot 未连接');
     const cfg = this.config ?? {};
     const allowActive = cfg.allowActive === true;
     const replyToId = String(conversation.replyToId ?? '').trim();
-    const passive = replyToId !== '';
+    const passive = conversation.reply === true && replyToId !== '';
     if (!passive && !allowActive) {
       const scope = conversation.kind === 'private' ? '私聊' : '群';
       throw new Error(
-        `QQ ${scope}主动消息没有权限：这条不是「回复某条收到的消息」（没有 msg_id），属于主动消息。`
-        + ' 需要主动推送时，先确认机器人具备主动消息能力，再到 Settings → IM 桥接 → 官方 QQ Bot 勾选「允许主动消息」。'
+        `QQ ${scope}主动消息没有权限：这次发送不是「回复刚收到的消息」（没有 msg_id），属于主动消息。`
+        + ' 需要主动推送时，确认机器人具备主动消息能力，再到 Settings → IM 桥接 → 官方 QQ Bot 勾选「允许主动消息」。'
       );
     }
     const target = {
@@ -178,7 +178,16 @@ export class QqbotAdapter extends ChannelAdapter {
       try {
         results.push(await this.bot.sendText(target, text));
       } catch (error) {
-        throw this.decorateSendError(error, { active: !passive });
+        // The 5-minute reply window can expire while a slow model turn runs. If
+        // the operator allowed active messages, degrade instead of losing the
+        // answer; otherwise surface the expiry with its real cause.
+        const expired = /40034005|40034128|msg_id\s*已过期|回复消息msg_id已过期/u.test(String(error?.message ?? error));
+        if (passive && allowActive && expired) {
+          this.logger?.warn?.(`[lane-bridge] 被动回复已过期，改发主动消息（${conversation.externalId}）`);
+          results.push(await this.bot.sendText({ scope: target.scope, targetId: target.targetId }, text));
+          continue;
+        }
+        throw this.decorateSendError(error, { active: !passive && !expired, expired });
       }
     }
     return results;
@@ -190,10 +199,15 @@ export class QqbotAdapter extends ChannelAdapter {
    * The codes come from the official 发送群聊消息 / 发送单聊消息 pages; the SDK
    * mostly forwards the Chinese text, so match either form.
    */
-  decorateSendError(error, { active }) {
+  decorateSendError(error, { active, expired = false } = {}) {
     const message = String(error?.message ?? error);
     const matched = QQ_SEND_ERROR_HINTS.find(([pattern]) => pattern.test(message));
     if (!matched) {
+      if (expired) {
+        const wrapped = new Error(`${message} （被动回复已过期：msg_id 只有 5 分钟有效期；模型这次回复太慢了）`);
+        wrapped.code = error?.code;
+        return wrapped;
+      }
       if (!active || !/无权限|not allowed|permission|403/iu.test(message)) return error;
       const wrapped = new Error(`${message} （这是主动消息：机器人需要具备主动消息权限）`);
       wrapped.code = error?.code;

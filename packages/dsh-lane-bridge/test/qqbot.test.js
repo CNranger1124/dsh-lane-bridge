@@ -76,20 +76,21 @@ test('QQ Bot adapter connects and normalizes c2c/group messages', async () => {
   }
 });
 
-test('QQ Bot keeps msg_id for replies and refuses msg_id-less sends', async () => {
+test('QQ Bot only attaches msg_id when the send is a reply', async () => {
   const adapter = await readyAdapter();
   try {
-    // A reply always carries msg_id, however old it is: the platform decides
-    // whether it is still valid (5 minutes), we must not strip it ourselves.
-    await adapter.send({ kind: 'private', externalId: 'u-1', replyToId: 'm-1', replyToAt: Date.now() }, ['第一条', '第二条']);
+    // Replies carry the inbound msg_id.
+    await adapter.send({ kind: 'private', externalId: 'u-1', reply: true, replyToId: 'm-1' }, ['第一条', '第二条']);
     assert.equal(adapter.bot.sent.length, 2);
     assert.deepEqual(adapter.bot.sent[0].target, { scope: 'c2c', targetId: 'u-1', msgId: 'm-1' });
-    await adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-old', replyToAt: Date.now() - 60 * 60 * 1000 }, ['旧消息也带 msg_id']);
-    assert.deepEqual(adapter.bot.sent[2].target, { scope: 'group', targetId: 'g-1', msgId: 'm-old' });
 
-    // No msg_id at all = an active message; default is to refuse locally.
-    await assert.rejects(() => adapter.send({ kind: 'group', externalId: 'g-1' }, ['群']), /主动消息没有权限/u);
-    assert.equal(adapter.bot.sent.length, 3, 'must not hit the API');
+    // A push must NOT reuse the stored msg_id — that is what produced
+    // `40034005 回复消息msg_id已过期`. Without allowActive it is refused locally.
+    await assert.rejects(
+      () => adapter.send({ kind: 'group', externalId: 'g-1', reply: false, replyToId: 'm-old' }, ['推送']),
+      /主动消息没有权限/u
+    );
+    assert.equal(adapter.bot.sent.length, 2, 'must not hit the API');
   } finally {
     await adapter.stop();
   }
@@ -98,9 +99,34 @@ test('QQ Bot keeps msg_id for replies and refuses msg_id-less sends', async () =
 test('a passive reply is capped at five bubbles per received message', async () => {
   const adapter = await readyAdapter();
   try {
-    await adapter.send({ kind: 'group', externalId: 'g-1', replyToId: 'm-1' }, ['1', '2', '3', '4', '5', '6', '7']);
+    await adapter.send({ kind: 'group', externalId: 'g-1', reply: true, replyToId: 'm-1' }, ['1', '2', '3', '4', '5', '6', '7']);
     assert.equal(adapter.bot.sent.length, 5);
     assert.equal(adapter.bot.sent.every((item) => item.target.msgId === 'm-1'), true);
+  } finally {
+    await adapter.stop();
+  }
+});
+
+test('an expired reply degrades to an active message when allowed', async () => {
+  const adapter = new QqbotAdapter({
+    config: { appId: 'app', appSecret: 'secret', allowActive: true },
+    logger: { info() {}, warn() {}, debug() {} },
+    loadQqbotModule: async () => ({ QQBot: FakeBot }),
+  });
+  await adapter.start();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  adapter.bot.emit('ready', { user: { id: 'bot-openid' } });
+  try {
+    let call = 0;
+    adapter.bot.sendText = async (target) => {
+      call += 1;
+      if (call === 1) throw new Error('40034005 回复消息msg_id已过期');
+      adapter.bot.sent.push({ target });
+      return { id: 'sent-after-fallback' };
+    };
+    const results = await adapter.send({ kind: 'group', externalId: 'g-1', reply: true, replyToId: 'm-stale' }, ['答复']);
+    assert.equal(results.length, 1);
+    assert.deepEqual(adapter.bot.sent[0].target, { scope: 'group', targetId: 'g-1' }, 'fallback drops msg_id');
   } finally {
     await adapter.stop();
   }

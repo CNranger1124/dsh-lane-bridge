@@ -177,21 +177,28 @@ export class ChannelManager {
     return this.adapters.get(channel) ?? null;
   }
 
-  /** Send to a conversation key (`<channel>:<kind>:<id>`). */
-  async sendKey(key, messages) {
+  /**
+   * Send to a conversation key (`<channel>:<kind>:<id>`).
+   *
+   * `options.reply` states the **intent**: true when this is the answer to the
+   * message that just arrived (turn reply, ack), false for a push. Only replies
+   * may carry `replyToId` — attaching a stale id to a push is what produced
+   * `40034005 回复消息msg_id已过期` on QQ.
+   */
+  async sendKey(key, messages, options = {}) {
     const parsed = parseConversationKey(key);
     if (!parsed) throw new Error(`非法的会话 key：${key}`);
     const adapter = this.adapterFor(parsed.channel);
     if (!adapter) throw new Error(`通道未启用或未连接：${parsed.channel}`);
     const convo = this.getConversation?.(key) ?? null;
-    // The passive-reply window is platform-specific (QQ is strict, OneBot and
-    // Discord are not), so pass the raw facts and let the adapter decide.
+    const reply = options.reply === true;
     return adapter.send({
       channel: parsed.channel,
       kind: parsed.kind,
       externalId: parsed.externalId,
-      replyToId: String(convo?.replyToId ?? ''),
-      replyToAt: Number(convo?.lastAt) || 0,
+      reply,
+      replyToId: reply ? String(convo?.replyToId ?? '') : '',
+      replyToAt: reply ? Number(convo?.lastAt) || 0 : 0,
     }, messages);
   }
 

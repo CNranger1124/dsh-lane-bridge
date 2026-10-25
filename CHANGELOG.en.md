@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.4.5
+
+- **Fix `40034005 回复消息msg_id已过期`**: since 0.4.3 ("always attach msg_id"),
+  pushes and cross-group sends also reused the conversation's stored msg_id and
+  were rejected as expired replies. Sends are now split by **intent**: turn
+  replies, error notices and the hand-off ack carry msg_id; the push API,
+  cross-group `lane_send` and the hand-off notification are active messages and
+  carry none.
+- If a reply's msg_id has expired (slow model, >5 minutes) and "allow active
+  messages" is on, the send is retried once as an active message and logged;
+  otherwise it reports "被动回复已过期（msg_id 只有 5 分钟有效期）".
+- `sendKey` / `sendToConversation` take `{ reply: boolean }`; the channel manager
+  no longer guesses freshness on its own.
+- 147 tests.
+
 ## 0.4.4
 
 - **Keyword triggers now work on the official QQ Bot** — provided the bot enables

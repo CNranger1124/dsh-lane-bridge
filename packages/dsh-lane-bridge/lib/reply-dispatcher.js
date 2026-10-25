@@ -12,7 +12,7 @@ export function createReplyDispatcher({ store, channels, consumeSent, logger = n
     if (ended?.reason?.kind === 'error' || ended?.reason?.kind === 'failed') {
       if (!sentByAgent) {
         logger?.warn?.(`[lane-bridge] ${key} 回合失败：${ended?.reason?.error?.message ?? ended?.reason?.kind}`);
-        try { await channels.sendKey(key, [apology]); } catch (error) {
+        try { await channels.sendKey(key, [apology], { reply: true }); } catch (error) {
           logger?.warn?.(`[lane-bridge] 错误提示发送失败：${error?.message ?? error}`);
         }
       }
@@ -27,7 +27,7 @@ export function createReplyDispatcher({ store, channels, consumeSent, logger = n
     const chunks = splitText(text, maxChars);
     if (chunks.length === 0) return;
     try {
-      await channels.sendKey(key, chunks);
+      await channels.sendKey(key, chunks, { reply: true });
       logger?.debug?.(`[lane-bridge] ${key} 已发送 ${chunks.length} 条`);
     } catch (error) {
       logger?.warn?.(`[lane-bridge] ${key} 回复发送失败：${error?.message ?? error}`);
