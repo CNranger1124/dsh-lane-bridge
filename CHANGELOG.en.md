@@ -13,7 +13,7 @@
 - Add **View logs** to the channel launcher: the last 300 connect/reconnect/error
   lines, instead of just "not connected".
 - Keep **Start / Stop / Retry / Reconnect all** in the launcher.
-- Test suite grows to 89.
+- Test suite grows to 90, including the GitHub repo/branch routes.
 
 ## 0.2.1
 

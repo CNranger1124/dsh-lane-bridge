@@ -9,7 +9,7 @@ import { defaultState } from '../lib/defaults.js';
 import { writeDraft } from '../lib/knowledge.js';
 import { tempDir, cleanup, mockRequest, mockResponse, fakeChannels } from './helpers.js';
 
-async function setup() {
+async function setup({ repo = null } = {}) {
   const dir = tempDir();
   const store = new LaneStore({ dataDir: dir });
   await store.load();
@@ -22,7 +22,7 @@ async function setup() {
     pause: async () => {},
     escalate: async () => ({ paused: true, notified: true }),
   };
-  const routes = createRoutes({ store, channels, pool, memoryStore, usageStore, logger: { warn() {}, info() {}, debug() {} } });
+  const routes = createRoutes({ store, channels, pool, memoryStore, usageStore, repo, logger: { warn() {}, info() {}, debug() {} } });
   return { dir, store, channels, routes, memoryStore, usageStore };
 }
 
@@ -220,6 +220,27 @@ test('knowledge draft routes list, approve, and discard', async () => {
       body: { action: 'discard', scope: 'default', file: second.file },
     }), discard);
     assert.equal(discard.status, 200);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('github routes expose repo/branch dropdown data', async () => {
+  const repo = {
+    authStatus: async () => ({ authenticated: true, source: 'gh-cli', account: 'me' }),
+    listRepos: async () => ({ source: 'gh-cli', repos: [{ repo: 'owner/repo', private: false, defaultBranch: 'main' }] }),
+    listBranches: async ({ repo: name }) => ({ repo: name, branches: ['main', 'dev'] }),
+  };
+  const { dir, routes } = await setup({ repo });
+  try {
+    const repos = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/github/repos' }), repos);
+    assert.equal(repos.status, 200);
+    assert.equal(repos.json().repos[0].repo, 'owner/repo');
+
+    const branches = mockResponse();
+    await routes.handle(mockRequest({ url: '/lane-bridge/api/github/branches?repo=owner/repo' }), branches);
+    assert.deepEqual(branches.json().branches, ['main', 'dev']);
   } finally {
     cleanup(dir);
   }
