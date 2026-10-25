@@ -728,10 +728,16 @@ window.__ModuleLoader__.load({
         patch('triggers', next);
         patch('trigger', next[0]);
       };
-      // `all` and `off` are exclusive; mention + keyword combine.
+      // `all` and `off` are exclusive; mention + keyword combine. Unchecking an
+      // exclusive mode lands on a visible alternative instead of silently
+      // snapping back to the same value.
       const toggleTrigger = (mode, on) => {
-        if (mode === 'all' || mode === 'off') {
-          setTriggers([on ? mode : 'all']);
+        if (mode === 'all') {
+          setTriggers(on ? ['all'] : ['mention']);
+          return;
+        }
+        if (mode === 'off') {
+          setTriggers(on ? ['off'] : ['all']);
           return;
         }
         const picked = new Set(triggersOf(current));
