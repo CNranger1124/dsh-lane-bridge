@@ -52,7 +52,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 插件不会代启动 SnowLuma（许可证原因），所以「已启用但未连接」通常只是 SnowLuma 没开，或 WS 端口不对。
 
-1. 先自行启动 SnowLuma，确认它的 OneBot v11 WebSocket 在 `127.0.0.1:3001`（SnowLuma 日志里会写 `listening 127.0.0.1:3001`）。
+1. 先自行启动 SnowLuma：双击 SnowLuma 目录里的 `launcher.bat`，或在目录里运行 `node index.mjs`；确认日志出现 `listening 127.0.0.1:3001`。插件不会代启动它（EULA 原因）。
 2. 打开 **Settings → IM 桥接 → 概览与通道**。
 3. 在 **SnowLuma / QQ** 卡片右上角点 **启用**；状态应变成 **已连接**。如果仍是「未连接」，卡片里会直接显示原因。
 4. 官方 QQ Bot / Discord：填好 AppID+AppSecret / Bot Token，点卡片右上角 **启用**；不需要用的通道点 **停用** 即可。

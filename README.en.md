@@ -62,8 +62,9 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 The plugin does not start SnowLuma for you (licence reasons). "Enabled but not
 connected" usually means SnowLuma is not running, or the WS port is wrong.
 
-1. Start SnowLuma yourself and confirm its OneBot v11 WebSocket is on
-   `127.0.0.1:3001` (its log prints `listening 127.0.0.1:3001`).
+1. Start SnowLuma yourself: double-click `launcher.bat` in its folder, or run
+   `node index.mjs` there; wait for `listening 127.0.0.1:3001` in its log. The
+   plugin does not start it for you (EULA reasons).
 2. Open **Settings → IM 桥接 → 概览与通道**.
 3. On the **SnowLuma / QQ** card, click **Enable** in the top-right corner. The
    pill should turn **已连接**. If not, the card shows the concrete reason.
