@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.2.5
+
+- If the prompt still fails after retries, clear that conversation's session
+  mapping so the next message creates a fresh session instead of staying stuck
+  on a broken one.
+- Log the Remote code and `details.reason` for prompt failures, and surface them
+  in **View logs**.
+
 ## 0.2.4
 
 - Every module header now has an **explicit Save button** (domains, bindings,

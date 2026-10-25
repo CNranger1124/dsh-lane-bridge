@@ -364,6 +364,10 @@ export class SessionPool {
         });
         return fresh;
       }
+      if (isTransientProjectionError(error)) {
+        this.logger?.warn?.(`[lane-bridge] ${key} 会话投影仍不可用，清理会话映射，下一条消息重建`);
+        await this.store.setSession(key, null);
+      }
       throw error;
     }
   }

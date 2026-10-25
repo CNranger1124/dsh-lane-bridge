@@ -1,6 +1,6 @@
 {
   "name": "dsh-lane-bridge",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "DeepSeek Harness plugin: one chat/customer-support bot across QQ (SnowLuma), official QQ Bot, and Discord, with per-conversation domains, shared knowledge, and unified push.",
   "private": false,
   "license": "MIT",
