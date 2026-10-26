@@ -97,7 +97,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 - **人工接管**：`lane_escalate` 暂停自动回复、通知接管会话，并可在 Settings 恢复。
 - **用量账本**：本地按会话统计输入/输出/缓存 token。
 - **管理面**：概览与通道、会话、领域、角色卡、知识库、记忆、知识库审批、用量、推送共 9 个页面；每个模块标题栏有独立保存按钮、可折叠，底部保存栏固定。侧栏面板与设置页共用同一份状态。
-- **测试**：157 项，覆盖 store、resolver、路由、会话编排、GitHub、知识库与草稿审批、渠道适配器和插件 harness。
+- **测试**：168 项，覆盖 store、resolver、路由、会话编排、多机器人实例、GitHub、知识库与草稿审批、渠道适配器和插件 harness。
 
 ## 配置模型：会话 → 角色 → 领域
 
@@ -131,7 +131,7 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 
 `0.8.0` 把通道变成"机器人实例"：同一渠道可加多个 AppID，一个项目一个 Bot，领域可指定自己用的机器人，重连/保存都只影响那一个实例。`0.7.0` 新增 `lane-chat` preset：群聊闲聊/角色扮演，把角色卡当最高身份设定。`0.6.0` 把知识库变成一等公民：草稿必须带触发词、只能落在领域绑定的库里，采纳＝新建一篇独立文档；审批页可改触发词。`0.5.x` 引入知识库增删改、跨库转移/改名和领域多库绑定；`0.4.x` 修正官方 QQ Bot 的被动回复、全量群消息与 @ 判定；`0.3.x` 把模型改成「会话 → 角色 → 领域」。细节见 [CHANGELOG.md](./CHANGELOG.md)。
 
-代码与测试已完成（157 项通过），真实 DSH/官方 QQ Bot 正在验收，SnowLuma/Discord 尚未做端到端收发。请按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验证。
+代码与测试已完成（168 项通过）。**Discord 与官方 QQ Bot 已在生产环境跑通**；SnowLuma 已做过测试，尚未在生产环境运行。请在目标环境按 [LIVE_TEST.md](./docs/guides/LIVE_TEST.md) 验收。
 
 旧项目还有群聊黑话学习、表情包库、语音消息、费用折算和仿真调度器没有迁；Token 用量账本已经实现。架构文档会跟踪。
 

@@ -35,6 +35,10 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 This is the checklist for the first run on a real DSH installation. The
 repository tests use fake host services; these steps exercise the real ones.
 
+> **Current status (2026-10-26)**: **Discord and the official QQ Bot are running
+> in production**; SnowLuma has only been tested, not run in production. Use this
+> checklist for a new environment or a channel that needs re-verification.
+
 ## 1. Install
 
 ```sh
@@ -65,7 +69,7 @@ Expected:
   `knowledgeBases`, `roles`.
 - The Settings card has nine tabs: Overview & channels, Conversations, Domains,
   Roles, Knowledge, Memory, KB approval, Usage, Push.
-- The Settings header shows the running plugin version (`v0.7.0`), and
+- The Settings header shows the running plugin version (`v0.8.0`), and
   `GET /lane-bridge/api/health` returns the same `version`.
 
 If the page is blank or shows “面板渲染失败”, open the browser console: a missing
@@ -80,7 +84,7 @@ cause; the error boundary keeps the rest of the UI alive when it can.
 3. Stopping should show **已停用**; starting again should return to
    **未连接/已连接**.
 
-## 2. SnowLuma (QQ)
+## 2. SnowLuma (QQ) — tested, not in production
 
 1. Start SnowLuma yourself and log in the bot account; confirm its OneBot WS is
    listening on `127.0.0.1:3001`.
@@ -106,7 +110,7 @@ Common failures:
 | 401 / 403 from `/lane-bridge/api/*` | Browser same-origin check; open through the DSH URL, not a copied file |
 | No `lane_*` tools in the session | Domain was bound before the plugin loaded; rebind or restart the bridge session |
 
-## 3. Official QQ Bot
+## 3. Official QQ Bot — running in production
 
 1. Create an app on the QQ Open Platform and enable the bot capabilities you
    need.
@@ -133,7 +137,7 @@ Common failures:
 7. Two identical AppIDs must raise the red "the platform will kick one of them"
    warning.
 
-## 4. Discord
+## 4. Discord — running in production
 
 1. Create a bot in the Discord Developer Portal, enable **Message Content
    Intent**, and invite it with `bot` + `applications.commands` scopes.

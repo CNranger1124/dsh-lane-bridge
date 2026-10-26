@@ -34,6 +34,8 @@ dsh plugin --profile desktop add https://github.com/CNranger1124/dsh-lane-bridge
 
 这是在真实 DSH 安装上第一次运行的清单。仓库测试使用 fake host services；下面这些步骤验证真实服务。
 
+> **当前状态（2026-10-26）**：**Discord 与官方 QQ Bot 已在生产环境跑通**；SnowLuma 只做过测试，尚未在生产环境运行。下面清单用于新环境，或需要重新验收的渠道。
+
 ## 1. 安装
 
 ```sh
@@ -68,7 +70,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 2. 点 **启动** 会立即保存并重连；未连接时行内显示原因（SnowLuma 未启动、端口不对、缺少 AppID/Token）。
 3. 停止后应显示 **已停用**；重新启动后应回到 **未连接/已连接**。
 
-## 2. SnowLuma（QQ）
+## 2. SnowLuma（QQ，已测试、未上生产）
 
 1. 你自己启动 SnowLuma 并登录 bot 账号；确认 OneBot WS 监听 `127.0.0.1:3001`。
 2. 在 **IM 桥接 → 概览与通道**：
@@ -78,7 +80,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 4. 用允许的账号给 bot 发私聊。它应出现在 **会话**，key 形如 `snowluma:private:<id>`。
 5. 在 **会话** 页把它绑到「客服」角色（该角色属于默认客服领域），再发一条。DSH 侧应出现一个 session，assistant 的回合会发回 QQ。
 
-> 设置页标题旁会显示运行中的插件版本（`v0.7.0`），应与安装的版本一致；`GET /lane-bridge/api/health` 返回同一个 `version`。
+> 设置页标题旁会显示运行中的插件版本（`v0.8.0`），应与安装的版本一致；`GET /lane-bridge/api/health` 返回同一个 `version`。
 
 常见失败：
 
@@ -90,7 +92,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 | `/lane-bridge/api/*` 401/403 | 浏览器同源检查；用 DSH 地址打开，不要用复制出来的文件 |
 | session 里没有 `lane_*` 工具 | 领域是在插件加载前绑定的；重新绑定或重置会话 |
 
-## 3. 官方 QQ Bot
+## 3. 官方 QQ Bot（生产已跑通）
 
 1. 在 QQ 开放平台创建应用，开启需要的 bot 能力。
 2. 在渠道卡片填 `AppID` / `AppSecret` 并点 **启动**。
@@ -107,7 +109,7 @@ Desktop 版把 `web` 换成 `desktop`，并先完全退出 DSH Desktop。
 6. 再在 **通道** 页点一次「删除这个机器人」→ 出现「确认删除」→ 确认后卡片消失，领域页回到「通用」，历史会话仍在。
 7. 填了两个相同 AppID 时应出现红字警告「会互相踢线」。
 
-## 4. Discord
+## 4. Discord（生产已跑通）
 
 1. 在 Discord Developer Portal 创建 bot，开启 **Message Content Intent**，用 `bot` + `applications.commands` scope 邀请。
 2. 凭据只需要 **Bot Token**（开发者门户 → 你的应用 → **Bot** 页 → `Reset Token`，只显示一次），填进 Discord 渠道卡片并点 **启动**。OAuth2 页的「客户端 ID / 客户端密钥」和 General Information 页的「公钥」都不需要——前者是授权码流程用的，后者是 HTTP Interactions 验签用的，我们走的是网关长连接。

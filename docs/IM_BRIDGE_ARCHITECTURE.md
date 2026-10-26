@@ -2,7 +2,7 @@
 
 # IM Bridge 架构（DSH 插件）
 
-> 状态：方案 + v0.7.0 实现说明。
+> 状态：方案 + v0.8.0 实现说明。
 > 读者：维护者、未来贡献者、安装前想评估这个插件的人。
 
 ## 1. 决策：DSH 原生插件，不做独立前端
@@ -259,12 +259,13 @@ dsh plugin --profile web add dsh-lane-bridge
 
 ## 10. 验证状态
 
-仓库当前验证的内容（`npm test`，157 个测试）：
+仓库当前验证的内容（`npm test`，168 个测试）：
 
 | 区域 | 证据 |
 | --- | --- |
 | State store | 原子写、schema 修复、密钥保留、角色文件对账、会话写合并与 flush |
 | 领域/绑定 resolver | 未绑定默认、按绑定覆盖、禁用绑定、按领域触发策略（可多选）、旧数据迁移 |
+| 通道实例 | 老状态按 id 推断 `kind`、增删改与按实例重连、领域认领的解析顺序、重复 AppID 警告 |
 | 知识库 | 库的创建/重命名/删除与领域联动、文档改名/跨库转移、路径穿越拒绝、`_` 目录隐藏 |
 | 知识库触发词 | 按文档自己的 triggers 命中、`always`、无命中不注入、兜底词仅旧文档、排序与字符预算 |
 | 知识库草稿 | 只写 `_待审`、不参与 list/search/read、去重/限流、必须带 triggers 且 scope 在领域绑定内、采纳＝新建带触发词的文档（同名加序号）、丢弃、审批页无目标文件下拉 |
@@ -290,16 +291,14 @@ dsh plugin --profile web add dsh-lane-bridge
 | Cordis 激活 | 用真实 `@deepseek-ai/cordis` 和 fake host services 激活插件，并干净销毁两个路由（能抓 mock ctx 抓不到的 async apply/effect 错误） |
 | 迁移 | 旧 config/roles/KB/sessions → 新 state |
 
-**未验证**（需要真实 DSH + 真实渠道）。可复现的首次验收清单见 [guides/LIVE_TEST.md](./guides/LIVE_TEST.md)。
+**真实环境状态**（截至 2026-10-26）：
 
-- 通过 `dsh plugin add` 安装并渲染 Settings 卡片（API 形状来自已安装的 DSH 包；DSH 的 slot 接口可能随版本演进）。
-- 真实 SnowLuma 账号的 OneBot 收发。
-- 官方 QQ Bot 凭据、被动回复 `msgId`、全量群消息与主动消息权限。
-- 真实 Discord bot token 和 gateway（适配器只用 fake client 测过）。
-- 插件内的完整模型回合（测试使用 fake `sessionController` 和 `sessionQuery`；真实服务只在 DSH Host 里跑）。
-- 知识库/审批/领域联动的浏览器真实交互（client 测试只到渲染层）。
+- **生产环境已跑通**：Discord、官方 QQ Bot。真实 DSH 上已在生产使用：安装与 Settings 渲染、真实模型回合、这两个渠道的收发。
+- **已测试、未上生产**：SnowLuma OneBot 收发（做过测试，但未在生产环境运行）。
+- **按目标账号确认**：官方 QQ Bot 的「接收所有消息」与主动消息权限（开关在手机 QQ 的机器人资料页）。
+- **可按 LIVE_TEST 补充验收**：知识库审批、会话归档等低频管理流程的浏览器交互。
 
-v0.7.0 应视为**功能完整、测试覆盖的管理面 + 待真实渠道验收的运行时**；在真实清单通过前不要当成生产客服机器人。
+v0.8.0 的定位：Discord 与官方 QQ Bot 已在生产环境使用；SnowLuma 已测试，但尚未上生产。
 
 ## 11. 待定问题
 

@@ -2,7 +2,7 @@
 
 # IM Bridge architecture (DSH plugin)
 
-> Status: proposal + v0.7.0 implementation notes.
+> Status: proposal + v0.8.0 implementation notes.
 > Audience: maintainers, future contributors, and anyone evaluating the plugin
 > before installing it.
 
@@ -379,12 +379,13 @@ build?" is answerable. Publishing/install details:
 
 ## 10. Verification status
 
-What the repository verifies today (`npm test`, 157 tests):
+What the repository verifies today (`npm test`, 168 tests):
 
 | Area | Evidence |
 | --- | --- |
 | State store | atomic writes, schema repair, secret preservation, role-file reconciliation, coalesced conversation writes and flush |
 | Domain/binding resolver | unbound default, per-binding overrides, disabled binding, per-domain trigger (all/mention/keyword/off, multi-select), legacy state migration |
+| Channel instances | legacy `kind` inference from the id, add/rename/delete and per-instance reconnect, domain-claim resolution order, duplicate-AppID warning |
 | Knowledge bases | create/rename/delete with domain repointing, document rename/cross-base move, traversal rejection, `_`-prefixed hiding |
 | Document triggers | matching only by a document's own triggers, `always`, no injection without a hit, fallback only for legacy docs, ranking and character budget |
 | KB drafts | write-only `_待审`, excluded from list/search/read, dedupe/rate limit, triggers required and scope must be bound by the domain, approval creates a new triggered document (suffix on name clash), discard, no target-file picker |
@@ -410,24 +411,21 @@ What the repository verifies today (`npm test`, 157 tests):
 | Cordis activation | the real `@deepseek-ai/cordis` runtime activated the plugin with fake host services and disposed both routes cleanly (catches async-apply/effect mistakes that a mock ctx misses) |
 | Migration | legacy config/roles/KB/sessions → new state |
 
-What is **not** verified in this checkout (needs a live DSH + a real channel).
-The reproducible first-run checklist is [guides/LIVE_TEST.en.md](./guides/LIVE_TEST.en.md).
+**Real-environment status** (as of 2026-10-26):
 
-- Loading the package through `dsh plugin add` and rendering the settings card in
-  a real DSH build (the API shape follows the installed DSH packages; slot APIs
-  may evolve between versions).
-- SnowLuma OneBot traffic (connect, inbound, outbound) on the target account.
-- Official QQ Bot credentials, the passive-reply `msgId` path, full-mode group
-  messages, and active-message permission.
-- Discord against a real bot token and gateway (the adapter is tested with a fake discord.js client).
-- A full model turn inside the plugin (the tests use a fake `sessionController`
-  and `sessionQuery`; the real services are only exercised by the DSH host).
-- Real browser interaction for knowledge bases, approval, and domain binding
-  (client tests stop at the rendering layer).
+- **Running in production**: Discord and the official QQ Bot. The real DSH
+  installation and Settings rendering, real model turns, and traffic on both
+  channels are all in production use.
+- **Tested, not in production**: SnowLuma OneBot traffic (tested, but it has not
+  run in production).
+- **Confirm against the target account**: the official QQ Bot "receive all
+  messages" and active-message permissions (the switches live on the bot profile
+  page in the mobile QQ app).
+- **Can be re-verified with LIVE_TEST**: browser interaction for low-frequency
+  flows such as KB approval and session archival.
 
-Treat v0.7.0 as a **feature-complete, test-covered management surface with a
-runtime still awaiting live channel acceptance**, not as a production support bot
-until the live checklist above passes.
+v0.8.0 is positioned as: Discord and the official QQ Bot running in production;
+SnowLuma tested but not yet deployed to production.
 
 ## 11. Open questions
 

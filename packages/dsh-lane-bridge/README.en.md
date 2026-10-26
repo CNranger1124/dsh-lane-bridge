@@ -509,16 +509,17 @@ SnowLuma.
 
 ## Status
 
-`0.7.0`: adds the `lane-chat` preset (group chit-chat / role-play with the role
-card first); the QQ / official QQ Bot / Discord adapters and the management surface
-are in place, with 157 passing tests. The legacy simulation/sticker/voice/**cost-conversion**
+`0.8.0`: channels become bot instances that run side by side (several AppIDs per
+transport, a domain picks its bot, reconnects are per instance); `0.7.0` adds the
+`lane-chat` preset (group chit-chat / role-play with the role card first). The
+QQ / official QQ Bot / Discord adapters and the management surface are in place,
+with 168 passing tests. The legacy simulation/sticker/voice/**cost-conversion**
 features are not ported yet; the token usage ledger is included. See the
-repository's `docs/IM_BRIDGE_ARCHITECTURE.en.md` for the design and
-live-verification checklist.
+repository's `docs/IM_BRIDGE_ARCHITECTURE.en.md` for the design and verification
+checklist.
 
-Live DSH installation and real-channel acceptance are still in progress: the
-official QQ Bot has entered acceptance, while SnowLuma / Discord have not had
-end-to-end traffic yet.
+Real environment: **Discord and the official QQ Bot are running in production**;
+SnowLuma has been tested but is not running in production yet.
 
 ## Credits
 

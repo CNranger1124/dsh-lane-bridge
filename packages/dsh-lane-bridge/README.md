@@ -362,9 +362,9 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 
 ## 状态
 
-`0.7.0`：新增 `lane-chat` preset（群聊闲聊/角色扮演，角色卡优先）；QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 157 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和 live 验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
+`0.8.0`：通道变成可并排运行的机器人实例（同一渠道多个 AppID，领域可指定机器人，重连按实例隔离）；`0.7.0` 新增 `lane-chat` preset（群聊闲聊/角色扮演，角色卡优先）。QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 168 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
 
-真实 DSH 安装和真实渠道验收仍在进行：官方 QQ Bot 已进入验收，SnowLuma / Discord 尚未做端到端收发。
+真实环境：**Discord 与官方 QQ Bot 已在生产环境跑通**；SnowLuma 已测试，尚未在生产环境运行。
 
 ## 来源与致谢
 

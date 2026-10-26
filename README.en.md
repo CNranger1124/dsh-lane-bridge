@@ -168,9 +168,9 @@ only a one-shot legacy migration script.
   Roles, Knowledge, Memory, KB approval, Usage, Push), each module with its own
   Save button and collapsible header, plus a sticky save bar. The sidebar panel
   shares the same state.
-- **Tests**: 157, covering store, resolver, routes, session orchestration,
-  GitHub, knowledge bases and draft approval, channel adapters, and the plugin
-  harness.
+- **Tests**: 168, covering store, resolver, routes, session orchestration, bot
+  instances, GitHub, knowledge bases and draft approval, channel adapters, and
+  the plugin harness.
 
 ## Configuration model: conversation → role → domain
 
@@ -217,9 +217,10 @@ renames, and multi-base domain binding; `0.4.x` fixed official QQ Bot passive
 replies, full-mode group messages, and mention detection; `0.3.x` introduced the
 conversation → role → domain model. See [CHANGELOG.en.md](./CHANGELOG.en.md).
 
-The code and tests are complete (157 passing); real DSH / official QQ Bot
-acceptance is in progress, while SnowLuma / Discord end-to-end traffic is not
-verified yet. Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md).
+The code and tests are complete (168 passing). **Discord and the official QQ Bot
+are running in production**; SnowLuma has been tested but is not running in
+production yet. Use [LIVE_TEST.en.md](./docs/guides/LIVE_TEST.en.md) to verify a
+new target environment.
 
 The legacy project still has features the plugin does not port: group slang
 learning, the sticker library, voice messages, cost conversion, and the
