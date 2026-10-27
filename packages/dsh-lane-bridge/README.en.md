@@ -123,14 +123,16 @@ that domain gets. Two ship with the plugin:
 | preset | Best for | Persona focus |
 | --- | --- | --- |
 | `lane-support` (default) | support desk, Q&A inbox | solve the problem: check the KB first, short conclusions, hand off when needed |
-| `lane-chat` | group chit-chat, role-play | the role card *is* the identity: speak and stay in character, no support-desk or all-answers tone |
+| `lane-chat` | group chit-chat, role-play | the role card *is* the identity: speak and stay in character, no handoff, no knowledge lookups, no AI tells |
 
 Both mount only `@deepseek-ai/dsh-persona` and register **no built-in tools**;
 the bridge injects `lane_*` and the role card per conversation, so switching a
 preset never widens permissions. `lane-chat` additionally fixes the priority
-(role card over generic rules), forbids breaking character, forbids deciding the
-other player's actions, allows staying silent in a group, and requires answering
-when @-mentioned.
+(role card over generic rules), forbids breaking character or exposing any AI
+tell, forbids deciding the other player's actions, allows staying silent in a
+group, and requires answering when @-mentioned. In chat/role-play it forbids
+every `lane_*` tool except `lane_send` — no handoff, no knowledge or repo
+lookups, no conversation info, no shared-memory writes.
 
 - New sessions use the domain's current preset; **existing sessions do not
   switch on their own**. After changing the preset, press **Reset session** for
@@ -469,6 +471,8 @@ SnowLuma.
   `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` /
   `lane_escalate` and a `tools.restrict({ allow: allowedHostTools })` mask; the
   default allow-list is empty. `lane_retire` only works inside an archival turn.
+  A `lane-chat` conversation still registers these tools, but its persona forbids
+  calling any `lane_*` except `lane_send` (chat is not a support queue).
 - KB tools read the official tree only; drafts write only to `_待审/` and are
   excluded from retrieval. GitHub is off per domain unless enabled.
 - Issue creation, cross-conversation push, and shared-memory writes are limited
@@ -509,8 +513,10 @@ SnowLuma.
 
 ## Status
 
-`0.8.0`: channels become bot instances that run side by side (several AppIDs per
-transport, a domain picks its bot, reconnects are per instance); `0.7.0` adds the
+`0.8.1`: `lane-chat` forbids handoff and knowledge/repo/memory tools in
+chat/role-play (only `lane_send`), and exposes no AI tells. `0.8.0`: channels
+become bot instances that run side by side (several AppIDs per transport, a
+domain picks its bot, reconnects are per instance); `0.7.0` adds the
 `lane-chat` preset (group chit-chat / role-play with the role card first). The
 QQ / official QQ Bot / Discord adapters and the management surface are in place,
 with 168 passing tests. The legacy simulation/sticker/voice/**cost-conversion**

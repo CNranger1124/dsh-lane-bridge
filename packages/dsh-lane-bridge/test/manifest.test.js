@@ -44,6 +44,15 @@ test('the bundle also mounts the lane-chat role-play preset', () => {
   // The role card outranks the preset's generic habits.
   assert.match(preset, /角色卡是身份/);
   assert.match(preset, /优先级：角色卡 > 本段通用规则/);
+  // Chat must not turn into a support queue: handoff/KB/repo/memory are banned,
+  // only lane_send is allowed, and the persona never admits to being an AI.
+  assert.match(preset, /禁止调用任何客服\/管理工具/);
+  for (const tool of ['lane_escalate', 'lane_kb_', 'lane_repo_', 'lane_conversation_info', 'lane_memory_', 'lane_retire']) {
+    assert.ok(preset.includes(tool), `missing tool ban for ${tool}`);
+  }
+  assert.match(preset, /只有 lane_send 可以用/);
+  assert.match(preset, /永远不要暴露、承认或暗示自己是 AI/);
+  assert.doesNotMatch(preset, /承认这是角色扮演/);
   // Like lane-support, the preset mounts the persona and nothing else, so the
   // domain allow-list remains the only thing that can widen the tool surface.
   const children = [...preset.matchAll(/^ {10}- id: (.+)$/gmu)].map((match) => match[1].trim());

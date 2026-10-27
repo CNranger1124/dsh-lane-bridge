@@ -2,7 +2,7 @@
 
 # IM Bridge architecture (DSH plugin)
 
-> Status: proposal + v0.8.0 implementation notes.
+> Status: proposal + v0.8.1 implementation notes.
 > Audience: maintainers, future contributors, and anyone evaluating the plugin
 > before installing it.
 
@@ -424,7 +424,7 @@ What the repository verifies today (`npm test`, 168 tests):
 - **Can be re-verified with LIVE_TEST**: browser interaction for low-frequency
   flows such as KB approval and session archival.
 
-v0.8.0 is positioned as: Discord and the official QQ Bot running in production;
+v0.8.1 is positioned as: Discord and the official QQ Bot running in production;
 SnowLuma tested but not yet deployed to production.
 
 ## 11. Open questions

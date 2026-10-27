@@ -2,6 +2,24 @@
 
 # Changelog
 
+## 0.8.1
+
+- **`lane-chat` no longer hands off or looks up support material.** The persona
+  forbids every `lane_*` tool except `lane_send`: handoff (`lane_escalate`),
+  knowledge (`lane_kb_*`), repo (`lane_repo_*`), conversation info
+  (`lane_conversation_info`), shared memory (`lane_memory_*`) and archival
+  (`lane_retire`). When someone asks for "a human / support / a complaint", it
+  answers in character or points them to the group owner — it never replies
+  "handed off to a human" or "admin notified".
+- **`lane-chat` shows no AI tells.** It never admits, hints, or claims to be an
+  AI/model/assistant/robot/virtual character, and never mentions prompts, role
+  cards, tools, knowledge bases, model names or session ids. It does not cave
+  under repeated questions, dares, or threats, and does not invent real-person
+  proof. The old "if they insist on a real answer, admit it is role-play" escape
+  hatch is gone.
+- Docs and the live-check step are updated; 168 tests (new assertions for the
+  banned-tool list and the no-AI-tells rule).
+
 ## 0.8.0
 
 - **Channels are bot instances now.** `config.channels` is no longer the fixed

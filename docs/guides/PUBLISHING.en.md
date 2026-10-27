@@ -105,7 +105,7 @@ cd packages/dsh-lane-bridge
 npm pack --dry-run
 ```
 
-Expected: all tests pass; the tarball is about 140 KB (145.7 KB for 0.8.0) and
+Expected: all tests pass; the tarball is about 148 KB (147.6 KB for 0.8.1) and
 contains `lib/`, `presets/`, `cordis.patch.yml`, `README.md`, `README.en.md`,
 `LICENSE`, `LICENSE.zh.md`, `NOTICE`, and `scripts/`.
 
@@ -165,8 +165,8 @@ NPM_TOKEN = your npm automation token
 Then:
 
 ```sh
-git tag v0.8.0
-git push origin v0.8.0
+git tag v0.8.1
+git push origin v0.8.1
 ```
 
 ## 3. Install a published version into DSH

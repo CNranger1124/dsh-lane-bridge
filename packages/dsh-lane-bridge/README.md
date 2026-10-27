@@ -86,9 +86,9 @@ dsh plugin --profile web add link:F:/path/to/repo/packages/dsh-lane-bridge
 | preset | 适合 | 人格重点 |
 | --- | --- | --- |
 | `lane-support`（默认） | 客服、答疑、收件箱 | 解决问题优先：先查知识库、短句给结论、必要时转人工 |
-| `lane-chat` | 群聊闲聊、角色扮演 | 角色卡是身份本身：按卡片说话和入戏，不讲客服腔、不强答 |
+| `lane-chat` | 群聊闲聊、角色扮演 | 角色卡是身份本身：按卡片说话和入戏，不转人工、不查知识库、不暴露 AI |
 
-两个 preset 都只挂 `@deepseek-ai/dsh-persona`，**不注册任何内置工具**；`lane_*` 工具和角色卡由桥接按会话注入，所以换 preset 不会扩大权限。`lane-chat` 额外约定了：角色卡优先于通用规则、不出戏、不替对方决定行动、群聊里可以不说、被 @ 必须回。
+两个 preset 都只挂 `@deepseek-ai/dsh-persona`，**不注册任何内置工具**；`lane_*` 工具和角色卡由桥接按会话注入，所以换 preset 不会扩大权限。`lane-chat` 额外约定了：角色卡优先于通用规则、不出戏且不暴露任何 AI 迹象、不替对方决定行动、群聊里可以不说、被 @ 必须回；闲聊/扮演中禁止调用除 `lane_send` 外的任何 `lane_*`——不转人工、不查知识库/仓库、不读会话信息、不写共享记忆。
 
 - 新会话按领域当前 preset 创建；**已有会话不会自动换**。改完 preset，要到「会话」页对该会话点「重置会话」，下一条消息才会用新人格。
 - 要换成自己的 preset：在 profile 里用 `@deepseek-ai/dsh-agent-preset` 声明一行（`id` 自己定），再到领域页选「手动输入 / 未知 preset」填进去。
@@ -326,7 +326,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 ## 安全默认
 
 - `lane-support` 与 `lane-chat` preset 都不注册任何内置工具。
-- 每个会话的 agent 会拿到 `lane_send` / `lane_conversation_info` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。`lane_retire` 只在归档回合内可用。
+- 每个会话的 agent 会拿到 `lane_send` / `lane_conversation_info` / `lane_kb_*` / `lane_kb_draft` / `lane_repo_*` / `lane_memory_*` / `lane_retire` / `lane_escalate`，并应用 `tools.restrict({ allow: allowedHostTools })`；默认白名单为空。`lane_retire` 只在归档回合内可用。`lane-chat` 会话仍会注册这些工具，但人格明确禁止调用除 `lane_send` 外的任何 `lane_*`（闲聊不是客服队列）。
 - KB 工具只读正式区；草稿只能写 `_待审/`，且不参与检索。GitHub 默认关闭，按领域开启。
 - 建 issue、跨会话推送、写共享记忆只允许领域管理者白名单里的成员；白名单默认留空＝谁都不能。
 - 密钥永不返回浏览器；UI 只显示“已配置”。
@@ -362,7 +362,7 @@ node scripts/migrate-from-qq-bridge.mjs --from /path/to/external/qq-bridge --dat
 
 ## 状态
 
-`0.8.0`：通道变成可并排运行的机器人实例（同一渠道多个 AppID，领域可指定机器人，重连按实例隔离）；`0.7.0` 新增 `lane-chat` preset（群聊闲聊/角色扮演，角色卡优先）。QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 168 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
+`0.8.1`：`lane-chat` 闲聊/扮演中禁止转人工与查知识库/仓库/记忆（只有 `lane_send` 可用），且不暴露任何 AI 迹象。`0.8.0`：通道变成可并排运行的机器人实例（同一渠道多个 AppID，领域可指定机器人，重连按实例隔离）；`0.7.0` 新增 `lane-chat` preset（群聊闲聊/角色扮演，角色卡优先）。QQ / 官方 QQ Bot / Discord 适配器和管理面已经就位，测试 168 项全部通过。旧的仿真/表情包/语音/**费用折算**尚未迁移；Token 用量账本已经有了。设计、迁移和验收清单见仓库的 `docs/IM_BRIDGE_ARCHITECTURE.md`。
 
 真实环境：**Discord 与官方 QQ Bot 已在生产环境跑通**；SnowLuma 已测试，尚未在生产环境运行。
 

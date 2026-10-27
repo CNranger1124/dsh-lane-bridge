@@ -5,7 +5,7 @@
 A **DeepSeek Harness (DSH) plugin** that connects QQ (SnowLuma OneBot v11),
 the official QQ Bot, and Discord to DSH agents: **one plugin, many channels,
 shared knowledge bases, per-conversation personas, and a single outbound push
-API**. Current version: `0.8.0`.
+API**. Current version: `0.8.1`.
 
 This repository started from `qq-bridge` (a standalone QQ ↔ DSH bridge). The
 plugin in [`packages/dsh-lane-bridge`](./packages/dsh-lane-bridge) is the new home
@@ -129,7 +129,8 @@ only a one-shot legacy migration script.
 - **Two built-in personas**: `lane-support` for a support desk and `lane-chat` for
   group chit-chat / role-play. The latter treats the role card as the highest
   identity setting (card over generic rules, in-character play allowed, silence
-  allowed in groups); neither registers built-in tools.
+  allowed in groups), forbids handoff/KB tools, and exposes no AI tells; neither
+  registers built-in tools.
 - **Knowledge bases are first-class**: one directory under `knowledge/<name>/` is
   one knowledge base. Create, rename, and delete them on the Knowledge page. A
   domain binds **several** bases, and renaming a base repoints every domain that
@@ -209,7 +210,7 @@ draft approval, archival budget, QQ Bot passive vs active messages) lives in
 
 ## Status
 
-`0.8.0` turns channels into bot instances: several AppIDs per transport, one bot per project, a domain picks the bot it uses, and reconnects/saves only touch that one instance. `0.7.0` adds the `lane-chat` preset (group chit-chat / role-play, role card first).
+`0.8.1` tightens `lane-chat`: no handoff, knowledge, repo or memory tools in chat/role-play (only `lane_send`), and no AI tells. `0.8.0` turns channels into bot instances: several AppIDs per transport, one bot per project, a domain picks the bot it uses, and reconnects/saves only touch that one instance. `0.7.0` adds the `lane-chat` preset (group chit-chat / role-play, role card first).
 `0.6.0` makes knowledge bases first-class: drafts require triggers, land only in a
 base the domain binds, and approving creates a standalone document (the approval
 page edits the triggers). `0.5.x` added knowledge-base CRUD, cross-base moves and
